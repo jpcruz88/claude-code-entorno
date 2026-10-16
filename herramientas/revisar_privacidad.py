@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Busca en el repo datos que no deben publicarse. Si encuentra algo, sale con 1.
 
-Revisa los archivos que irían al repo (los versionados y los nuevos que no están
-ignorados) y, con --historial, también todo lo ya guardado en commits anteriores
-y sus mensajes.
+Revisa los archivos que irían al repo (su contenido y su nombre: los versionados
+y los nuevos que no están ignorados) y, con --historial, también todo lo ya
+guardado en commits anteriores, sus mensajes, y el autor y el committer de cada
+commit: solo se acepta la identidad acordada, que es la de `git config --local
+user.name` / `user.email` de este repo (así el correo no se escribe en ningún
+archivo).
 
 Busca dos tipos de cosas:
 1. Patrones genéricos (están aquí mismo): rutas de usuario (/Users/<nombre>,
@@ -137,9 +140,34 @@ def es_binario(datos):
     return b"\0" in datos[:8192]
 
 
+def revisar_identidades(repo):
+    """Autor y committer de todos los commits deben ser la identidad local acordada."""
+    nombre = git(repo, "config", "--local", "user.name")[1].decode("utf-8", "replace").strip()
+    correo = git(repo, "config", "--local", "user.email")[1].decode("utf-8", "replace").strip()
+    if not nombre or not correo:
+        return [("configuración de git", 0, "faltan user.name / user.email locales "
+                 "(la identidad acordada para los commits)", "")]
+    codigo, salida = git(repo, "log", "--all", "--format=%h%x00%an%x00%ae%x00%cn%x00%ce")
+    hallazgos = []
+    if codigo != 0:
+        return hallazgos  # todavía no hay commits
+    for linea in salida.decode("utf-8", "replace").splitlines():
+        partes = linea.split("\0")
+        if len(partes) != 5:
+            continue
+        h, an, ae, cn, ce = partes
+        if (an, ae) != (nombre, correo):
+            hallazgos.append(("commit " + h, 0, "autor distinto del acordado", enmascarar(ae)))
+        if (cn, ce) != (nombre, correo):
+            hallazgos.append(("commit " + h, 0, "committer distinto del acordado", enmascarar(ce)))
+    return hallazgos
+
+
 def revisar(repo, terminos, historial=False):
     hallazgos = []
     for relativo in archivos_del_repo(repo):
+        hallazgos += [(o, n, "nombre de archivo: " + t, v)
+                      for o, n, t, v in revisar_texto(relativo, relativo, terminos)]
         ruta = repo / relativo
         if not ruta.is_file() or ruta.stat().st_size > TAMANO_MAXIMO:
             continue
@@ -148,6 +176,7 @@ def revisar(repo, terminos, historial=False):
             continue
         hallazgos += revisar_texto(datos.decode("utf-8", "replace"), relativo, terminos)
     if historial:
+        hallazgos += revisar_identidades(repo)
         codigo, salida = git(repo, "log", "--all", "--format=%B%x00")
         if codigo == 0:
             for i, mensaje in enumerate(salida.decode("utf-8", "replace").split("\0")):
@@ -160,6 +189,8 @@ def revisar(repo, terminos, historial=False):
                 if len(partes) < 2 or partes[0] in vistos:
                     continue
                 vistos.add(partes[0])
+                hallazgos += [("historial:" + partes[1], n, "nombre de archivo: " + t, v)
+                              for _, n, t, v in revisar_texto(partes[1], "", terminos)]
                 c, tipo = git(repo, "cat-file", "-t", partes[0])
                 if tipo.strip() != b"blob":
                     continue

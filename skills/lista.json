@@ -1,5 +1,5 @@
 {
-  "_que_es": "Skills que instalan instalar.sh e instalar.ps1 con `npx -y skills add <origen> -g -y -a claude-code`. Lo genera exportar.sh desde esta Mac; para cambiar qué entra, edita herramientas/filtros.json.",
+  "_que_es": "Skills que instalan instalar.sh e instalar.ps1 con `npx -y skills@<versión fija> add <origen> -g -y -a claude-code` (la versión está en herramientas/instalar_comun.py). Lo genera exportar.sh desde esta Mac; para cambiar qué entra, edita skills_permitidas en herramientas/filtros.json.",
   "skills": [
     {
       "nombre": "21st-dev-builder-v2",
@@ -43,7 +43,7 @@
     },
     {
       "nombre": "clean-code",
-      "origen": "sickn33/antigravity-awesome-skills@clean-code"
+      "origen": "sickn33/agentic-awesome-skills@clean-code"
     },
     {
       "nombre": "conventional-commit",
@@ -59,7 +59,7 @@
     },
     {
       "nombre": "design-consistency-auditor",
-      "origen": "shipshitdev/library@design-consistency-auditor"
+      "origen": "shipshitdev/skills@design-consistency-auditor"
     },
     {
       "nombre": "design-review",
@@ -91,7 +91,7 @@
     },
     {
       "nombre": "game-designer",
-      "origen": "opusgamelabs/game-creator@game-designer"
+      "origen": "PlayableIntelligence/game-creator@game-designer"
     },
     {
       "nombre": "game-engine",

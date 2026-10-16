@@ -1,7 +1,7 @@
 {
-  "_que_es": "Filtros que usa exportar.sh para sacar del Claude Code de esta Mac solo lo genérico. Todo lo que no esté aquí se queda fuera.",
+  "_que_es": "Filtros que usa exportar.sh para sacar del Claude Code de esta Mac solo lo genérico. Todo funciona como lista de permitidos: lo que no esté aquí se queda fuera.",
   "settings": {
-    "_claves": "Claves de ~/.claude/settings.json que se exportan, en este orden.",
+    "_claves": "Claves de ~/.claude/settings.json que se exportan, en este orden. skipDangerousModePermissionPrompt NO va aquí: es opcional en el instalador (--saltar-aviso-permisos).",
     "claves": [
       "model",
       "modelSettings",
@@ -11,38 +11,85 @@
       "theme",
       "tui",
       "cleanupPeriodDays",
-      "skipDangerousModePermissionPrompt",
       "agentPushNotifEnabled"
     ],
     "_hooks": "Hooks que se exportan, por nombre de su script. Los demás se quedan fuera. 'matcher' reemplaza al de esta Mac.",
     "hooks_permitidos": {
-      "guard-kill.py": {"matcher": "Bash|PowerShell"},
+      "guard-kill.py": {
+        "matcher": "Bash|PowerShell"
+      },
       "cbm-code-discovery-gate": {},
       "cbm-session-reminder": {}
     },
     "_plugins": "enabledPlugins se recorta a los que estén en plugins.txt."
   },
-  "reglas": ["context7.md", "matar-procesos.md"],
+  "_reglas_permitidas": "Reglas de ~/.claude/rules que se exportan. Una regla nueva que no esté aquí no se exporta; exportar.sh avisa.",
+  "reglas_permitidas": [
+    "context7.md",
+    "matar-procesos.md"
+  ],
+  "_skills_permitidas": "Únicas skills que se exportan (con su origen de .skill-lock.json, que debe ser un repositorio público de GitHub). Una skill usada que no esté aquí no se exporta; exportar.sh avisa.",
+  "skills_permitidas": [
+    "21st-dev-builder-v2",
+    "ad-creative",
+    "api-design-principles",
+    "app-store-screenshots",
+    "architecture-decision-records",
+    "architecture-diagram",
+    "better-typography",
+    "brand-identity",
+    "building-pydantic-ai-agents",
+    "caveman",
+    "clean-code",
+    "conventional-commit",
+    "council",
+    "data-viz-2025",
+    "design-consistency-auditor",
+    "design-review",
+    "documentation-writer",
+    "domain-name-brainstormer",
+    "error-analysis",
+    "eval-audit",
+    "find-skills",
+    "frontend-design",
+    "game-designer",
+    "game-engine",
+    "gemini-api-dev",
+    "grill-me",
+    "impeccable",
+    "improve-codebase-architecture",
+    "ios-hig-design",
+    "llm-security",
+    "mobile-ios-design",
+    "mobile-responsive",
+    "modal-and-overlay-patterns",
+    "n8n-agents-official",
+    "n8n-workflow-patterns",
+    "owasp-security",
+    "playwright-best-practices",
+    "playwright-cli",
+    "python-design-patterns",
+    "responsive-design",
+    "security-best-practices",
+    "security-threat-model",
+    "seo-audit",
+    "solid",
+    "temporal-developer",
+    "ui-ux-pro-max",
+    "video",
+    "write-judge-prompt"
+  ],
   "skills": {
-    "_extra": "Se exportan aunque no aparezcan en skillUsage (instaladas pero aún sin usar).",
-    "extra": [
-      "playwright-cli",
-      "playwright-best-practices",
-      "building-pydantic-ai-agents",
-      "temporal-developer",
-      "eval-audit",
-      "error-analysis",
-      "write-judge-prompt",
-      "llm-security",
-      "n8n-agents-official"
-    ],
-    "_excluidas": "Nunca se exportan, con su motivo (además de las retiradas, las de synced/ y las que no tienen origen).",
-    "excluidas": {
-      "unsplash-downloader": "su repositorio (serpdownloaders/skills) ya no existe en GitHub"
+    "_origenes_renombrados": "Repositorios que cambiaron de nombre en GitHub: se usa el nombre nuevo (el viejo solo redirige).",
+    "origenes_renombrados": {
+      "opusgamelabs/game-creator": "PlayableIntelligence/game-creator",
+      "shipshitdev/library": "shipshitdev/skills",
+      "sickn33/antigravity-awesome-skills": "sickn33/agentic-awesome-skills"
     },
-    "_fuentes_de_plugins": "Repositorios cuyas skills ya llegan con un plugin.",
-    "fuentes_de_plugins": ["obra/superpowers"],
-    "_integradas": "Vienen con Claude Code o con la cuenta de claude.ai; no se instalan aparte.",
+    "_llegan_solas": "Solo para no avisar de ellas: vienen con un plugin, con Claude Code o con la cuenta de claude.ai.",
+    "fuentes_de_plugins": [
+      "obra/superpowers"
+    ],
     "integradas": [
       "artifact-capabilities",
       "artifact-design",

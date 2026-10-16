@@ -5,20 +5,24 @@ Solo LEE la configuración real (nunca la modifica) y escribe únicamente dentro
 del repo. Aplica los filtros de herramientas/filtros.json:
   - claude/settings.base.json: solo las claves y hooks permitidos; enabledPlugins
     recortado a plugins.txt; rutas del HOME convertidas a «~».
-  - claude/rules/: las reglas permitidas; a matar-procesos.md se le agrega la
-    sección de Windows si no la trae.
-  - skills/lista.json: las skills usadas alguna vez (clave skillUsage de
-    ~/.claude.json; no se lee nada más de ese archivo) más las «extra», menos las
-    retiradas, las de synced/, las integradas, las que llegan con un plugin y las
-    que no tienen origen en ~/.agents/.skill-lock.json.
+  - claude/rules/: solo las de reglas_permitidas; a matar-procesos.md se le
+    agrega la sección de Windows si no la trae. Avisa de reglas nuevas.
+  - skills/lista.json: solo las de skills_permitidas, con su origen de
+    ~/.agents/.skill-lock.json (corrigiendo los repos renombrados). Avisa de las
+    skills usadas (clave skillUsage de ~/.claude.json; no se lee nada más de ese
+    archivo) que no estén en la lista. Con --verificar-origenes comprueba, sin
+    credenciales, que cada repo sea público y conserve su nombre; si no, falla.
 Además compara el hook guard-kill.py y statusline.sh de esta Mac con los del repo
 (el repo guarda versiones portables: no se sobrescriben) y avisa de diferencias.
 """
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
@@ -46,6 +50,43 @@ def nombres_en(raiz):
     return nombres
 
 
+def repo_publico(repo):
+    """True si el repo se puede leer sin ninguna credencial (ni la del llavero,
+    ni la de gh, ni reglas insteadOf de la configuración personal de git)."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_ASKPASS="", SSH_ASKPASS="",
+               GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    try:
+        r = subprocess.run(["git", "-c", "credential.helper=", "ls-remote", "--exit-code", "-h",
+                            "https://github.com/%s.git" % repo],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=60, env=env)
+        return r.returncode in (0, 2)  # 2: existe pero sin ramas que coincidan
+    except Exception:
+        return False
+
+
+class _SinRedireccion(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def nombre_actual(repo):
+    """dueño/repo al que redirige GitHub si el repo cambió de nombre, o None."""
+    abrir = urllib.request.build_opener(_SinRedireccion).open
+    pedido = urllib.request.Request("https://github.com/%s" % repo, method="HEAD",
+                                    headers={"User-Agent": "claude-code-entorno"})
+    try:
+        abrir(pedido, timeout=30)
+        return None
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 307, 308):
+            m = re.match(r"https://github\.com/([^/]+/[^/?#]+)", e.headers.get("Location", ""))
+            return m.group(1) if m else None
+        return None
+    except Exception:
+        return None
+
+
 class Exportador:
     def __init__(self, repo, claude_dir, claude_json, skill_lock, verificar=False):
         self.repo = Path(repo).resolve()
@@ -56,7 +97,12 @@ class Exportador:
         self.filtros = json.loads((self.repo / "herramientas" / "filtros.json")
                                   .read_text(encoding="utf-8"))
         self.cambiados = []
+        self.errores = []
         self.verificar = verificar
+
+    def error(self, texto):
+        print("    ERROR: " + texto)
+        self.errores.append(texto)
 
     # ------------------------------------------------------------ escritura
     def escribir(self, relativo, texto):
@@ -136,81 +182,77 @@ class Exportador:
 
     # ------------------------------------------------------------ reglas
     def reglas(self):
-        print("\n==> claude/rules/")
+        print("\n==> claude/rules/ (lista de permitidas)")
         plantilla = (AQUI / "plantillas" / "matar-procesos-windows.md").read_text(encoding="utf-8")
-        for nombre in self.filtros["reglas"]:
+        permitidas = self.filtros["reglas_permitidas"]
+        for nombre in permitidas:
             texto = (self.claude_dir / "rules" / nombre).read_text(encoding="utf-8")
             if nombre == "matar-procesos.md" and "taskkill" not in texto:
                 texto = texto.rstrip("\n") + "\n" + plantilla
             self.escribir("claude/rules/" + nombre, texto)
+        for f in sorted((self.claude_dir / "rules").glob("*.md")):
+            if f.name not in permitidas and not f.name.startswith("."):
+                print("    regla nueva: %s; agrégala a reglas_permitidas en "
+                      "herramientas/filtros.json si quieres llevarla" % f.name)
 
     # ------------------------------------------------------------ skills
     def skills(self):
-        print("\n==> skills/lista.json")
+        print("\n==> skills/lista.json (lista de permitidas)")
+        permitidas = self.filtros["skills_permitidas"]
         conf = self.filtros["skills"]
+        renombrados = conf.get("origenes_renombrados", {})
         usadas = set(json.loads(self.claude_json.read_text(encoding="utf-8"))
                      .get("skillUsage", {}))
         lock = json.loads(self.skill_lock.read_text(encoding="utf-8")).get("skills", {})
-        retiradas = nombres_en(self.claude_dir / "skills-retiradas")
-        synced = nombres_en(self.claude_dir / "skills" / "synced")
-        fuera = {}
         incluidas = []
-        for nombre in sorted(usadas | set(conf["extra"])):
-            entrada = lock.get(nombre)
-            if ":" in nombre:
-                motivo = "vienen dentro de un plugin"
-            elif nombre in conf["excluidas"]:
-                motivo = "excluidas: %s" % conf["excluidas"][nombre]
-            elif nombre in retiradas:
-                motivo = "retiradas"
-            elif nombre in synced:
-                motivo = "llegan por la cuenta de claude.ai (synced)"
-            elif nombre in conf["integradas"]:
-                motivo = "integradas en Claude Code"
-            elif not entrada:
-                motivo = "SIN ORIGEN en .skill-lock.json"
-            elif entrada.get("source") in conf["fuentes_de_plugins"]:
-                motivo = "llegan con un plugin (%s)" % entrada.get("source")
-            elif entrada.get("sourceType") != "github":
-                motivo = "origen que no es de GitHub"
-            else:
-                incluidas.append({"nombre": nombre, "origen": "%s@%s" % (entrada["source"], nombre)})
+        for nombre in sorted(permitidas):
+            entrada = lock.get(nombre) or {}
+            if entrada.get("sourceType") != "github" or not entrada.get("source"):
+                self.error("la skill permitida «%s» no tiene un origen de GitHub en "
+                           ".skill-lock.json" % nombre)
                 continue
-            fuera.setdefault(motivo, []).append(nombre)
-        for nombre in conf["extra"]:
-            if nombre not in lock:
-                print("    AVISO: la skill extra «%s» no tiene origen; no se incluye." % nombre)
+            fuente = renombrados.get(entrada["source"], entrada["source"])
+            incluidas.append({"nombre": nombre, "origen": "%s@%s" % (fuente, nombre)})
         print("    incluidas: %d" % len(incluidas))
-        for motivo in sorted(fuera):
-            print("    fuera (%s): %s" % (motivo, ", ".join(fuera[motivo])))
+        # Avisa de las usadas que no están en la lista (salvo las que llegan solas)
+        llegan_solas = (nombres_en(self.claude_dir / "skills-retiradas")
+                        | nombres_en(self.claude_dir / "skills" / "synced")
+                        | set(conf.get("integradas", [])))
+        for nombre in sorted(usadas - set(permitidas)):
+            fuente = (lock.get(nombre) or {}).get("source")
+            if ":" in nombre or nombre in llegan_solas or fuente in conf.get("fuentes_de_plugins", []):
+                continue
+            print("    nueva skill usada: %s; agrégala a filtros.json si quieres llevarla" % nombre)
         datos = {
             "_que_es": ("Skills que instalan instalar.sh e instalar.ps1 con "
-                        "`npx -y skills add <origen> -g -y -a claude-code`. Lo genera "
+                        "`npx -y skills@<versión fija> add <origen> -g -y -a claude-code` "
+                        "(la versión está en herramientas/instalar_comun.py). Lo genera "
                         "exportar.sh desde esta Mac; para cambiar qué entra, edita "
-                        "herramientas/filtros.json."),
+                        "skills_permitidas en herramientas/filtros.json."),
             "skills": incluidas,
         }
         self.escribir("skills/lista.json", json.dumps(datos, indent=2, ensure_ascii=False) + "\n")
         if self.verificar:
             self.verificar_origenes(incluidas)
-        return incluidas, fuera
+        return incluidas
 
     def verificar_origenes(self, incluidas):
-        """Comprueba (con internet) que cada repositorio de origen siga existiendo."""
+        """Comprueba, sin credenciales, que cada repositorio de origen sea público y
+        conserve su nombre (GitHub redirige los renombrados)."""
         repos = sorted({s["origen"].split("@", 1)[0] for s in incluidas})
-        print("    verificando %d repositorios de origen en GitHub…" % len(repos))
+        print("    verificando sin credenciales %d repositorios de origen…" % len(repos))
         for repo in repos:
-            try:
-                r = subprocess.run(["git", "ls-remote", "--exit-code", "-h",
-                                    "https://github.com/%s.git" % repo],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   timeout=30, env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
-                ok = r.returncode in (0, 2)  # 2: existe pero sin ramas que coincidan
-            except Exception:
-                ok = False
-            if not ok:
-                print("    AVISO: no pude abrir https://github.com/%s; ¿lo borraron? Si es así, "
-                      "agrega sus skills a «excluidas» en herramientas/filtros.json." % repo)
+            if not repo_publico(repo):
+                self.error("https://github.com/%s no es público (o ya no existe): sus skills "
+                           "no se pueden instalar sin credenciales. Sácalas de "
+                           "skills_permitidas." % repo)
+                continue
+            nuevo = nombre_actual(repo)
+            if nuevo and nuevo.lower() != repo.lower():
+                self.error("%s ahora se llama %s: agrégalo a skills.origenes_renombrados "
+                           "en herramientas/filtros.json." % (repo, nuevo))
+        if not self.errores:
+            print("    todos públicos y con su nombre actual.")
 
     # ------------------------------------------------------------ comparaciones
     def comparar(self):
@@ -232,6 +274,10 @@ class Exportador:
         self.skills()
         self.comparar()
         print("\nArchivos cambiados: %s" % (", ".join(self.cambiados) or "ninguno"))
+        if self.errores:
+            print("Hubo %d error(es); corrígelos antes de hacer commit." % len(self.errores))
+            return 1
+        return 0
 
 
 def main(argv=None):
@@ -242,10 +288,11 @@ def main(argv=None):
     p.add_argument("--claude-json", default=str(home / ".claude.json"))
     p.add_argument("--skill-lock", default=str(home / ".agents" / ".skill-lock.json"))
     p.add_argument("--verificar-origenes", action="store_true",
-                   help="comprobar con internet que los repositorios de las skills existan")
+                   help="comprobar con internet que los repositorios de las skills sean "
+                        "públicos y conserven su nombre")
     a = p.parse_args(argv)
-    Exportador(a.repo, a.claude_dir, a.claude_json, a.skill_lock, a.verificar_origenes).todo()
-    return 0
+    return Exportador(a.repo, a.claude_dir, a.claude_json, a.skill_lock,
+                      a.verificar_origenes).todo()
 
 
 if __name__ == "__main__":

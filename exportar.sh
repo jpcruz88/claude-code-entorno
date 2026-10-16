@@ -43,7 +43,7 @@ else
   gitleaks detect --no-git --source "$REPO" --no-banner --redact || fallo=1
   # Todo el historial de commits, si ya hay alguno
   if git -C "$REPO" rev-parse --verify -q HEAD >/dev/null; then
-    gitleaks detect --source "$REPO" --no-banner --redact || fallo=1
+    gitleaks detect --source "$REPO" --log-opts="--all" --no-banner --redact || fallo=1
   fi
 fi
 

@@ -40,6 +40,11 @@ class Exportar(unittest.TestCase):
                     "plugins.txt", "claude/hooks/guard-kill.py", "claude/statusline.sh"):
             (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(str(RAIZ / rel), str(self.repo / rel))
+        # misma estructura que el filtros.json real, con una lista de permitidas de prueba
+        filtros = json.loads((RAIZ / "herramientas/filtros.json").read_text(encoding="utf-8"))
+        filtros["skills_permitidas"] = ["buena", "playwright-cli", "renombrada"]
+        filtros["skills"]["origenes_renombrados"] = {"dueno/viejo": "dueno/nuevo"}
+        (self.repo / "herramientas/filtros.json").write_text(json.dumps(filtros), encoding="utf-8")
         # configuración falsa
         self.claude = base / "claude"
         (self.claude / "rules").mkdir(parents=True)
@@ -56,7 +61,8 @@ class Exportar(unittest.TestCase):
         self.claude_json = base / "claude.json"
         self.claude_json.write_text(json.dumps({
             "skillUsage": {n: {} for n in ["buena", "vieja", "de-la-cuenta", "personal",
-                                           "init", "plugin:algo", "de-plugin"]},
+                                           "personal-usada", "init", "plugin:algo",
+                                           "de-plugin"]},
             "otraClave": "no se lee"}), encoding="utf-8")
         self.lock = base / "lock.json"
         self.lock.write_text(json.dumps({"skills": {
@@ -65,6 +71,8 @@ class Exportar(unittest.TestCase):
             "de-la-cuenta": {"source": "dueno/repo", "sourceType": "github"},
             "de-plugin": {"source": "obra/superpowers", "sourceType": "github"},
             "playwright-cli": {"source": "microsoft/playwright-cli", "sourceType": "github"},
+            "renombrada": {"source": "dueno/viejo", "sourceType": "github"},
+            "personal-usada": {"source": "dueno/privado", "sourceType": "github"},
         }}), encoding="utf-8")
 
     def tearDown(self):
@@ -73,7 +81,8 @@ class Exportar(unittest.TestCase):
     def correr(self):
         salida = io.StringIO()
         with redirect_stdout(salida):
-            exportar.Exportador(self.repo, self.claude, self.claude_json, self.lock).todo()
+            self.codigo = exportar.Exportador(self.repo, self.claude, self.claude_json,
+                                              self.lock).todo()
         return salida.getvalue()
 
     def test_filtra_y_es_idempotente(self):
@@ -90,10 +99,25 @@ class Exportar(unittest.TestCase):
         lista = json.loads((self.repo / "skills/lista.json").read_text(encoding="utf-8"))
         self.assertEqual(lista["skills"], [
             {"nombre": "buena", "origen": "dueno/repo@buena"},
-            {"nombre": "playwright-cli", "origen": "microsoft/playwright-cli@playwright-cli"}])
-        self.assertIn("SIN ORIGEN", salida)
+            {"nombre": "playwright-cli", "origen": "microsoft/playwright-cli@playwright-cli"},
+            {"nombre": "renombrada", "origen": "dueno/nuevo@renombrada"}])
+        self.assertEqual(self.codigo, 0)
+        # usadas fuera de la lista: se avisa de las propias, no de las que llegan solas
+        self.assertIn("nueva skill usada: personal;", salida)
+        self.assertIn("nueva skill usada: personal-usada;", salida)
+        for callada in ("vieja", "de-la-cuenta", "init", "plugin:algo", "de-plugin"):
+            self.assertNotIn("nueva skill usada: %s;" % callada, salida)
+        self.assertIn("regla nueva: privada.md", salida)
         # segunda vez: nada cambia
         self.assertIn("Archivos cambiados: ninguno", self.correr())
+
+    def test_permitida_sin_origen_falla(self):
+        filtros = json.loads((self.repo / "herramientas/filtros.json").read_text(encoding="utf-8"))
+        filtros["skills_permitidas"].append("no-existe")
+        (self.repo / "herramientas/filtros.json").write_text(json.dumps(filtros), encoding="utf-8")
+        salida = self.correr()
+        self.assertEqual(self.codigo, 1)
+        self.assertIn("«no-existe» no tiene un origen", salida)
 
 
 if __name__ == "__main__":

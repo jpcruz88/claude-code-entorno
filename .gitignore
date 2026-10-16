@@ -6,6 +6,12 @@
 # Cachés de Python y de las pruebas
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Secretos y la lista de términos privados (esa vive FUERA del repo; esto es
+# por si alguien la copia aquí por error)
+.env
+terminos-privados.txt
 
 # Respaldos que pudieran quedar al probar los instaladores
 *.bak-*

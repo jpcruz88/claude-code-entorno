@@ -3,6 +3,7 @@
 Los datos «privados» de ejemplo se arman al vuelo (por partes) para que este
 archivo no contenga ninguno y la propia revisión del repo siga limpia.
 """
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -73,6 +74,38 @@ class Privacidad(unittest.TestCase):
             (repo / "sucio.md").write_text("ruta /" + "Users/" + "ana\n", encoding="utf-8")
             hallazgos = rp.revisar(repo, [])
             self.assertEqual([(h[0], h[1]) for h in hallazgos], [("sucio.md", 1)])
+
+
+class Historial(unittest.TestCase):
+    """Autor/committer y nombres de archivo, en un repo git de prueba."""
+
+    def git(self, repo, *args, **entorno):
+        env = dict(__import__("os").environ, GIT_CONFIG_GLOBAL="/dev/null",
+                   GIT_CONFIG_NOSYSTEM="1", **entorno)
+        subprocess.run(["git", "-C", str(repo)] + list(args), check=True, env=env,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def test_autor_y_nombres(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            self.git(repo, "init", "-q", "-b", "main")
+            self.git(repo, "config", "user.name", "Persona Acordada")
+            self.git(repo, "config", "user.email", "acordada" + "@ejemplo.invalid")
+            (repo / "a.txt").write_text("hola\n")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-q", "-m", "uno")
+            self.assertEqual(rp.revisar(repo, [], historial=True), [])
+            # un commit con otra identidad y un archivo con nombre privado
+            (repo / "clienteuno.md").write_text("x\n")
+            self.git(repo, "add", "clienteuno.md")
+            otro = "otra" + "@ejemplo.invalid"
+            self.git(repo, "commit", "-q", "-m", "dos", GIT_AUTHOR_NAME="Otra",
+                     GIT_AUTHOR_EMAIL=otro, GIT_COMMITTER_NAME="Otra", GIT_COMMITTER_EMAIL=otro)
+            terminos = [("clienteuno", __import__("re").compile("clienteuno", 2))]
+            tipos_ = {h[2] for h in rp.revisar(repo, terminos, historial=True)}
+            self.assertIn("autor distinto del acordado", tipos_)
+            self.assertIn("committer distinto del acordado", tipos_)
+            self.assertIn("nombre de archivo: término privado", tipos_)
 
 
 if __name__ == "__main__":
