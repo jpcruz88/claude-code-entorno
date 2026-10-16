@@ -6,6 +6,9 @@
 #
 # Opciones:
 #   --simular                solo muestra lo que haría
+#   --no-interactivo         no pregunta nada (para agentes y scripts): si falta la
+#                            clave de Context7 la omite y explica cómo ponerla después.
+#                            Es automático cuando la entrada no es una terminal.
 #   --sin-codebase-memory    no instala codebase-memory-mcp ni sus hooks
 #   --sin-skills             no instala las skills (código de terceros; ver README)
 #   --saltar-aviso-permisos  agrega skipDangerousModePermissionPrompt (quita un aviso
@@ -26,12 +29,16 @@ SIMULAR=0
 SIN_CBM=0
 SIN_SKILLS=0
 SALTAR_AVISO=0
+NO_INTERACTIVO=0
+MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
 
-uso() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
+# Ayuda: el comentario del principio, hasta la primera línea que no lo es.
+uso() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"; }
 
 for arg in "$@"; do
   case "$arg" in
     --simular) SIMULAR=1 ;;
+    --no-interactivo) NO_INTERACTIVO=1 ;;
     --sin-codebase-memory) SIN_CBM=1 ;;
     --sin-skills) SIN_SKILLS=1 ;;
     --saltar-aviso-permisos) SALTAR_AVISO=1 ;;
@@ -39,6 +46,13 @@ for arg in "$@"; do
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
   esac
 done
+
+# Sin terminal en la entrada (un agente, un script, una tubería) nadie puede
+# contestar: se comporta igual que con --no-interactivo.
+if [ "$NO_INTERACTIVO" = 0 ] && [ ! -t 0 ]; then
+  NO_INTERACTIVO=1
+  MOTIVO_NO_INTERACTIVO="la entrada no es una terminal"
+fi
 
 paso()  { printf '\n==> %s\n' "$*"; }
 info()  { printf '    %s\n' "$*"; }
@@ -56,6 +70,7 @@ paso "Claude Code: instalación del entorno (${SO})"
 info "Carpeta personal: $HOME"
 info "Repo: $REPO"
 [ "$SIMULAR" = 1 ] && info "Modo simulación: no se cambia nada."
+[ "$NO_INTERACTIVO" = 1 ] && info "Modo no interactivo (${MOTIVO_NO_INTERACTIVO}): no se pregunta nada."
 
 # ---------------------------------------------------------------------------
 paso "Políticas de la empresa (managed settings)"
@@ -138,8 +153,19 @@ else
       esac
     done
     if [ ${#apt[@]} -gt 0 ]; then
-      hacer sudo apt-get update && hacer sudo apt-get install -y "${apt[@]}" curl \
-        || { aviso "apt-get falló"; exit 1; }
+      sudo_=(sudo)
+      # Sin nadie que escriba la contraseña, «sudo -n» falla en vez de quedarse esperando.
+      [ "$NO_INTERACTIVO" = 1 ] && sudo_=(sudo -n env DEBIAN_FRONTEND=noninteractive)
+      if ! { hacer "${sudo_[@]}" apt-get update \
+             && hacer "${sudo_[@]}" apt-get install -y "${apt[@]}" curl; }; then
+        aviso "apt-get falló."
+        if [ "$NO_INTERACTIVO" = 1 ]; then
+          aviso "Si fue porque sudo pide contraseña, corre tú en una terminal:"
+          info "sudo apt-get install -y ${apt[*]} curl"
+          aviso "y vuelve a correr este instalador."
+        fi
+        exit 1
+      fi
     fi
     if [[ " ${faltan[*]} " == *" uv "* ]]; then
       if [ "$SIMULAR" = 1 ]; then
@@ -223,9 +249,14 @@ if [ -n "${CONTEXT7_API_KEY:-}" ]; then
 elif grep -qs 'CONTEXT7_API_KEY=' "$HOME/.zshrc" "$HOME/.zshenv" "$HOME/.zprofile" \
        "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; then
   info "Ya está en tu archivo de inicio de la terminal; se carga al abrir una nueva."
-elif [ "$SIMULAR" = 1 ] || [ ! -t 0 ]; then
+elif [ "$SIMULAR" = 1 ]; then
   aviso "No está definida."
   explicar_clave
+elif [ "$NO_INTERACTIVO" = 1 ]; then
+  aviso "No está definida. Modo no interactivo: no la pido; queda pendiente."
+  explicar_clave
+  info "O vuelve a correr ./instalar.sh (con las mismas opciones) en tu terminal: te la"
+  info "pide sin mostrarla en pantalla."
 else
   read -r -s -p "    Pega tu clave de Context7 (Enter para omitir): " clave
   echo

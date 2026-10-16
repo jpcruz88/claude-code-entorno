@@ -7,7 +7,8 @@
   1. Avisa si la empresa tiene políticas de Claude Code (managed settings).
   2. Instala con winget lo que falte: Git for Windows, Node.js LTS, Python 3, jq y uv.
   3. Instala codebase-memory-mcp con su instalador oficial (si falta).
-  4. Pide la clave de Context7 si la variable CONTEXT7_API_KEY no existe.
+  4. Pide la clave de Context7 si la variable CONTEXT7_API_KEY no existe (en modo no
+     interactivo no la pide: explica cómo ponerla después).
   5. Copia reglas, hooks y statusline a %USERPROFILE%\.claude, fusiona settings.json
      (con respaldo), instala plugins, skills y MCP (herramientas\instalar_comun.py).
 
@@ -20,11 +21,17 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
   Instala.
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File .\instalar.ps1 -NoInteractivo -SinSkills
+  Instala sin preguntar nada (para un agente o un script) y sin las skills de terceros.
 #>
 [CmdletBinding()]
 param(
   # Solo muestra lo que haría.
   [switch]$Simular,
+  # No pregunta nada (para agentes y scripts). Es automático si nadie puede contestar.
+  [switch]$NoInteractivo,
   # No instala codebase-memory-mcp ni sus hooks.
   [switch]$SinCodebaseMemory,
   # No instala las skills (son código de terceros; ver README).
@@ -53,6 +60,18 @@ function Paso([string]$Texto) { Write-Host ''; Write-Host "==> $Texto" -Foregrou
 function Info([string]$Texto) { Write-Host "    $Texto" }
 function Aviso([string]$Texto) { Write-Host "    AVISO: $Texto" -ForegroundColor Yellow }
 
+# ¿Hay alguien que pueda contestar una pregunta? No, si no hay consola, si la
+# entrada está redirigida (un agente, una tubería) o si PowerShell se abrió con
+# -NonInteractive (ahí Read-Host da error).
+function Entrada-Interactiva {
+  if (-not [Environment]::UserInteractive) { return $false }
+  try { if ([Console]::IsInputRedirected) { return $false } } catch { return $false }
+  foreach ($a in [Environment]::GetCommandLineArgs()) {
+    if ($a -match '^[-/]noni') { return $false }
+  }
+  return $true
+}
+
 function Tiene([string]$Comando) {
   return [bool](Get-Command $Comando -ErrorAction SilentlyContinue)
 }
@@ -69,6 +88,12 @@ Paso 'Claude Code: instalación del entorno (Windows)'
 Info "Carpeta personal: $env:USERPROFILE"
 Info "Repo: $Repo"
 if ($Simular) { Info 'Modo simulación: no se cambia nada.' }
+$motivoNoInteractivo = 'opción -NoInteractivo'
+if (-not $NoInteractivo -and -not (Entrada-Interactiva)) {
+  $NoInteractivo = $true
+  $motivoNoInteractivo = 'no hay una consola que pueda contestar'
+}
+if ($NoInteractivo) { Info "Modo no interactivo ($motivoNoInteractivo): no se pregunta nada." }
 
 # ---------------------------------------------------------------------------
 Paso 'Políticas de la empresa (managed settings)'
@@ -115,6 +140,9 @@ if ($encontradas.Count -gt 0) {
 
 # ---------------------------------------------------------------------------
 Paso 'Programas necesarios: Git, Node.js LTS, Python 3, jq y uv'
+# Por si esta ventana (o la terminal de un agente) se abrió antes de que otra
+# corrida instalara algo con winget: así lo encuentra sin reiniciar.
+Actualizar-Path
 
 # Python: «python» puede ser el atajo de la Microsoft Store, que no es Python de
 # verdad. Se prueba que responda con la versión 3.
@@ -245,7 +273,10 @@ if ($SinCodebaseMemory) {
       Invoke-WebRequest -Uri $UrlCbm -OutFile $instaladorCbm -UseBasicParsing -ErrorAction Stop
       Unblock-File -LiteralPath $instaladorCbm -ErrorAction Stop
       $env:CBM_DOWNLOAD_URL = $UrlCbmRelease
-      & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $instaladorCbm
+      $opcionesPs = @('-NoProfile', '-ExecutionPolicy', 'Bypass')
+      # Sin nadie que conteste, una pregunta inesperada falla en vez de esperar.
+      if ($NoInteractivo) { $opcionesPs += '-NonInteractive' }
+      & powershell.exe @opcionesPs -File $instaladorCbm
       if ($LASTEXITCODE -ne 0) { throw "el instalador terminó con código $LASTEXITCODE" }
       Actualizar-Path
       Info 'codebase-memory-mcp instalado.'
@@ -264,8 +295,9 @@ if ($SinCodebaseMemory) {
 Paso 'Clave de Context7 (variable CONTEXT7_API_KEY)'
 function Explicar-Clave {
   Info 'Sácala gratis en https://context7.com/dashboard y guárdala como variable de'
-  Info 'entorno de tu usuario. En PowerShell:'
-  Info '  [Environment]::SetEnvironmentVariable(''CONTEXT7_API_KEY'', ''<tu-clave>'', ''User'')'
+  Info 'entorno de tu usuario. En una ventana de PowerShell (te la pide y no queda en el'
+  Info 'historial):'
+  Info '  [Environment]::SetEnvironmentVariable(''CONTEXT7_API_KEY'', (Read-Host ''Clave de Context7''), ''User'')'
   Info 'o en «Editar las variables de entorno de esta cuenta» (búscalo en Inicio).'
   Info 'Luego cierra y vuelve a abrir la terminal. Sin la clave, context7 marca error en /mcp.'
 }
@@ -273,8 +305,11 @@ $claveUsuario = [Environment]::GetEnvironmentVariable('CONTEXT7_API_KEY', 'User'
 $claveMaquina = [Environment]::GetEnvironmentVariable('CONTEXT7_API_KEY', 'Machine')
 if ($env:CONTEXT7_API_KEY -or $claveUsuario -or $claveMaquina) {
   Info 'Ya está definida.'
-} elseif ($Simular -or -not [Environment]::UserInteractive -or [Console]::IsInputRedirected) {
+} elseif ($Simular) {
   Aviso 'No está definida.'
+  Explicar-Clave
+} elseif ($NoInteractivo) {
+  Aviso 'No está definida. Modo no interactivo: no la pido; queda pendiente.'
   Explicar-Clave
 } else {
   $segura = Read-Host '    Pega tu clave de Context7 (Enter para omitir)' -AsSecureString

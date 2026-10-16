@@ -12,6 +12,7 @@ Hace, en orden:
 
 Todo es idempotente: lo que ya está se deja igual. Con --simular solo muestra lo
 que haría y no ejecuta claude ni npx (hasta sus consultas crean archivos).
+Nunca pregunta nada: los programas que lanza reciben una entrada vacía.
 """
 import argparse
 import datetime
@@ -85,8 +86,11 @@ class Instalador:
     def correr(self, args, timeout=600, env_extra=None):
         env = dict(os.environ, **(env_extra or {}))
         try:
-            r = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               timeout=timeout, env=env, encoding="utf-8", errors="replace")
+            # stdin vacío: la salida se captura, así que una pregunta de npx o claude
+            # quedaría invisible esperando respuesta; así falla en vez de colgarse.
+            r = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, timeout=timeout, env=env,
+                               encoding="utf-8", errors="replace")
             return r.returncode, r.stdout or ""
         except subprocess.TimeoutExpired:
             return 124, "se agotó el tiempo (%d s)" % timeout
