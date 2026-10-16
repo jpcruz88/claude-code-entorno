@@ -1,0 +1,40 @@
+{
+  "cwd": "/proyectos/demo",
+  "session_id": "abc123",
+  "session_name": "mi-sesion",
+  "transcript_path": "/proyectos/demo/transcript.jsonl",
+  "model": { "id": "claude-opus-5-5", "display_name": "Opus" },
+  "workspace": {
+    "current_dir": "/proyectos/demo",
+    "project_dir": "/proyectos/demo",
+    "added_dirs": [],
+    "git_worktree": "feature-xyz"
+  },
+  "version": "2.1.301",
+  "output_style": { "name": "default" },
+  "cost": {
+    "total_cost_usd": 0.01234,
+    "total_duration_ms": 4545000,
+    "total_api_duration_ms": 2300,
+    "total_lines_added": 156,
+    "total_lines_removed": 23
+  },
+  "context_window": {
+    "total_input_tokens": 15500,
+    "total_output_tokens": 1200,
+    "context_window_size": 200000,
+    "used_percentage": 8,
+    "remaining_percentage": 92
+  },
+  "exceeds_200k_tokens": false,
+  "prompt_cache": { "warm": true, "hit_ratio": 0.91 },
+  "fast_mode": false,
+  "effort": { "level": "xhigh" },
+  "thinking": { "enabled": true },
+  "rate_limits": {
+    "five_hour": { "used_percentage": 23.5, "resets_at": 1738425600 },
+    "seven_day": { "used_percentage": 41.2, "resets_at": 1738857600 }
+  },
+  "agent": { "name": "revisor" },
+  "worktree": { "name": "mi-rama", "path": "/proyectos/demo/.claude/worktrees/mi-rama" }
+}

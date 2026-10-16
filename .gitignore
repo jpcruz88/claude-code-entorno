@@ -1,0 +1,11 @@
+# Archivos que macOS crea solo: .DS_Store en cualquier carpeta y ._* (AppleDouble)
+# en discos que no son de Mac (exFAT, FAT, USB, red). Este repo vive en un disco exFAT.
+.DS_Store
+._*
+
+# Cachés de Python y de las pruebas
+__pycache__/
+*.pyc
+
+# Respaldos que pudieran quedar al probar los instaladores
+*.bak-*

@@ -1,0 +1,6 @@
+# Fin de línea LF para todo: los scripts de bash fallan en Git Bash de Windows si
+# llegan con CRLF (el «\r» sobrante rompe cada línea).
+* text=auto eol=lf
+
+# PowerShell en Windows: CRLF, como espera el Bloc de notas.
+*.ps1 text eol=crlf
