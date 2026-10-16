@@ -5,27 +5,36 @@
 #   ./instalar.sh             # instala
 #
 # Opciones:
-#   --simular               solo muestra lo que haría
-#   --sin-codebase-memory   no instala codebase-memory-mcp ni sus hooks
-#   --sin-skills            no instala las skills (lo más lento: ~50 descargas)
-#   --ayuda                 muestra esta ayuda
+#   --simular                solo muestra lo que haría
+#   --sin-codebase-memory    no instala codebase-memory-mcp ni sus hooks
+#   --sin-skills             no instala las skills (código de terceros; ver README)
+#   --saltar-aviso-permisos  agrega skipDangerousModePermissionPrompt (quita un aviso
+#                            de seguridad; apagado por omisión, ver README)
+#   --ayuda                  muestra esta ayuda
 #
 # Se puede correr las veces que haga falta: lo que ya está instalado se deja igual.
 set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-URL_CBM="https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.sh"
+# codebase-memory-mcp: versión publicada fija (no la rama main). El instalador
+# oficial sale de la etiqueta de esa versión y descarga el binario de su release,
+# que verifica con el checksums.txt de la misma release.
+CBM_VERSION="v0.12.0"
+URL_CBM="https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/${CBM_VERSION}/install.sh"
+URL_CBM_RELEASE="https://github.com/DeusData/codebase-memory-mcp/releases/download/${CBM_VERSION}"
 SIMULAR=0
 SIN_CBM=0
 SIN_SKILLS=0
+SALTAR_AVISO=0
 
-uso() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+uso() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
 
 for arg in "$@"; do
   case "$arg" in
     --simular) SIMULAR=1 ;;
     --sin-codebase-memory) SIN_CBM=1 ;;
     --sin-skills) SIN_SKILLS=1 ;;
+    --saltar-aviso-permisos) SALTAR_AVISO=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
   esac
@@ -179,14 +188,16 @@ if [ "$SIN_CBM" = 1 ]; then
 elif r="$(ruta_cbm)" && [ -n "$r" ]; then
   info "Ya instalado: $r"
 else
-  info "No está instalado. Uso su instalador oficial: descarga el binario y configura"
-  info "Claude Code (su MCP, sus hooks y su skill)."
+  info "No está instalado. Uso su instalador oficial, versión $CBM_VERSION: descarga el"
+  info "binario de la release, lo verifica y configura Claude Code (su MCP, hooks y skill)."
   if [ "$SIMULAR" = 1 ]; then
-    info "[simular] haría: curl -fsSL $URL_CBM -o <temporal>/install.sh && bash <temporal>/install.sh"
+    info "[simular] haría: curl -fsSL $URL_CBM -o <temporal>/install.sh"
+    info "[simular] haría: CBM_DOWNLOAD_URL=$URL_CBM_RELEASE bash <temporal>/install.sh"
     SUPONER_CBM=1
   else
     tmp="$(mktemp -d)"
-    if curl -fsSL "$URL_CBM" -o "$tmp/install.sh" && bash "$tmp/install.sh"; then
+    if curl -fsSL "$URL_CBM" -o "$tmp/install.sh" \
+       && CBM_DOWNLOAD_URL="$URL_CBM_RELEASE" bash "$tmp/install.sh"; then
       info "codebase-memory-mcp instalado."
     else
       aviso "No se pudo instalar codebase-memory-mcp; sigo sin él."
@@ -240,4 +251,5 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SIN_CBM" = 1 ] && args+=(--sin-codebase-memory)
 [ "$SUPONER_CBM" = 1 ] && args+=(--suponer-codebase-memory)
 [ "$SIN_SKILLS" = 1 ] && args+=(--sin-skills)
+[ "$SALTAR_AVISO" = 1 ] && args+=(--saltar-aviso-permisos)
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"

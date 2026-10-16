@@ -78,6 +78,5 @@
   "theme": "dark",
   "tui": "fullscreen",
   "cleanupPeriodDays": 3650,
-  "skipDangerousModePermissionPrompt": true,
   "agentPushNotifEnabled": true
 }

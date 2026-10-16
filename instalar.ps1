@@ -27,8 +27,10 @@ param(
   [switch]$Simular,
   # No instala codebase-memory-mcp ni sus hooks.
   [switch]$SinCodebaseMemory,
-  # No instala las skills (lo más lento: unas 50 descargas).
-  [switch]$SinSkills
+  # No instala las skills (son código de terceros; ver README).
+  [switch]$SinSkills,
+  # Agrega skipDangerousModePermissionPrompt: quita un aviso de seguridad (ver README).
+  [switch]$SaltarAvisoPermisos
 )
 
 # 'Continue' a propósito: en PowerShell 5.1, con 'Stop', cualquier texto que un
@@ -40,7 +42,12 @@ if ($env:OS -ne 'Windows_NT') {
   Write-Host 'Este instalador es para Windows. En macOS o Linux usa: ./instalar.sh'
   exit 1
 }
-$UrlCbm = 'https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1'
+# codebase-memory-mcp: versión publicada fija (no la rama main). El instalador
+# oficial sale de la etiqueta de esa versión y descarga el binario de su release,
+# que verifica con el checksums.txt de la misma release.
+$CbmVersion = 'v0.12.0'
+$UrlCbm = "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/$CbmVersion/install.ps1"
+$UrlCbmRelease = "https://github.com/DeusData/codebase-memory-mcp/releases/download/$CbmVersion"
 
 function Paso([string]$Texto) { Write-Host ''; Write-Host "==> $Texto" -ForegroundColor Cyan }
 function Info([string]$Texto) { Write-Host "    $Texto" }
@@ -223,10 +230,11 @@ if ($SinCodebaseMemory) {
 } elseif ((Tiene 'codebase-memory-mcp') -or (Test-Path -LiteralPath $cbmLocal)) {
   Info 'Ya instalado.'
 } else {
-  Info 'No está instalado. Uso su instalador oficial: descarga el binario para Windows'
-  Info 'y configura Claude Code (su MCP, sus hooks y su skill).'
+  Info "No está instalado. Uso su instalador oficial, versión ${CbmVersion}: descarga el"
+  Info 'binario para Windows de la release, lo verifica y configura Claude Code.'
   if ($Simular) {
     Info "[simular] haría: descargar $UrlCbm, Unblock-File y ejecutarlo"
+    Info "[simular]        con CBM_DOWNLOAD_URL=$UrlCbmRelease"
     $suponerCbm = $true
   } else {
     $tmp = Join-Path ([IO.Path]::GetTempPath()) ('cbm-' + [guid]::NewGuid().ToString('N'))
@@ -236,6 +244,7 @@ if ($SinCodebaseMemory) {
       [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
       Invoke-WebRequest -Uri $UrlCbm -OutFile $instaladorCbm -UseBasicParsing -ErrorAction Stop
       Unblock-File -LiteralPath $instaladorCbm -ErrorAction Stop
+      $env:CBM_DOWNLOAD_URL = $UrlCbmRelease
       & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $instaladorCbm
       if ($LASTEXITCODE -ne 0) { throw "el instalador terminó con código $LASTEXITCODE" }
       Actualizar-Path
@@ -245,6 +254,7 @@ if ($SinCodebaseMemory) {
       Aviso 'Si el antivirus lo bloqueó, mira la nota del README sobre falsos positivos.'
       $SinCodebaseMemory = $true
     } finally {
+      Remove-Item Env:\CBM_DOWNLOAD_URL -ErrorAction SilentlyContinue
       Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
   }
@@ -293,6 +303,7 @@ if ($Simular) { $argumentos += '--simular' }
 if ($SinCodebaseMemory) { $argumentos += '--sin-codebase-memory' }
 if ($suponerCbm) { $argumentos += '--suponer-codebase-memory' }
 if ($SinSkills) { $argumentos += '--sin-skills' }
+if ($SaltarAvisoPermisos) { $argumentos += '--saltar-aviso-permisos' }
 if ($gitBash) { $argumentos += @('--git-bash', $gitBash) }
 & $python.Exe @argumentos
 exit $LASTEXITCODE

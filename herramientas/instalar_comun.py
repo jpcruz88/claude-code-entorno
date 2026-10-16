@@ -31,6 +31,9 @@ import fusionar_settings  # noqa: E402
 ES_WINDOWS = os.name == "nt"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
+# Versión fija del instalador de skills (vercel-labs/skills): la misma con la que
+# se probó este repo. Cambiarla a propósito, nunca usar «la última».
+SKILLS_CLI = "skills@1.7.2"
 
 
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
@@ -59,6 +62,7 @@ class Instalador:
         self.suponer_cbm = a.suponer_codebase_memory
         self.sin_skills = a.sin_skills
         self.git_bash = a.git_bash
+        self.saltar_aviso = a.saltar_aviso_permisos
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
         self.fallos = []
@@ -158,11 +162,16 @@ class Instalador:
             # en una simulación todavía no existen los scripts que crea su instalador
             disponibles |= {"cbm-code-discovery-gate", "cbm-session-reminder"}
         env_extra = {"CLAUDE_CODE_GIT_BASH_PATH": self.git_bash} if self.git_bash else None
+        ajustes = None
+        if self.saltar_aviso:
+            self.aviso("--saltar-aviso-permisos: se agrega skipDangerousModePermissionPrompt, "
+                       "que quita la advertencia antes del modo sin permisos.")
+            ajustes = {"skipDangerousModePermissionPrompt": True}
         codigo = fusionar_settings.aplicar(
             REPO / "claude" / "settings.base.json", self.claude_dir / "settings.json",
             plataforma=self.plataforma, python_hooks=self.python_hooks,
             sin_codebase_memory=not cbm, scripts_disponibles=disponibles,
-            env_extra=env_extra, simular=self.simular)
+            env_extra=env_extra, simular=self.simular, ajustes_extra=ajustes)
         if codigo != 0:
             self.fallos.append("settings.json")
 
@@ -242,6 +251,7 @@ class Instalador:
         if self.sin_skills:
             self.info("Se omiten (--sin-skills).")
             return
+        self.info("Ojo: las skills son código de terceros sin auditar (ver README).")
         lista = json.loads((REPO / "skills" / "lista.json").read_text(encoding="utf-8"))
         skills = lista.get("skills", [])
         npx = self.buscar("npx")
@@ -255,7 +265,7 @@ class Instalador:
                 hechas += 1
                 continue
             faltan += 1
-            args = ["npx", "-y", "skills", "add", origen, "-g", "-y", "-a", "claude-code"]
+            args = ["npx", "-y", SKILLS_CLI, "add", origen, "-g", "-y", "-a", "claude-code"]
             if ES_WINDOWS:
                 args.append("--copy")  # en Windows los enlaces simbólicos piden permisos
             if self.simular:
@@ -398,6 +408,8 @@ def main(argv=None):
     p.add_argument("--suponer-codebase-memory", action="store_true",
                    help="(simulación) actuar como si ya estuviera instalado")
     p.add_argument("--sin-skills", action="store_true")
+    p.add_argument("--saltar-aviso-permisos", action="store_true",
+                   help="agrega skipDangerousModePermissionPrompt (apagado por omisión)")
     p.add_argument("--git-bash", default=None,
                    help="ruta a bash.exe si no está en el lugar de siempre (Windows)")
     a = p.parse_args(argv)

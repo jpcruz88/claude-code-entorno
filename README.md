@@ -19,7 +19,7 @@ Solo trae lo **genérico**: nada de proyectos, clientes, claves ni rutas persona
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
-| Skills | `skills/lista.json` | 48 skills públicas, cada una con el repositorio de donde sale. |
+| Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
 
@@ -83,6 +83,9 @@ aceptar.
 
    - Instala con `winget` lo que falte: Git for Windows, Node.js LTS, Python 3,
      jq y uv.
+   - Instala unas 48 skills de terceros sin auditar (ver [Skills](#skills)). En una
+     computadora del trabajo conviene instalar sin ellas: añadir `-SinSkills` al
+     final del comando.
    - Si después de instalar Python dice que no lo encuentra, cerrar PowerShell,
      abrirlo otra vez y repetir este paso (no se duplica nada).
    - Pide la **clave de Context7** si no existe (se saca gratis en
@@ -120,7 +123,8 @@ aceptar.
 |---|---|
 | `-Simular` | Muestra lo que haría, sin cambiar nada. |
 | `-SinCodebaseMemory` | No instala codebase-memory-mcp ni sus hooks. |
-| `-SinSkills` | Salta las skills (lo más lento). |
+| `-SinSkills` | No instala las skills (son código de terceros; ver [Skills](#skills)). |
+| `-SaltarAvisoPermisos` | Agrega `skipDangerousModePermissionPrompt` (ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos)). Apagado si no lo pones. |
 
 ### Detalles de Windows que conviene saber
 
@@ -153,7 +157,8 @@ cd claude-code-entorno
   hay Homebrew, explica cómo ponerlo.
 - En Linux usa `apt-get` (pide `sudo`). La versión de Node.js de apt suele ser
   vieja: si avisa, instalar Node.js LTS desde <https://nodejs.org>.
-- Opciones: `--simular`, `--sin-codebase-memory`, `--sin-skills`.
+- Opciones: `--simular`, `--sin-codebase-memory`, `--sin-skills` (no instala las
+  skills de terceros) y `--saltar-aviso-permisos` (ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos)).
 - Clave de Context7: la pide y ofrece guardarla en `~/.zshrc` (o `~/.bashrc`).
   A mano: `echo "export CONTEXT7_API_KEY='<tu-clave>'" >> ~/.zshrc`.
 
@@ -170,7 +175,8 @@ cd claude-code-entorno
      `com.anthropic.claudecode` en `/Library/Managed Preferences/`.
    - Linux: `/etc/claude-code/`.
 2. Instala los programas que falten.
-3. Instala **codebase-memory-mcp** con su instalador oficial, si falta.
+3. Instala **codebase-memory-mcp** con su instalador oficial, si falta, en una
+   versión fija (`v0.12.0`, no la rama en desarrollo).
 4. Pide la clave de Context7, si falta.
 5. Copia reglas, hook y línea de estado a la carpeta `.claude` de tu usuario. Si ya
    había un archivo distinto, antes guarda una copia `.bak-<fecha>`.
@@ -179,7 +185,8 @@ cd claude-code-entorno
    `settings.json.bak-<fecha>`, no cambia ningún valor que ya tengas (te avisa si
    difiere) y agrega los hooks sin repetirlos.
 7. Instala el plugin (`claude plugin install … --scope user`), las skills
-   (`npx -y skills add <dueño/repo@skill> -g -y -a claude-code`) y registra los MCP
+   (`npx -y skills@1.7.2 add <dueño/repo@skill> -g -y -a claude-code`, con la
+   versión del instalador de skills fija) y registra los MCP
    (`claude mcp add-json --scope user …`).
 8. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
@@ -213,11 +220,23 @@ a 8 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
 | `theme` | `dark` | Tema oscuro. |
 | `tui` | `fullscreen` | Interfaz a pantalla completa. |
 | `cleanupPeriodDays` | `3650` | Guarda el historial de sesiones 10 años (por omisión se borra a los 30 días). |
-| `skipDangerousModePermissionPrompt` | `true` | ⚠️ **Quita una advertencia de seguridad**: no pregunta antes de entrar al modo que acepta todo sin pedir permiso (`--dangerously-skip-permissions`). Úsalo solo si sabes lo que implica; para recuperarla, bórrala de `settings.json`. |
 | `agentPushNotifEnabled` | `true` | Notificaciones cuando un agente termina o necesita algo. |
 
 Los hooks de codebase-memory-mcp solo se agregan si está instalado (en Windows
 también). Si su instalador ya los creó, no se duplican.
+
+### Ajuste opcional: saltar el aviso de permisos
+
+`skipDangerousModePermissionPrompt` **no viene activado**. Solo se agrega si lo
+pides al instalar (`--saltar-aviso-permisos` en Mac/Linux, `-SaltarAvisoPermisos`
+en Windows).
+
+⚠️ **Riesgo:** quita la advertencia que Claude Code muestra antes de entrar al modo
+que acepta todo sin pedir permiso (`--dangerously-skip-permissions`). En ese modo
+Claude puede borrar, instalar o ejecutar cualquier cosa sin preguntarte; la
+advertencia es la última oportunidad de pensarlo. Actívalo solo si usas ese modo a
+menudo y entiendes lo que implica. Para quitarlo, borra la clave de
+`~/.claude/settings.json`.
 
 ## Hook `guard-kill.py`
 
@@ -255,17 +274,33 @@ del idioma del sistema: los días salen en español siempre.
   abrir Claude Code**.
 - **codebase-memory-mcp** (`mcp/codebase-memory-mcp.json`): programa local. Se
   instala con [su instalador oficial](https://github.com/DeusData/codebase-memory-mcp)
-  (`install.sh` en Mac/Linux, `install.ps1` en Windows), que además configura su
-  MCP, sus hooks y su skill. Si ya lo registró, este repo no lo repite.
+  (`install.sh` en Mac/Linux, `install.ps1` en Windows) en la versión publicada
+  **v0.12.0**: el instalador sale de esa etiqueta y el binario de
+  `https://github.com/DeusData/codebase-memory-mcp/releases/download/v0.12.0`,
+  verificado con el `checksums.txt` de esa misma release. El instalador además
+  configura su MCP, sus hooks y su skill; si ya lo registró, este repo no lo
+  repite. Para cambiar de versión se edita `CBM_VERSION` en `instalar.sh` y
+  `$CbmVersion` en `instalar.ps1`.
 - **Claude in Chrome**: no es un MCP que se configure aquí; basta instalar la
   extensión de Chrome e iniciar sesión.
 
 ## Skills
 
-`skills/lista.json` tiene cada skill con su origen (`dueño/repo@skill`). Son las
-que he usado alguna vez más algunas instaladas hace poco, sin las personales, las
-retiradas ni las que ya llegan por otro lado. Para cambiar la lista se edita
-`herramientas/filtros.json` (en la Mac principal) y se vuelve a exportar.
+> ⚠️ **Las skills son código de terceros sin auditar.** Cada una es una carpeta
+> de instrucciones (y a veces scripts) escrita por otra persona u organización.
+> Claude las lee y puede seguir lo que digan, y sus dueños pueden cambiarlas en
+> cualquier momento. Este repo no revisa su contenido: solo guarda de dónde salen.
+> Si la computadora es del trabajo o no quieres ese riesgo, instala **sin skills**:
+> `./instalar.sh --sin-skills` o `instalar.ps1 -SinSkills`. Puedes agregar después
+> solo las que revises con `npx -y skills@1.7.2 add <dueño/repo@skill> -g -y -a claude-code`.
+
+`skills/lista.json` tiene cada skill con su origen (`dueño/repo@skill`). Sale de
+una **lista de permitidas** (`skills_permitidas` en `herramientas/filtros.json`):
+solo esas se exportan. Si en la Mac principal usas una skill que no está en la
+lista, `exportar.sh` avisa («nueva skill usada: …») y no la lleva hasta que la
+agregues. Cada origen debe ser un repositorio **público** de GitHub con su nombre
+actual (los renombrados se corrigen en `origenes_renombrados`). La versión del
+instalador de skills está fija (`skills@1.7.2`) en `herramientas/instalar_comun.py`.
 
 ## Git: gitignore global
 
@@ -309,15 +344,24 @@ powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # Windows
 1. Lee (sin modificar nada) `~/.claude/settings.json`, las reglas, la lista de
    skills usadas (solo la clave `skillUsage` de `~/.claude.json`) y
    `~/.agents/.skill-lock.json`.
-2. Aplica los filtros de `herramientas/filtros.json` y reescribe
-   `claude/settings.base.json`, `claude/rules/` y `skills/lista.json`.
-3. Compara el hook y la línea de estado de la Mac con los del repo y avisa si
+2. Aplica las **listas de permitidos** de `herramientas/filtros.json` (claves y
+   hooks de settings, reglas y skills) y reescribe `claude/settings.base.json`,
+   `claude/rules/` y `skills/lista.json`. Lo que no esté en esas listas no sale, y
+   las reglas o skills nuevas solo se avisan.
+3. Comprueba **sin credenciales** que cada repositorio de origen de las skills sea
+   público y conserve su nombre; si no, termina con error.
+4. Compara el hook y la línea de estado de la Mac con los del repo y avisa si
    difieren. El repo guarda versiones **portables** (funcionan en Windows), así que
    esos dos no se sobrescriben: un cambio en ellos se hace en el repo.
-4. Corre las pruebas, **gitleaks** y una búsqueda propia de datos privados
-   (`herramientas/revisar_privacidad.py`): rutas personales, discos, claves
-   (`sk-`, `ghp_`…), `CONTEXT7_API_KEY=` con valor, IPs, correos, teléfonos y la
-   lista de términos privados. Si encuentra algo, **termina con error**.
+5. Corre las pruebas, **gitleaks** (archivos actuales y todo el historial, con
+   `--log-opts=--all`) y una búsqueda propia de datos privados
+   (`herramientas/revisar_privacidad.py`) en el contenido y los nombres de los
+   archivos, el historial y los mensajes de commit: rutas personales, discos,
+   claves (`sk-`, `ghp_`…), `CONTEXT7_API_KEY=` con valor, IPs, correos,
+   teléfonos y la lista de términos privados. También exige que el autor y el
+   committer de cada commit sean la identidad acordada (la de
+   `git config --local user.name/user.email` del repo). Si encuentra algo,
+   **termina con error**.
 
 La lista de términos privados (nombres de clientes, teléfono…) **no está en el
 repo**, porque sería publicarlos: vive en
@@ -362,8 +406,12 @@ Este repo es **público**. Nunca debe tener claves, tokens, rutas con nombres de
 usuario, IPs, nombres de equipos o clientes, ni contenido de memorias de
 proyecto. Para cuidarlo:
 
-- La exportación usa **listas de lo permitido** (todo lo demás se queda fuera).
-- `exportar.sh` no deja terminar si gitleaks o la revisión propia encuentran algo.
+- La exportación usa **listas de lo permitido** para todo lo que sale de la Mac:
+  claves y hooks de settings, plugins (`plugins.txt`), reglas y skills. Lo que no
+  esté en esas listas se queda fuera; las reglas y skills nuevas solo se avisan.
+- Las skills solo se aceptan si su repositorio es público sin credenciales.
+- `exportar.sh` no deja terminar si gitleaks o la revisión propia encuentran algo
+  (contenido, nombres de archivo, historial, mensajes, autor y committer).
 - Las claves van como variables de entorno en cada computadora
   (`${CONTEXT7_API_KEY}` en la plantilla).
 

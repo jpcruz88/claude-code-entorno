@@ -239,7 +239,7 @@ def respaldar(ruta):
 
 def aplicar(base_ruta, destino_ruta, plataforma="unix", python_hooks=None,
             sin_codebase_memory=False, scripts_disponibles=None, env_extra=None,
-            simular=False, salida=print):
+            simular=False, salida=print, ajustes_extra=None):
     """Hace todo el trabajo y devuelve 0 si salió bien, 1 si hubo un error."""
     try:
         base = leer_json(base_ruta)
@@ -259,6 +259,8 @@ def aplicar(base_ruta, destino_ruta, plataforma="unix", python_hooks=None,
             return 1
     base, avisos = preparar_base(base, plataforma, python_hooks, sin_codebase_memory,
                                  scripts_disponibles)
+    for clave, valor in (ajustes_extra or {}).items():  # opcionales (p. ej. del instalador)
+        base.setdefault(clave, valor)
     resultado, cambios, avisos_fusion = fusionar(base, destino, env_extra)
     for a in avisos + avisos_fusion:
         salida("    aviso: " + a)
@@ -289,13 +291,17 @@ def main(argv=None):
                    help="nombres de scripts de hooks que existen, separados por comas")
     p.add_argument("--env", action="append", default=[], metavar="CLAVE=VALOR",
                    help="variable para la sección env (solo si no existe)")
+    p.add_argument("--saltar-aviso-permisos", action="store_true",
+                   help="agrega skipDangerousModePermissionPrompt: true (quita un aviso de seguridad)")
     p.add_argument("--simular", action="store_true")
     a = p.parse_args(argv)
     env_extra = dict(x.split("=", 1) for x in a.env) if a.env else None
     disponibles = set(filter(None, a.scripts_disponibles.split(","))) \
         if a.scripts_disponibles is not None else None
+    extra = {"skipDangerousModePermissionPrompt": True} if a.saltar_aviso_permisos else None
     return aplicar(a.base, os.path.expanduser(a.destino), a.plataforma, a.python_hooks,
-                   a.sin_codebase_memory, disponibles, env_extra, a.simular)
+                   a.sin_codebase_memory, disponibles, env_extra, a.simular,
+                   ajustes_extra=extra)
 
 
 if __name__ == "__main__":

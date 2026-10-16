@@ -105,6 +105,16 @@ class Fusion(unittest.TestCase):
         self.assertNotIn("SessionStart", self.leer()["hooks"])
         self.assertIn("no existe ~/.claude/hooks/cbm-session-reminder", salida)
 
+    def test_aviso_de_permisos_es_opcional(self):
+        self.aplicar(python_hooks="python3")
+        self.assertNotIn("skipDangerousModePermissionPrompt", self.leer())
+        self.aplicar(python_hooks="python3",
+                     ajustes_extra={"skipDangerousModePermissionPrompt": True})
+        self.assertIs(self.leer()["skipDangerousModePermissionPrompt"], True)
+        _, salida = self.aplicar(python_hooks="python3",
+                                 ajustes_extra={"skipDangerousModePermissionPrompt": True})
+        self.assertIn("ya estaba al día", salida)
+
     def test_simular_no_escribe(self):
         codigo, salida = self.aplicar(python_hooks="python3", simular=True)
         self.assertEqual(codigo, 0)
