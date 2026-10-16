@@ -15,7 +15,7 @@ Solo trae lo **genérico**: nada de proyectos, clientes, claves ni rutas persona
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación y matar procesos solo por PID. |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |

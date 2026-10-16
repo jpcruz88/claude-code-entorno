@@ -26,7 +26,8 @@
   "_reglas_permitidas": "Reglas de ~/.claude/rules que se exportan. Una regla nueva que no esté aquí no se exporta; exportar.sh avisa.",
   "reglas_permitidas": [
     "context7.md",
-    "matar-procesos.md"
+    "matar-procesos.md",
+    "caveman.md"
   ],
   "_skills_permitidas": "Únicas skills que se exportan (con su origen de .skill-lock.json, que debe ser un repositorio público de GitHub). Una skill usada que no esté aquí no se exporta; exportar.sh avisa.",
   "skills_permitidas": [

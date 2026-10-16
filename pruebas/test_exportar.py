@@ -43,6 +43,7 @@ class Exportar(unittest.TestCase):
         # misma estructura que el filtros.json real, con una lista de permitidas de prueba
         filtros = json.loads((RAIZ / "herramientas/filtros.json").read_text(encoding="utf-8"))
         filtros["skills_permitidas"] = ["buena", "playwright-cli", "renombrada"]
+        filtros["reglas_permitidas"] = ["context7.md", "matar-procesos.md"]
         filtros["skills"]["origenes_renombrados"] = {"dueno/viejo": "dueno/nuevo"}
         (self.repo / "herramientas/filtros.json").write_text(json.dumps(filtros), encoding="utf-8")
         # configuración falsa
