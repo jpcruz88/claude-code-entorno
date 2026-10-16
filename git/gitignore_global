@@ -1,0 +1,49 @@
+# Gitignore global: archivos que no deberían entrar en ningún repositorio.
+# Se activa una sola vez por máquina:
+#   git config --global core.excludesfile ~/.gitignore_global
+# (los instaladores lo hacen si todavía no tienes uno configurado)
+
+# --- Sistema operativo ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Los archivos «._algo» (AppleDouble) solo aparecen cuando una Mac escribe en un
+# disco que no es de Mac (USB, exFAT, FAT o carpeta de red). En Windows no se
+# crean, así que no van aquí: ponlos en el .gitignore del proyecto que viva en un
+# disco así, o quita el «#» de la línea siguiente si te pasa seguido.
+# ._*
+
+# --- Editores ---
+.idea/
+*.swp
+*~
+
+# --- Secretos y configuración local ---
+.env
+.env.local
+.env.*.local
+*.pem
+
+# --- Claude Code: ajustes personales de cada proyecto ---
+.claude/settings.local.json
+
+# --- Dependencias y cachés ---
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Registros ---
+*.log
+npm-debug.log*

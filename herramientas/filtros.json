@@ -1,0 +1,61 @@
+{
+  "_que_es": "Filtros que usa exportar.sh para sacar del Claude Code de esta Mac solo lo genérico. Todo lo que no esté aquí se queda fuera.",
+  "settings": {
+    "_claves": "Claves de ~/.claude/settings.json que se exportan, en este orden.",
+    "claves": [
+      "model",
+      "modelSettings",
+      "statusLine",
+      "hooks",
+      "enabledPlugins",
+      "theme",
+      "tui",
+      "cleanupPeriodDays",
+      "skipDangerousModePermissionPrompt",
+      "agentPushNotifEnabled"
+    ],
+    "_hooks": "Hooks que se exportan, por nombre de su script. Los demás se quedan fuera. 'matcher' reemplaza al de esta Mac.",
+    "hooks_permitidos": {
+      "guard-kill.py": {"matcher": "Bash|PowerShell"},
+      "cbm-code-discovery-gate": {},
+      "cbm-session-reminder": {}
+    },
+    "_plugins": "enabledPlugins se recorta a los que estén en plugins.txt."
+  },
+  "reglas": ["context7.md", "matar-procesos.md"],
+  "skills": {
+    "_extra": "Se exportan aunque no aparezcan en skillUsage (instaladas pero aún sin usar).",
+    "extra": [
+      "playwright-cli",
+      "playwright-best-practices",
+      "building-pydantic-ai-agents",
+      "temporal-developer",
+      "eval-audit",
+      "error-analysis",
+      "write-judge-prompt",
+      "llm-security",
+      "n8n-agents-official"
+    ],
+    "_excluidas": "Nunca se exportan, con su motivo (además de las retiradas, las de synced/ y las que no tienen origen).",
+    "excluidas": {
+      "unsplash-downloader": "su repositorio (serpdownloaders/skills) ya no existe en GitHub"
+    },
+    "_fuentes_de_plugins": "Repositorios cuyas skills ya llegan con un plugin.",
+    "fuentes_de_plugins": ["obra/superpowers"],
+    "_integradas": "Vienen con Claude Code o con la cuenta de claude.ai; no se instalan aparte.",
+    "integradas": [
+      "artifact-capabilities",
+      "artifact-design",
+      "artifact-diagramming",
+      "claude-api",
+      "claude-in-chrome",
+      "code-review",
+      "commands",
+      "dataviz",
+      "init",
+      "simplify",
+      "update-config",
+      "verify"
+    ]
+  }
+}

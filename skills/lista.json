@@ -1,0 +1,197 @@
+{
+  "_que_es": "Skills que instalan instalar.sh e instalar.ps1 con `npx -y skills add <origen> -g -y -a claude-code`. Lo genera exportar.sh desde esta Mac; para cambiar qué entra, edita herramientas/filtros.json.",
+  "skills": [
+    {
+      "nombre": "21st-dev-builder-v2",
+      "origen": "trin-zenityx/21st-dev-builder-v2@21st-dev-builder-v2"
+    },
+    {
+      "nombre": "ad-creative",
+      "origen": "coreyhaines31/marketingskills@ad-creative"
+    },
+    {
+      "nombre": "api-design-principles",
+      "origen": "wshobson/agents@api-design-principles"
+    },
+    {
+      "nombre": "app-store-screenshots",
+      "origen": "parthjadhav/app-store-screenshots@app-store-screenshots"
+    },
+    {
+      "nombre": "architecture-decision-records",
+      "origen": "wshobson/agents@architecture-decision-records"
+    },
+    {
+      "nombre": "architecture-diagram",
+      "origen": "cocoon-ai/architecture-diagram-generator@architecture-diagram"
+    },
+    {
+      "nombre": "better-typography",
+      "origen": "jakubkrehel/skills@better-typography"
+    },
+    {
+      "nombre": "brand-identity",
+      "origen": "travisjneuman/.claude@brand-identity"
+    },
+    {
+      "nombre": "building-pydantic-ai-agents",
+      "origen": "pydantic/skills@building-pydantic-ai-agents"
+    },
+    {
+      "nombre": "caveman",
+      "origen": "juliusbrussee/caveman@caveman"
+    },
+    {
+      "nombre": "clean-code",
+      "origen": "sickn33/antigravity-awesome-skills@clean-code"
+    },
+    {
+      "nombre": "conventional-commit",
+      "origen": "github/awesome-copilot@conventional-commit"
+    },
+    {
+      "nombre": "council",
+      "origen": "warpdotdev/common-skills@council"
+    },
+    {
+      "nombre": "data-viz-2025",
+      "origen": "curiositech/some_claude_skills@data-viz-2025"
+    },
+    {
+      "nombre": "design-consistency-auditor",
+      "origen": "shipshitdev/library@design-consistency-auditor"
+    },
+    {
+      "nombre": "design-review",
+      "origen": "plugin87/ux-ui-agent-skills@design-review"
+    },
+    {
+      "nombre": "documentation-writer",
+      "origen": "github/awesome-copilot@documentation-writer"
+    },
+    {
+      "nombre": "domain-name-brainstormer",
+      "origen": "composiohq/awesome-claude-skills@domain-name-brainstormer"
+    },
+    {
+      "nombre": "error-analysis",
+      "origen": "hamelsmu/evals-skills@error-analysis"
+    },
+    {
+      "nombre": "eval-audit",
+      "origen": "hamelsmu/evals-skills@eval-audit"
+    },
+    {
+      "nombre": "find-skills",
+      "origen": "vercel-labs/skills@find-skills"
+    },
+    {
+      "nombre": "frontend-design",
+      "origen": "anthropics/skills@frontend-design"
+    },
+    {
+      "nombre": "game-designer",
+      "origen": "opusgamelabs/game-creator@game-designer"
+    },
+    {
+      "nombre": "game-engine",
+      "origen": "github/awesome-copilot@game-engine"
+    },
+    {
+      "nombre": "gemini-api-dev",
+      "origen": "google-gemini/gemini-skills@gemini-api-dev"
+    },
+    {
+      "nombre": "grill-me",
+      "origen": "mattpocock/skills@grill-me"
+    },
+    {
+      "nombre": "impeccable",
+      "origen": "pbakaus/impeccable@impeccable"
+    },
+    {
+      "nombre": "improve-codebase-architecture",
+      "origen": "mattpocock/skills@improve-codebase-architecture"
+    },
+    {
+      "nombre": "ios-hig-design",
+      "origen": "wondelai/skills@ios-hig-design"
+    },
+    {
+      "nombre": "llm-security",
+      "origen": "semgrep/skills@llm-security"
+    },
+    {
+      "nombre": "mobile-ios-design",
+      "origen": "wshobson/agents@mobile-ios-design"
+    },
+    {
+      "nombre": "mobile-responsive",
+      "origen": "asadsumbul/mobile-responsive@mobile-responsive"
+    },
+    {
+      "nombre": "modal-and-overlay-patterns",
+      "origen": "dembrandt/dembrandt-skills@modal-and-overlay-patterns"
+    },
+    {
+      "nombre": "n8n-agents-official",
+      "origen": "n8n-io/skills@n8n-agents-official"
+    },
+    {
+      "nombre": "n8n-workflow-patterns",
+      "origen": "czlonkowski/n8n-skills@n8n-workflow-patterns"
+    },
+    {
+      "nombre": "owasp-security",
+      "origen": "hoodini/ai-agents-skills@owasp-security"
+    },
+    {
+      "nombre": "playwright-best-practices",
+      "origen": "currents-dev/playwright-best-practices-skill@playwright-best-practices"
+    },
+    {
+      "nombre": "playwright-cli",
+      "origen": "microsoft/playwright-cli@playwright-cli"
+    },
+    {
+      "nombre": "python-design-patterns",
+      "origen": "wshobson/agents@python-design-patterns"
+    },
+    {
+      "nombre": "responsive-design",
+      "origen": "wshobson/agents@responsive-design"
+    },
+    {
+      "nombre": "security-best-practices",
+      "origen": "openai/skills@security-best-practices"
+    },
+    {
+      "nombre": "security-threat-model",
+      "origen": "openai/skills@security-threat-model"
+    },
+    {
+      "nombre": "seo-audit",
+      "origen": "coreyhaines31/marketingskills@seo-audit"
+    },
+    {
+      "nombre": "solid",
+      "origen": "ramziddin/solid-skills@solid"
+    },
+    {
+      "nombre": "temporal-developer",
+      "origen": "temporalio/skill-temporal-developer@temporal-developer"
+    },
+    {
+      "nombre": "ui-ux-pro-max",
+      "origen": "nextlevelbuilder/ui-ux-pro-max-skill@ui-ux-pro-max"
+    },
+    {
+      "nombre": "video",
+      "origen": "coreyhaines31/marketingskills@video"
+    },
+    {
+      "nombre": "write-judge-prompt",
+      "origen": "hamelsmu/evals-skills@write-judge-prompt"
+    }
+  ]
+}

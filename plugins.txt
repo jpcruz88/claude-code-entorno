@@ -1,0 +1,4 @@
+# Plugins de Claude Code que instala el instalador, uno por línea:
+#   <plugin>@<marketplace>  [repositorio del marketplace, si no es el oficial]
+# Se instalan con: claude plugin install <plugin>@<marketplace> --scope user
+superpowers@claude-plugins-official
