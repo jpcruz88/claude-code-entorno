@@ -10,6 +10,49 @@ Solo trae lo **genérico**: nada de proyectos, clientes, claves ni rutas persona
 
 ---
 
+## Que lo instale Claude por ti
+
+Lo más sencillo es pedírselo a Claude Code. Sigue [AGENTS.md](AGENTS.md): primero
+te enseña lo que va a hacer, te pregunta lo necesario y solo instala cuando le
+dices que sí.
+
+1. **Instala Claude Code**, si no lo tienes:
+   - Windows: abre PowerShell (Inicio → escribir `PowerShell`; no hace falta
+     abrirla como administrador) y corre:
+
+     ```powershell
+     irm https://claude.ai/install.ps1 | iex
+     ```
+
+   - Mac: abre la app Terminal y corre:
+
+     ```bash
+     curl -fsSL https://claude.ai/install.sh | bash
+     ```
+
+   Al terminar, abre una terminal nueva y comprueba que `claude --version` muestra
+   un número de versión. Si dice que no encuentra `claude`, sigue lo que indicó el
+   instalador sobre el PATH.
+
+2. **Abre Claude Code en tu carpeta de usuario** e inicia sesión con tu cuenta de
+   Claude: en Windows, `cd $env:USERPROFILE` y luego `claude`; en Mac, `cd ~` y
+   luego `claude`.
+
+3. **Pega este mensaje** en Claude Code:
+
+   ```text
+   Instala mi entorno de Claude Code. Si no está git, instálalo (en Windows con winget; en Mac con xcode-select --install). Luego clona https://github.com/jpcruz88/claude-code-entorno en mi carpeta de usuario (o haz git pull si ya está) y sigue su AGENTS.md al pie de la letra.
+   ```
+
+4. **Contesta sus preguntas** (en una computadora del trabajo, lo prudente es
+   instalar sin las skills de terceros) y acepta las ventanas de «¿Permitir
+   cambios?» que abra Windows. Al final te dice qué quedó y qué te toca a ti:
+   normalmente poner la clave de Context7 y reiniciar Claude Code.
+
+> No le des tu clave de Context7 a Claude por el chat: te dirá cómo ponerla tú.
+
+---
+
 ## Qué incluye
 
 | Qué | Dónde está en el repo | Qué hace |
@@ -36,10 +79,10 @@ Solo trae lo **genérico**: nada de proyectos, clientes, claves ni rutas persona
 
 ---
 
-## Instalación en Windows (paso a paso)
+## Instalación en Windows (paso a paso, a mano)
 
-Pensado para que lo siga cualquier persona que esté ayudando. Tarda unos 15
-minutos, casi todo en descargas.
+Pensado para que lo siga cualquier persona que esté ayudando, sin Claude. Tarda
+unos 15 minutos, casi todo en descargas.
 
 **Antes de empezar:** una cuenta de Claude (la misma de la Mac) e internet. No
 hace falta abrir nada como administrador; Windows puede pedir permiso
@@ -89,11 +132,15 @@ aceptar.
    - Si después de instalar Python dice que no lo encuentra, cerrar PowerShell,
      abrirlo otra vez y repetir este paso (no se duplica nada).
    - Pide la **clave de Context7** si no existe (se saca gratis en
-     <https://context7.com/dashboard>). Se puede pulsar Enter y ponerla después:
+     <https://context7.com/dashboard>). Se puede pulsar Enter y ponerla después
+     con este comando, que la pide sin dejarla en el historial:
 
      ```powershell
-     [Environment]::SetEnvironmentVariable('CONTEXT7_API_KEY', '<tu-clave>', 'User')
+     [Environment]::SetEnvironmentVariable('CONTEXT7_API_KEY', (Read-Host 'Clave de Context7'), 'User')
      ```
+
+     Con `-NoInteractivo` (o si no hay una consola que pueda contestar, como
+     cuando lo corre un agente) no la pide: avisa y explica cómo ponerla después.
 
 6. **Si no estaba Claude Code**, el instalador lo dice. Instalarlo con:
 
@@ -122,6 +169,7 @@ aceptar.
 | Opción | Para qué |
 |---|---|
 | `-Simular` | Muestra lo que haría, sin cambiar nada. |
+| `-NoInteractivo` | No pregunta nada (para agentes y scripts): si falta la clave de Context7, la omite y explica cómo ponerla después. Se activa solo si no hay una consola que pueda contestar (entrada redirigida o `powershell -NonInteractive`). |
 | `-SinCodebaseMemory` | No instala codebase-memory-mcp ni sus hooks. |
 | `-SinSkills` | No instala las skills (son código de terceros; ver [Skills](#skills)). |
 | `-SaltarAvisoPermisos` | Agrega `skipDangerousModePermissionPrompt` (ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos)). Apagado si no lo pones. |
@@ -157,8 +205,16 @@ cd claude-code-entorno
   hay Homebrew, explica cómo ponerlo.
 - En Linux usa `apt-get` (pide `sudo`). La versión de Node.js de apt suele ser
   vieja: si avisa, instalar Node.js LTS desde <https://nodejs.org>.
-- Opciones: `--simular`, `--sin-codebase-memory`, `--sin-skills` (no instala las
-  skills de terceros) y `--saltar-aviso-permisos` (ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos)).
+- Opciones:
+
+  | Opción | Para qué |
+  |---|---|
+  | `--simular` | Muestra lo que haría, sin cambiar nada. |
+  | `--no-interactivo` | No pregunta nada (para agentes y scripts): si falta la clave de Context7, la omite y explica cómo ponerla después. Se activa solo si la entrada no es una terminal. En Linux usa `sudo -n`, que falla en vez de esperar una contraseña. |
+  | `--sin-codebase-memory` | No instala codebase-memory-mcp ni sus hooks. |
+  | `--sin-skills` | No instala las skills de terceros (ver [Skills](#skills)). |
+  | `--saltar-aviso-permisos` | Ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos). Apagado si no lo pones. |
+
 - Clave de Context7: la pide y ofrece guardarla en `~/.zshrc` (o `~/.bashrc`).
   A mano: `echo "export CONTEXT7_API_KEY='<tu-clave>'" >> ~/.zshrc`.
 
@@ -177,7 +233,8 @@ cd claude-code-entorno
 2. Instala los programas que falten.
 3. Instala **codebase-memory-mcp** con su instalador oficial, si falta, en una
    versión fija (`v0.12.0`, no la rama en desarrollo).
-4. Pide la clave de Context7, si falta.
+4. Pide la clave de Context7, si falta (en modo no interactivo no la pide: avisa
+   y explica cómo ponerla después).
 5. Copia reglas, hook y línea de estado a la carpeta `.claude` de tu usuario. Si ya
    había un archivo distinto, antes guarda una copia `.bak-<fecha>`.
 6. **Fusiona** `settings.base.json` con tu `settings.json`
@@ -339,6 +396,9 @@ git pull
 powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # Windows
 ```
 
+(o pedirle a Claude Code: «Actualiza mi entorno de Claude Code siguiendo el
+AGENTS.md de ~/claude-code-entorno»).
+
 ### Qué hace `exportar.sh`
 
 1. Lee (sin modificar nada) `~/.claude/settings.json`, las reglas, la lista de
@@ -347,7 +407,8 @@ powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # Windows
 2. Aplica las **listas de permitidos** de `herramientas/filtros.json` (claves y
    hooks de settings, reglas y skills) y reescribe `claude/settings.base.json`,
    `claude/rules/` y `skills/lista.json`. Lo que no esté en esas listas no sale, y
-   las reglas o skills nuevas solo se avisan.
+   las reglas o skills nuevas solo se avisan. No borra nada ni toca el resto del
+   repo (README, `AGENTS.md`, `CLAUDE.md`, instaladores, pruebas).
 3. Comprueba **sin credenciales** que cada repositorio de origen de las skills sea
    público y conserve su nombre; si no, termina con error.
 4. Compara el hook y la línea de estado de la Mac con los del repo y avisa si
@@ -423,12 +484,17 @@ python3 -m unittest discover -s pruebas -v
 
 Prueban el hook (casos permitidos y bloqueados en Bash y PowerShell), la línea de
 estado (con un JSON como el que manda Claude Code), la fusión de settings, la
-exportación y la revisión de privacidad. No necesitan instalar nada; las de la
-línea de estado necesitan `bash` y `jq`.
+exportación, la revisión de privacidad y los instaladores en modo no interactivo:
+`instalar.sh` se corre de verdad con `HOME` en una carpeta temporal y un `claude`
+de mentira (sin internet ni tocar tu configuración), y de `instalar.ps1` se revisa
+que conserve el BOM y los finales CRLF. No necesitan instalar nada; las de la
+línea de estado necesitan `bash` y `jq`, y las de `instalar.sh` se omiten en
+Windows o si falta alguno de los programas que instalaría.
 
 ## Estructura
 
 ```
+├── AGENTS.md / CLAUDE.md          instrucciones para el agente que instala
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
 ├── exportar.sh                    regenera el repo desde la Mac principal
 ├── plugins.txt                    plugins a instalar

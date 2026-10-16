@@ -225,6 +225,12 @@ class GuardKillDeExtremoAExtremo(unittest.TestCase):
         salida = json.loads(self.correr(self.evento("Stop-Process -Name node", "PowerShell")))
         self.assertEqual(salida["hookSpecificOutput"]["permissionDecision"], "deny")
 
+    def test_ejemplo_de_agents_md(self):
+        """El JSON con el que AGENTS.md comprueba el hook instalado debe bloquearse."""
+        ejemplo = RAIZ / "pruebas" / "datos" / "hook-taskkill.json"
+        salida = json.loads(self.correr(ejemplo.read_text(encoding="utf-8")))
+        self.assertEqual(salida["hookSpecificOutput"]["permissionDecision"], "deny")
+
     def test_permite_kill_por_pid(self):
         self.assertEqual(self.correr(self.evento("kill 999999")), "")
 
