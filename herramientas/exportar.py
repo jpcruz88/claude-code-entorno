@@ -12,7 +12,7 @@ del repo. Aplica los filtros de herramientas/filtros.json:
     skills usadas (clave skillUsage de ~/.claude.json; no se lee nada más de ese
     archivo) que no estén en la lista. Con --verificar-origenes comprueba, sin
     credenciales, que cada repo sea público y conserve su nombre; si no, falla.
-Además compara el hook guard-kill.py y statusline.sh de esta Mac con los del repo
+Además compara el hook guard-kill.py, statusline.sh y las configs de herdr y Ghostty de esta Mac con los del repo
 (el repo guarda versiones portables: no se sobrescriben) y avisa de diferencias.
 """
 import argparse
@@ -88,12 +88,14 @@ def nombre_actual(repo):
 
 
 class Exportador:
-    def __init__(self, repo, claude_dir, claude_json, skill_lock, verificar=False):
+    def __init__(self, repo, claude_dir, claude_json, skill_lock, verificar=False,
+                 config_dir=None):
         self.repo = Path(repo).resolve()
         self.claude_dir = Path(claude_dir)
         self.claude_json = Path(claude_json)
         self.skill_lock = Path(skill_lock)
         self.home = Path.home()
+        self.config_dir = Path(config_dir) if config_dir else self.home / ".config"
         self.filtros = json.loads((self.repo / "herramientas" / "filtros.json")
                                   .read_text(encoding="utf-8"))
         self.cambiados = []
@@ -256,17 +258,29 @@ class Exportador:
 
     # ------------------------------------------------------------ comparaciones
     def comparar(self):
-        print("\n==> Hook y statusline (el repo guarda versiones portables)")
+        print("\n==> Hook, statusline, herdr y Ghostty (el repo guarda versiones portables)")
         pares = [("claude/hooks/guard-kill.py", self.claude_dir / "hooks" / "guard-kill.py"),
                  ("claude/statusline.sh", self.claude_dir / "statusline.sh")]
+        # herdr y Ghostty también se mantienen a mano en el repo (Ghostty, con el marcador
+        # {{RUTA_HERDR}} en lugar de la ruta de herdr de cada Mac).
+        for relativo, real in (("herdr/config.toml", self.config_dir / "herdr" / "config.toml"),
+                               ("ghostty/config", self.config_dir / "ghostty" / "config")):
+            if (self.repo / relativo).exists():
+                pares.append((relativo, real))
         for relativo, real in pares:
             if not real.exists():
                 print("    esta Mac no tiene %s" % real.name)
-            elif real.read_bytes() == (self.repo / relativo).read_bytes():
+            elif self._normalizar(relativo, real.read_bytes()) == (self.repo / relativo).read_bytes():
                 print("    igual en esta Mac y en el repo: %s" % relativo)
             else:
                 print("    distinto en esta Mac: %s. El repo conserva su versión portable; "
                       "si cambiaste algo aquí, pásalo a mano al repo." % relativo)
+
+    @staticmethod
+    def _normalizar(relativo, datos):
+        if relativo != "ghostty/config":
+            return datos
+        return re.sub(rb"(?m)^command = .*$", b"command = {{RUTA_HERDR}}", datos)
 
     def todo(self):
         self.settings()

@@ -1,0 +1,101 @@
+onboarding = false
+
+[theme]
+name = "one-dark"
+
+# Paleta de VS Code (Dark Modern)
+[theme.custom]
+panel_bg = "#1f1f1f"
+sidebar_bg = "#181818"
+active_row_bg = "#37373d"
+selection_bg = "#04395e"
+surface0 = "#2b2b2b"
+surface1 = "#3c3c3c"
+surface_dim = "#181818"
+overlay0 = "#6e7681"
+overlay1 = "#858585"
+text = "#cccccc"
+subtext0 = "#9d9d9d"
+accent = "#0078d4"
+blue = "#569cd6"
+teal = "#4ec9b0"
+green = "#89d185"
+yellow = "#dcdcaa"
+peach = "#ce9178"
+red = "#f14c4c"
+mauve = "#c586c0"
+
+[ui]
+status_indicators = "symbols"
+# Divisores finos compartidos, como los paneles de VS Code
+pane_gaps = false
+sidebar_width = 30
+# Nombre del agente (claude, codex…) en el borde de cada panel dividido
+show_agent_labels_on_pane_borders = true
+# Pedir nombre al crear un espacio de trabajo
+prompt_new_workspace_name = true
+# Lista de agentes ordenada por urgencia: primero los que te necesitan
+agent_panel_sort = "priority"
+# Título de la ventana de Ghostty
+window_title = "herdr · {workspace} · {tab}"
+# Barra de pestañas con iconos: ZOOM, rama git y hora
+tab_bar_right = [
+  { type = "zoom" },
+  { type = "command", command = "b=$(git branch --show-current 2>/dev/null); [ -n \"$b\" ] || exit 0; echo \" $b\"", interval_seconds = 5, timeout_seconds = 2 },
+  { type = "datetime", format = " %H:%M" },
+]
+tab_bar_right_separator = "   "
+
+# Barra lateral estilo explorador de VS Code
+[ui.sidebar.spaces]
+rows = [
+  ["state_icon", { token = "workspace", fg = "#e7e7e7", bold = true }],
+  [{ token = "branch", fg = "#4ec9b0" }, { token = "git_status", fg = "#e2c08d" }],
+]
+
+[ui.sidebar.agents]
+rows = [
+  ["state_icon", { token = "agent", fg = "#569cd6", bold = true }, { token = "workspace", fg = "#9d9d9d" }],
+  [{ token = "terminal_title_stripped", fg = "#858585" }],
+]
+
+# Avisos cuando un agente termina o necesita respuesta en otro espacio
+[ui.toast]
+delivery = "system"
+
+[ui.sound]
+enabled = true
+
+[keys]
+# Atajos directos (sin ctrl+b); los de prefijo siguen funcionando
+focus_pane_left = ["prefix+h", "ctrl+alt+h"]
+focus_pane_down = ["prefix+j", "ctrl+alt+j"]
+focus_pane_up = ["prefix+k", "ctrl+alt+k"]
+focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+previous_tab = ["prefix+p", "ctrl+alt+["]
+next_tab = ["prefix+n", "ctrl+alt+]"]
+new_tab = ["prefix+c", "ctrl+alt+c"]
+split_vertical = ["prefix+v", "ctrl+alt+d"]
+split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
+zoom = ["prefix+z", "ctrl+alt+z"]
+goto = ["prefix+g", "ctrl+alt+g"]
+previous_agent = "ctrl+alt+p"
+next_agent = "ctrl+alt+n"
+
+[[keys.command]]
+key = "prefix+alt+g"
+type = "popup"
+command = "lazygit"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+alt+t"
+type = "popup"
+command = "btop"
+width = "90%"
+height = "90%"
+
+# Guardar lo que se veía en cada panel entre reinicios
+[experimental]
+pane_history = true

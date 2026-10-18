@@ -8,7 +8,8 @@ repo, ve a [Si vas a modificar el repo](#si-vas-a-modificar-el-repo).
 
 `claude-code-entorno` es la configuración de Claude Code del usuario: reglas, el
 hook `guard-kill.py`, la línea de estado, el plugin `superpowers`, skills de
-terceros y los servidores MCP `context7` y `codebase-memory-mcp`. El instalador
+terceros y los servidores MCP `context7` y `codebase-memory-mcp`. En Mac, además,
+herdr (con su plugin de Telegram) y Ghostty. El instalador
 (`instalar.ps1` en Windows, `instalar.sh` en Mac) lo deja todo listo y se puede
 correr las veces que haga falta: lo que ya está se salta.
 
@@ -31,10 +32,19 @@ ahora.
    - ¿Instalo codebase-memory-mcp? Es un programa que se descarga de GitHub y
      algunos antivirus de empresa lo marcan como falso positivo. Si no:
      `-SinCodebaseMemory` / `--sin-codebase-memory`.
-3. **La clave de Context7 nunca pasa por ti.** No la pidas en el chat, no la
-   escribas en archivos ni en comandos y no la muestres. El usuario la pone él
-   mismo con el comando del paso «Cierre» (ahora o más tarde). Si aun así la pega
+   - Solo en Mac: ¿instalo herdr y Ghostty? Si no: `--sin-herdr`. ¿Y el plugin de
+     Telegram de herdr (código de la comunidad)? Si no: `--sin-plugins-herdr`.
+   - Solo en Mac: ¿esta Mac se queda siempre encendida (una Mac mini, no un
+     portátil)? Solo si dice que sí: `--servidor` (no duerme, se enciende tras un
+     corte de luz y abre Ghostty al iniciar sesión).
+3. **La clave de Context7 y el token del bot de Telegram nunca pasan por ti.** No
+   los pidas en el chat, no los escribas en archivos ni en comandos y no los
+   muestres. La clave la pone el usuario él mismo con el comando del paso «Cierre»
+   (ahora o más tarde). Si aun así la pega
    en el chat, no la uses y recomiéndale cambiarla en <https://context7.com/dashboard>.
+   El token del bot lo pega el usuario en la ventana de configuración del plugin
+   (README, «herdr y Telegram»); si lo pega en el chat, no lo uses y recomiéndale
+   revocarlo en @BotFather (`/revoke`).
 4. **Instala siempre en modo no interactivo** (`-NoInteractivo` /
    `--no-interactivo`): el instalador no pregunta nada y, si falta la clave de
    Context7, la omite con un aviso.
@@ -221,7 +231,8 @@ Los mismos pasos, con `instalar.sh`:
    ```
 
    El hook debe imprimir `"permissionDecision": "deny"` y las pruebas terminar en
-   `OK`.
+   `OK`. Si se instaló herdr: `herdr integration status` debe decir
+   `claude: current` y `herdr plugin list` mostrar `permgps.telegram-agents`.
 
 6. **Cierre:** igual que en Windows. Para la clave de Context7, el usuario corre
    esto en una ventana de Terminal aparte (zsh, la de siempre en Mac); se la pide
@@ -230,6 +241,13 @@ Los mismos pasos, con `instalar.sh`:
    ```bash
    read -rs 'k?Clave de Context7: ' && echo && echo "export CONTEXT7_API_KEY='$k'" >> ~/.zshrc && unset k
    ```
+
+   Si se instaló el plugin de Telegram y el resumen dice que falta configurarlo,
+   explícale los pasos del README («herdr y Telegram»): crear un bot propio para
+   esta computadora, un grupo con Temas y correr él mismo
+   `herdr plugin action invoke permgps.telegram-agents.setup` en un panel de herdr.
+   Si usó `--servidor` y el resumen dice que pmset necesita su contraseña, que
+   corra él `sudo pmset -a sleep 0 autorestart 1` en una terminal.
 
 ## Cómo actualizar después
 

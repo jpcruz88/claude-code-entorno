@@ -65,6 +65,10 @@ dices que sí.
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
+| herdr | `herdr/config.toml` | Organizador de terminales para agentes, con tema tipo VS Code, atajos `ctrl+alt`, lazygit y btop en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
+| Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
+| Ghostty | `ghostty/config` | Terminal con el tema Dark Modern de VS Code y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 
 ## Qué NO incluye
 
@@ -201,8 +205,9 @@ cd claude-code-entorno
 ./instalar.sh             # instalar
 ```
 
-- En Mac instala lo que falte con **Homebrew** (git, node, python, jq, uv). Si no
-  hay Homebrew, explica cómo ponerlo.
+- En Mac instala lo que falte con **Homebrew** (git, node, python, jq, uv y, para
+  herdr, herdr, lazygit, btop, Ghostty y la fuente JetBrains Mono Nerd Font). Si
+  no hay Homebrew, explica cómo ponerlo.
 - En Linux usa `apt-get` (pide `sudo`). La versión de Node.js de apt suele ser
   vieja: si avisa, instalar Node.js LTS desde <https://nodejs.org>.
 - Opciones:
@@ -214,6 +219,10 @@ cd claude-code-entorno
   | `--sin-codebase-memory` | No instala codebase-memory-mcp ni sus hooks. |
   | `--sin-skills` | No instala las skills de terceros (ver [Skills](#skills)). |
   | `--saltar-aviso-permisos` | Ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos). Apagado si no lo pones. |
+  | `--sin-herdr` | No instala herdr, su config, su skill ni sus plugins, ni Ghostty. |
+  | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
+  | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
+  | `--servidor` | Solo macOS: la Mac nunca duerme, se enciende sola tras un corte de luz y abre Ghostty al iniciar sesión (ver [Modo servidor](#modo-servidor)). Apagado si no lo pones. |
 
 - Clave de Context7: la pide y ofrece guardarla en `~/.zshrc` (o `~/.bashrc`).
   A mano: `echo "export CONTEXT7_API_KEY='<tu-clave>'" >> ~/.zshrc`.
@@ -245,10 +254,22 @@ cd claude-code-entorno
    (`npx -y skills@1.7.2 add <dueño/repo@skill> -g -y -a claude-code`, con la
    versión del instalador de skills fija) y registra los MCP
    (`claude mcp add-json --scope user …`).
-8. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+8. **herdr** (si está instalado): copia `herdr/config.toml` (con copia
+   `.bak-<fecha>` si ya había otro), instala su integración con Claude
+   (`herdr integration install claude`), su skill (`herdrdev/herdr@herdr`, salvo
+   con `--sin-skills`) y los plugins de `herdr/plugins.txt`
+   (`herdr plugin install … --yes`), y recarga la config si herdr está abierto.
+9. **Ghostty** (solo Mac, si está o se acaba de instalar): copia `ghostty/config`
+   con la ruta de herdr de esa computadora.
+10. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+
+Con `--servidor`, `instalar.sh` además ajusta la energía y los ítems de inicio
+antes del paso 5 (ver [Modo servidor](#modo-servidor)).
 
 **Se puede correr cuantas veces haga falta**: lo que ya está se salta. Los pasos 5
-a 8 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
+a 10 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
+En Windows, `instalar.ps1` no instala herdr: si no lo tienes, el paso 8 se salta
+con un aviso.
 
 ### Qué necesita internet o sesión
 
@@ -259,6 +280,7 @@ a 8 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
 | Plugin `superpowers` | sí (GitHub) | no |
 | Skills (`npx skills add`) | sí (npm y GitHub) | no |
 | Registrar MCP | no | no |
+| herdr, su skill y sus plugins | sí (Homebrew, npm y GitHub) | no |
 | Usar Claude Code después | sí | **sí** (`claude` → iniciar sesión) |
 
 ---
@@ -377,6 +399,79 @@ ponlos en el `.gitignore` de ese proyecto (como hace este repo).
 
 ---
 
+## herdr y Telegram
+
+[herdr](https://herdr.dev) organiza terminales en espacios de trabajo, pestañas y
+paneles, y reconoce los agentes que corren en ellos (Claude, Codex…): la barra
+lateral muestra cuál trabaja, cuál espera tu respuesta y cuál terminó. Los paneles
+siguen corriendo aunque cierres la ventana, y tras reiniciar la Mac vuelven los
+espacios, las pestañas, lo que se veía en cada panel y cada Claude en su
+conversación.
+
+### Lo que deja `herdr/config.toml`
+
+- **Aspecto:** colores de VS Code (Dark Modern), estados con símbolos, rama de git
+  y hora con iconos en la barra de pestañas, nombre del agente en el borde de cada
+  panel dividido.
+- **Atajos directos** (sin `ctrl+b`): `ctrl+alt+h/j/k/l` mueve entre paneles,
+  `ctrl+alt+d` / `ctrl+alt+shift+d` divide a la derecha / abajo, `ctrl+alt+c`
+  pestaña nueva, `ctrl+alt+[` / `ctrl+alt+]` pestaña anterior / siguiente,
+  `ctrl+alt+z` amplía, `ctrl+alt+g` busca un agente, `ctrl+alt+p` / `ctrl+alt+n`
+  agente anterior / siguiente. Los de prefijo siguen igual; `ctrl+b ?` los muestra
+  todos.
+- **Ventanas flotantes:** `ctrl+b alt+g` abre lazygit y `ctrl+b alt+t` abre btop.
+- **Avisos:** notificación de macOS y sonido cuando un agente termina o necesita tu
+  respuesta en otro espacio.
+- **Historial de paneles** (`pane_history`): guarda lo que se veía en cada panel
+  para mostrarlo tras un reinicio. Se guarda en disco, en
+  `~/.config/herdr/session-history.json`, y puede incluir claves o tokens que
+  hayan salido en pantalla.
+
+Para cambiar algo, edita `~/.config/herdr/config.toml` y recárgalo con
+`ctrl+b shift+r`. El repo guarda su propia copia: pasa el cambio a
+`herdr/config.toml` a mano (`exportar.sh` avisa si difieren).
+
+### Telegram (`permgps/herdr-telegram-agents`)
+
+Un grupo de Telegram con un tema por agente: lo que escribes en el tema le llega
+al agente, sus preguntas te llegan con botones y `/status`, `/new` y `/options`
+funcionan en el tema General. Es un plugin de la comunidad, no de herdr: se
+descarga como binario firmado y verificado. Solo se conecta a Telegram y a GitHub
+(para buscar versiones nuevas) y solo se actualiza si pulsas «Update».
+
+El instalador lo instala, pero **el bot se configura a mano en cada
+computadora** (el token nunca va en el repo):
+
+1. En Telegram, @BotFather → `/newbot` → copia el token. **Un bot por
+   computadora**: dos no pueden usar el mismo a la vez.
+2. Crea un grupo y activa **Temas** en su configuración.
+3. En un panel de herdr: `herdr plugin action invoke permgps.telegram-agents.setup`.
+   Pega el token en la ventana (no se ve), abre el enlace del bot y pulsa
+   **Start**.
+4. Añade el bot al grupo como administrador con **Manage topics**, **Delete
+   messages** y **Pin messages** (como tú, no como administrador anónimo) y
+   confirma el grupo en la ventana.
+5. Comprueba con `herdr plugin action invoke permgps.telegram-agents.status`:
+   debe decir `telegram=ready`.
+
+⚠️ Quien entre en tu Telegram puede dar órdenes a tus agentes y aprobar sus
+permisos: activa la verificación en dos pasos de Telegram.
+
+### Modo servidor
+
+Para una Mac que se queda encendida (una Mac mini, por ejemplo), `--servidor`:
+
+- `sudo pmset -a sleep 0 autorestart 1`: la Mac nunca entra en reposo (la pantalla
+  sí se apaga) y se enciende sola cuando vuelve la luz. Pide tu contraseña; en modo
+  no interactivo no la pide y explica cómo hacerlo tú.
+- Agrega Ghostty a los ítems de inicio: al iniciar sesión se abre Ghostty, que
+  abre herdr, que arranca el bot de Telegram.
+
+Mientras la Mac duerme, todo se congela: herdr, los agentes y el bot. Con FileVault
+activado, tras un reinicio la Mac espera tu contraseña; todo arranca cuando inicias
+sesión. Para deshacerlo: `sudo pmset -a sleep 1 autorestart 0` y quita Ghostty en
+Ajustes del Sistema → General → Ítems de inicio.
+
 ## Mantenerlo al día
 
 En la **Mac principal**, cuando cambie algo de la configuración:
@@ -486,8 +581,9 @@ Prueban el hook (casos permitidos y bloqueados en Bash y PowerShell), la línea 
 estado (con un JSON como el que manda Claude Code), la fusión de settings, la
 exportación, la revisión de privacidad y los instaladores en modo no interactivo:
 `instalar.sh` se corre de verdad con `HOME` en una carpeta temporal y un `claude`
-de mentira (sin internet ni tocar tu configuración), y de `instalar.ps1` se revisa
-que conserve el BOM y los finales CRLF. No necesitan instalar nada; las de la
+de mentira (sin internet ni tocar tu configuración); el paso de herdr se prueba
+igual, con `herdr` y `npx` de mentira (`pruebas/test_herdr.py`); y de
+`instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan instalar nada; las de la
 línea de estado necesitan `bash` y `jq`, y las de `instalar.sh` se omiten en
 Windows o si falta alguno de los programas que instalaría.
 
@@ -506,6 +602,8 @@ Windows o si falta alguno de los programas que instalaría.
 ├── skills/lista.json              skills y su origen
 ├── mcp/                           plantillas de servidores MCP
 ├── git/gitignore_global           gitignore global
+├── herdr/                         config de herdr y plugins de herdr (Telegram)
+├── ghostty/config                 config de Ghostty (con {{RUTA_HERDR}})
 ├── herramientas/                  scripts de apoyo (fusión, exportación, privacidad)
 └── pruebas/                       pruebas automáticas
 ```

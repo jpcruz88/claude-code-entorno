@@ -8,7 +8,10 @@ Hace, en orden:
   3. Instala los plugins de plugins.txt.
   4. Instala las skills de skills/lista.json.
   5. Registra los servidores MCP de mcp/.
-  6. Deja listo el gitignore global (solo si no tienes uno).
+  6. herdr: su config, la integración con Claude, su skill y los plugins de
+     herdr/plugins.txt (solo si herdr está instalado).
+  7. Con --ghostty, la config de Ghostty (abre herdr al arrancar).
+  8. Deja listo el gitignore global (solo si no tienes uno).
 
 Todo es idempotente: lo que ya está se deja igual. Con --simular solo muestra lo
 que haría y no ejecuta claude ni npx (hasta sus consultas crean archivos).
@@ -32,6 +35,9 @@ import fusionar_settings  # noqa: E402
 ES_WINDOWS = os.name == "nt"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
+MARCADOR_HERDR = "{{RUTA_HERDR}}"
+# Skill oficial de herdr: enseña a Claude a manejar paneles y otros agentes.
+SKILL_HERDR = ("herdr", "herdrdev/herdr@herdr")
 # Versión fija del instalador de skills (vercel-labs/skills): la misma con la que
 # se probó este repo. Cambiarla a propósito, nunca usar «la última».
 SKILLS_CLI = "skills@1.7.2"
@@ -64,6 +70,9 @@ class Instalador:
         self.sin_skills = a.sin_skills
         self.git_bash = a.git_bash
         self.saltar_aviso = a.saltar_aviso_permisos
+        self.sin_herdr = a.sin_herdr
+        self.sin_plugins_herdr = a.sin_plugins_herdr
+        self.con_ghostty = a.ghostty
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
         self.fallos = []
@@ -118,6 +127,28 @@ class Instalador:
             extras = [self.home / ".local" / "bin" / "codebase-memory-mcp"]
         return self.buscar("codebase-memory-mcp", extras)
 
+    def herdr_bin(self):
+        nombre = "herdr.exe" if ES_WINDOWS else "herdr"
+        return self.buscar("herdr", [self.home / ".local" / "bin" / nombre])
+
+    def instalar_archivo(self, contenido, destino, origen, ejecutable=False):
+        """Copia `contenido` a `destino`; si ya había otra versión, antes la respalda."""
+        if destino.exists() and destino.read_bytes() == contenido:
+            self.info("al día: %s" % destino)
+            return
+        if self.simular:
+            self.info("[simular] copiaría %s -> %s" % (origen, destino))
+            return
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        if destino.exists():
+            copia = Path("%s.bak-%s" % (destino, sello()))
+            shutil.copy2(str(destino), str(copia))
+            self.info("respaldo: %s" % copia)
+        destino.write_bytes(contenido)
+        if ejecutable and not ES_WINDOWS:
+            destino.chmod(0o755)
+        self.info("copiado: %s" % destino)
+
     def cbm_activo(self):
         if self.sin_cbm:
             return False
@@ -134,22 +165,8 @@ class Instalador:
         pares.append((REPO / "claude" / "statusline.sh", self.claude_dir / "statusline.sh"))
         for origen, destino in pares:
             contenido = origen.read_bytes().replace(b"\r\n", b"\n")  # siempre LF
-            ejecutable = origen.suffix in (".py", ".sh")
-            if destino.exists() and destino.read_bytes() == contenido:
-                self.info("al día: %s" % destino)
-                continue
-            if self.simular:
-                self.info("[simular] copiaría %s -> %s" % (origen.relative_to(REPO), destino))
-                continue
-            destino.parent.mkdir(parents=True, exist_ok=True)
-            if destino.exists():
-                copia = Path("%s.bak-%s" % (destino, sello()))
-                shutil.copy2(str(destino), str(copia))
-                self.info("respaldo: %s" % copia)
-            destino.write_bytes(contenido)
-            if ejecutable and not ES_WINDOWS:
-                destino.chmod(0o755)
-            self.info("copiado: %s" % destino)
+            self.instalar_archivo(contenido, destino, origen.relative_to(REPO),
+                                  ejecutable=origen.suffix in (".py", ".sh"))
 
     # ------------------------------------------------------------ 2. settings
     def settings(self):
@@ -250,6 +267,29 @@ class Instalador:
                 self.fallo("plugin %s: %s" % (pid, resumen_error(salida)))
 
     # ------------------------------------------------------------ 4. skills
+    def instalar_skill(self, nombre, origen):
+        """Devuelve "ya", "simulada", "nueva" o "fallida"."""
+        if (self.claude_dir / "skills" / nombre / "SKILL.md").exists():
+            return "ya"
+        args = ["npx", "-y", SKILLS_CLI, "add", origen, "-g", "-y", "-a", "claude-code"]
+        if ES_WINDOWS:
+            args.append("--copy")  # en Windows los enlaces simbólicos piden permisos
+        if self.simular:
+            self.info("[simular] haría: " + " ".join(args))
+            return "simulada"
+        npx = self.buscar("npx")
+        if not npx:
+            self.fallo("No encontré npx (viene con Node.js); no se instala la skill %s." % nombre)
+            return "fallida"
+        self.info("$ " + " ".join(args))
+        codigo, salida = self.correr([npx] + args[1:], timeout=300,
+                                     env_extra={"DO_NOT_TRACK": "1", "DISABLE_TELEMETRY": "1"})
+        if codigo == 0 and (self.claude_dir / "skills" / nombre / "SKILL.md").exists():
+            self.info("instalada: %s" % nombre)
+            return "nueva"
+        self.fallo("skill %s (%s): %s" % (nombre, origen, resumen_error(salida)))
+        return "fallida"
+
     def skills(self):
         self.paso("Skills (skills/lista.json)")
         if self.sin_skills:
@@ -258,32 +298,19 @@ class Instalador:
         self.info("Ojo: las skills son código de terceros sin auditar (ver README).")
         lista = json.loads((REPO / "skills" / "lista.json").read_text(encoding="utf-8"))
         skills = lista.get("skills", [])
-        npx = self.buscar("npx")
-        if not npx and not self.simular:
+        if not self.buscar("npx") and not self.simular:
             self.fallo("No encontré npx (viene con Node.js); no se instalan las skills.")
             return
         hechas = nuevas = fallidas = faltan = 0
         for s in skills:
-            nombre, origen = s["nombre"], s["origen"]
-            if (self.claude_dir / "skills" / nombre / "SKILL.md").exists():
+            resultado = self.instalar_skill(s["nombre"], s["origen"])
+            if resultado == "ya":
                 hechas += 1
                 continue
             faltan += 1
-            args = ["npx", "-y", SKILLS_CLI, "add", origen, "-g", "-y", "-a", "claude-code"]
-            if ES_WINDOWS:
-                args.append("--copy")  # en Windows los enlaces simbólicos piden permisos
-            if self.simular:
-                self.info("[simular] haría: " + " ".join(args))
-                continue
-            self.info("$ " + " ".join(args))
-            codigo, salida = self.correr([npx] + args[1:], timeout=300,
-                                         env_extra={"DO_NOT_TRACK": "1",
-                                                    "DISABLE_TELEMETRY": "1"})
-            if codigo == 0 and (self.claude_dir / "skills" / nombre / "SKILL.md").exists():
-                self.info("instalada: %s" % nombre)
+            if resultado == "nueva":
                 nuevas += 1
-            else:
-                self.fallo("skill %s (%s): %s" % (nombre, origen, resumen_error(salida)))
+            elif resultado == "fallida":
                 fallidas += 1
         if self.simular:
             self.info("%d de %d ya estaban instaladas; %d por instalar." % (hechas, len(skills), faltan))
@@ -343,7 +370,114 @@ class Instalador:
                                    "README) y reinicia la terminal; sin ella el MCP "
                                    "context7 marca error en /mcp.")
 
-    # ------------------------------------------------------------ 6. git
+    # ------------------------------------------------------------ 6. herdr
+    def leer_plugins_herdr(self):
+        plugins = []
+        for linea in (REPO / "herdr" / "plugins.txt").read_text(encoding="utf-8").splitlines():
+            partes = linea.split("#", 1)[0].split()
+            if len(partes) >= 2:
+                plugins.append((partes[0], partes[1]))
+        return plugins
+
+    def herdr(self):
+        self.paso("herdr (config, integración con Claude, skill y plugins)")
+        if self.sin_herdr:
+            self.info("Se omite (--sin-herdr).")
+            return
+        herdr = self.herdr_bin()
+        if not herdr:
+            self.aviso("No encontré herdr; se omiten su config, su integración, su skill y sus "
+                       "plugins. En Mac lo instala instalar.sh; en otros sistemas, ver "
+                       "https://herdr.dev/docs/install/")
+            return
+        if ES_WINDOWS:
+            destino = Path(os.environ.get("APPDATA", str(self.home))) / "herdr" / "config.toml"
+        else:
+            destino = self.home / ".config" / "herdr" / "config.toml"
+        origen = REPO / "herdr" / "config.toml"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), destino,
+                              origen.relative_to(REPO))
+
+        codigo, salida = self.correr([herdr, "integration", "status"], timeout=60)
+        if re.search(r"^claude: current", salida, re.M):
+            self.info("integración con Claude: al día")
+        elif self.simular:
+            self.info("[simular] haría: herdr integration install claude")
+        else:
+            self.info("$ herdr integration install claude")
+            codigo, salida = self.correr([herdr, "integration", "install", "claude"], timeout=120)
+            if codigo != 0:
+                self.fallo("integración de herdr con Claude: %s" % resumen_error(salida))
+
+        if self.sin_skills:
+            self.info("skill de herdr: se omite (--sin-skills).")
+        elif self.instalar_skill(*SKILL_HERDR) == "ya":
+            self.info("skill de herdr: ya instalada")
+
+        if self.sin_plugins_herdr:
+            self.info("plugins de herdr: se omiten (--sin-plugins-herdr).")
+        else:
+            self.plugins_herdr(herdr)
+
+        if not self.simular:
+            codigo, _ = self.correr([herdr, "server", "reload-config"], timeout=30)
+            self.info("config recargada en el herdr abierto." if codigo == 0 else
+                      "herdr no está abierto; la config se carga al abrirlo.")
+
+    def plugins_herdr(self, herdr):
+        self.info("Ojo: los plugins de herdr son código de la comunidad sin revisar (ver README).")
+        codigo, salida = self.correr([herdr, "plugin", "list", "--json"], timeout=60)
+        try:
+            lista = json.loads(salida)["result"]["plugins"] if codigo == 0 else []
+        except (ValueError, KeyError, TypeError):
+            lista = []
+        instalados = set()
+        for p in lista:
+            fuente = p.get("source") or {}
+            instalados.add(p.get("plugin_id"))
+            if fuente.get("owner") and fuente.get("repo"):
+                instalados.add(("%s/%s" % (fuente["owner"], fuente["repo"])).lower())
+        for fuente, pid in self.leer_plugins_herdr():
+            repo = "/".join(fuente.split("/")[:2]).lower()
+            if pid in instalados or repo in instalados:
+                self.info("ya instalado: %s" % pid)
+            elif self.simular:
+                self.info("[simular] haría: herdr plugin install %s --yes" % fuente)
+            else:
+                self.info("$ herdr plugin install %s --yes" % fuente)
+                codigo, salida = self.correr([herdr, "plugin", "install", fuente, "--yes"])
+                if codigo != 0:
+                    self.fallo("plugin de herdr %s: %s" % (fuente, resumen_error(salida)))
+                    continue
+                self.info("instalado: %s" % pid)
+            # Un plugin sin nada en su carpeta de config todavía no está configurado.
+            codigo, carpeta = self.correr([herdr, "plugin", "config-dir", pid], timeout=30)
+            carpeta = Path(carpeta.strip()) if codigo == 0 and carpeta.strip() else None
+            if not carpeta or not carpeta.is_dir() or not any(carpeta.iterdir()):
+                self.pendientes.append(
+                    "Configura el plugin %s de herdr: en un panel de herdr corre "
+                    "`herdr plugin action invoke %s.setup` (ver README, «herdr y Telegram»)."
+                    % (pid, pid))
+
+    # ------------------------------------------------------------ 7. Ghostty
+    def ghostty(self):
+        if not self.con_ghostty:
+            return
+        self.paso("Ghostty (aspecto tipo VS Code y herdr al abrir)")
+        if self.sin_herdr:
+            self.info("Se omite (--sin-herdr): su config abre herdr.")
+            return
+        herdr = self.herdr_bin()
+        if not herdr:
+            self.aviso("No encontré herdr; no cambio la config de Ghostty (abre herdr al arrancar).")
+            return
+        plantilla = REPO / "ghostty" / "config"
+        texto = plantilla.read_text(encoding="utf-8").replace(MARCADOR_HERDR, herdr)
+        self.instalar_archivo(texto.replace("\r\n", "\n").encode("utf-8"),
+                              self.home / ".config" / "ghostty" / "config",
+                              plantilla.relative_to(REPO))
+
+    # ------------------------------------------------------------ 8. git
     def git(self):
         self.paso("Gitignore global")
         origen = REPO / "git" / "gitignore_global"
@@ -414,13 +548,20 @@ def main(argv=None):
     p.add_argument("--sin-skills", action="store_true")
     p.add_argument("--saltar-aviso-permisos", action="store_true",
                    help="agrega skipDangerousModePermissionPrompt (apagado por omisión)")
+    p.add_argument("--sin-herdr", action="store_true",
+                   help="no toca herdr (config, integración, skill ni plugins) ni Ghostty")
+    p.add_argument("--sin-plugins-herdr", action="store_true",
+                   help="no instala los plugins de herdr/plugins.txt")
+    p.add_argument("--ghostty", action="store_true",
+                   help="instala la config de Ghostty (la pide instalar.sh si hay Ghostty)")
     p.add_argument("--git-bash", default=None,
                    help="ruta a bash.exe si no está en el lugar de siempre (Windows)")
     a = p.parse_args(argv)
     if os.path.isabs(a.python_hooks) and not a.python_hooks.startswith('"'):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
-    for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp, inst.git):
+    for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
+                 inst.herdr, inst.ghostty, inst.git):
         try:
             paso()
         except Exception as e:  # un paso roto no impide los demás

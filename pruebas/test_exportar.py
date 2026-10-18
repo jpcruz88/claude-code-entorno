@@ -83,7 +83,8 @@ class Exportar(unittest.TestCase):
         salida = io.StringIO()
         with redirect_stdout(salida):
             self.codigo = exportar.Exportador(self.repo, self.claude, self.claude_json,
-                                              self.lock).todo()
+                                              self.lock, config_dir=getattr(
+                                                  self, "config_dir", None)).todo()
         return salida.getvalue()
 
     def test_filtra_y_es_idempotente(self):
@@ -111,6 +112,25 @@ class Exportar(unittest.TestCase):
         self.assertIn("regla nueva: privada.md", salida)
         # segunda vez: nada cambia
         self.assertIn("Archivos cambiados: ninguno", self.correr())
+
+    def test_compara_herdr_y_ghostty_sin_tocar_el_repo(self):
+        for rel in ("herdr/config.toml", "ghostty/config"):
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(str(RAIZ / rel), str(self.repo / rel))
+        config = Path(self.tmp.name) / "config"
+        (config / "herdr").mkdir(parents=True)
+        (config / "herdr" / "config.toml").write_text("# cambiada en esta Mac\n", encoding="utf-8")
+        (config / "ghostty").mkdir()
+        # La de Ghostty lleva la ruta real de herdr en vez del marcador: cuenta como igual.
+        ghostty = (RAIZ / "ghostty/config").read_text(encoding="utf-8")
+        (config / "ghostty" / "config").write_text(
+            ghostty.replace("{{RUTA_HERDR}}", "/opt/homebrew/bin/herdr"), encoding="utf-8")
+        self.config_dir = config
+        salida = self.correr()
+        self.assertIn("distinto en esta Mac: herdr/config.toml", salida)
+        self.assertIn("igual en esta Mac y en el repo: ghostty/config", salida)
+        self.assertEqual((self.repo / "herdr/config.toml").read_bytes(),
+                         (RAIZ / "herdr/config.toml").read_bytes())
 
     def test_permitida_sin_origen_falla(self):
         filtros = json.loads((self.repo / "herramientas/filtros.json").read_text(encoding="utf-8"))

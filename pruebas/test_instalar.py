@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +20,8 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 INSTALAR_SH = RAIZ / "instalar.sh"
 INSTALAR_PS1 = RAIZ / "instalar.ps1"
-OPCIONES = ["--sin-skills", "--sin-codebase-memory"]
+# Sin herdr: su paso llamaría a brew y a herdr de verdad (se prueba en test_herdr.py).
+OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh
@@ -92,6 +94,9 @@ class InstalarShNoInteractivo(unittest.TestCase):
         self.assertIn("plugin install superpowers@claude-plugins-official --scope user", llamadas)
         self.assertIn("mcp add-json --scope user context7", llamadas)
         self.assertFalse((self.home / ".bashrc").exists())  # no guardó ninguna clave
+        self.assertIn("Se omite (--sin-herdr).", salida)
+        self.assertFalse((self.home / ".config" / "herdr").exists())
+        self.assertNotIn("Modo servidor", salida)  # solo con --servidor
 
     def test_opcion_no_interactivo_aunque_haya_terminal(self):
         import pty  # solo existe en macOS y Linux
@@ -124,6 +129,21 @@ class InstalarShNoInteractivo(unittest.TestCase):
         self.assertIn("al día: %s" % (self.home / ".claude" / "hooks" / "guard-kill.py"), salida)
         respaldos = [p.name for p in (self.home / ".claude").rglob("*.bak-*")]
         self.assertEqual(respaldos, [])
+
+
+    def test_ayuda_lista_las_opciones_nuevas(self):
+        salida = self.correr(["--ayuda"], stdin=subprocess.DEVNULL)
+        for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor"):
+            self.assertIn(opcion, salida)
+
+    @unittest.skipUnless(sys.platform == "darwin", "el modo servidor solo existe en macOS")
+    def test_servidor_en_simulacion_no_cambia_nada(self):
+        salida = self.correr(["--simular", "--no-interactivo", "--servidor"] + OPCIONES,
+                             stdin=subprocess.DEVNULL)
+        self.assertIn("==> Modo servidor", salida)
+        self.assertIn("sleep 0 autorestart 1", salida)  # «al día» o «[simular] haría»
+        self.assertNotIn("$ sudo", salida)  # en simulación nunca se ejecuta sudo
+        self.assertIn("Ítems de inicio", salida)
 
 
 class InstalarPs1(unittest.TestCase):

@@ -1,0 +1,5 @@
+# Plugins de herdr que instala el instalador, uno por línea:
+#   <dueño>/<repo>[/subcarpeta]  <id del plugin>
+# Se instalan con: herdr plugin install <dueño>/<repo> --yes
+# Son código de la comunidad sin revisar por herdr (ver README, «herdr y Telegram»).
+permgps/herdr-telegram-agents  permgps.telegram-agents

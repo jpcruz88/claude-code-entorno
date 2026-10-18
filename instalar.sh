@@ -13,6 +13,12 @@
 #   --sin-skills             no instala las skills (código de terceros; ver README)
 #   --saltar-aviso-permisos  agrega skipDangerousModePermissionPrompt (quita un aviso
 #                            de seguridad; apagado por omisión, ver README)
+#   --sin-herdr              no instala herdr (ni su config, skill, plugins) ni Ghostty
+#   --sin-ghostty            no instala Ghostty ni su config (sí herdr)
+#   --sin-plugins-herdr      no instala los plugins de herdr (el de Telegram)
+#   --servidor               (macOS) la Mac nunca duerme, se enciende sola tras un
+#                            corte de luz y abre Ghostty al iniciar sesión. Para una
+#                            Mac que se queda encendida (no para un portátil)
 #   --ayuda                  muestra esta ayuda
 #
 # Se puede correr las veces que haga falta: lo que ya está instalado se deja igual.
@@ -29,6 +35,10 @@ SIMULAR=0
 SIN_CBM=0
 SIN_SKILLS=0
 SALTAR_AVISO=0
+SIN_HERDR=0
+SIN_GHOSTTY=0
+SIN_PLUGINS_HERDR=0
+SERVIDOR=0
 NO_INTERACTIVO=0
 MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
 
@@ -42,6 +52,10 @@ for arg in "$@"; do
     --sin-codebase-memory) SIN_CBM=1 ;;
     --sin-skills) SIN_SKILLS=1 ;;
     --saltar-aviso-permisos) SALTAR_AVISO=1 ;;
+    --sin-herdr) SIN_HERDR=1 ;;
+    --sin-ghostty) SIN_GHOSTTY=1 ;;
+    --sin-plugins-herdr) SIN_PLUGINS_HERDR=1 ;;
+    --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
   esac
@@ -190,6 +204,94 @@ if ! python_ok; then
 fi
 
 # ---------------------------------------------------------------------------
+paso "herdr, lazygit, btop y Ghostty"
+ghostty_app() {
+  [ -d /Applications/Ghostty.app ] || [ -d "$HOME/Applications/Ghostty.app" ] || tiene ghostty
+}
+fuente_nerd() {
+  local f
+  for f in "$HOME/Library/Fonts"/JetBrainsMonoNerdFont-Regular.* /Library/Fonts/JetBrainsMonoNerdFont-Regular.*; do
+    [ -e "$f" ] && return 0
+  done
+  return 1
+}
+herdr_ok() { tiene herdr || [ -x "$HOME/.local/bin/herdr" ]; }
+CON_GHOSTTY=0
+if [ "$SIN_HERDR" = 1 ]; then
+  info "Se omite (--sin-herdr)."
+elif [ "$SO" = Darwin ]; then
+  formulas=() casks=()
+  herdr_ok    || formulas+=(herdr)
+  tiene lazygit || formulas+=(lazygit)
+  tiene btop  || formulas+=(btop)
+  if [ "$SIN_GHOSTTY" = 0 ]; then
+    ghostty_app || casks+=(ghostty)
+    fuente_nerd || casks+=(font-jetbrains-mono-nerd-font)
+  fi
+  if [ ${#formulas[@]} = 0 ] && [ ${#casks[@]} = 0 ]; then
+    info "Ya están todos."
+  elif ! tiene brew; then
+    aviso "Faltan: ${formulas[*]} ${casks[*]} y no está Homebrew; se omiten (ver arriba cómo instalarlo)."
+  else
+    [ ${#formulas[@]} = 0 ] || hacer brew install "${formulas[@]}" || aviso "brew install falló"
+    [ ${#casks[@]} = 0 ] || hacer brew install --cask "${casks[@]}" || aviso "brew install --cask falló"
+  fi
+  if [ "$SIN_GHOSTTY" = 0 ] && { ghostty_app || [ "$SIMULAR" = 1 ]; }; then CON_GHOSTTY=1; fi
+else
+  if herdr_ok; then
+    info "herdr ya está."
+  elif [ "$SIMULAR" = 1 ]; then
+    info "[simular] haría: curl -fsSL https://herdr.dev/install.sh | sh"
+  else
+    curl -fsSL https://herdr.dev/install.sh | sh || aviso "no se pudo instalar herdr"
+  fi
+  for p in lazygit btop; do
+    tiene "$p" || aviso "Falta $p (lo usan las ventanas flotantes de herdr): instálalo con tu gestor de paquetes."
+  done
+  [ "$SIN_GHOSTTY" = 0 ] && tiene ghostty && CON_GHOSTTY=1
+fi
+
+# ---------------------------------------------------------------------------
+if [ "$SERVIDOR" = 1 ]; then
+  paso "Modo servidor (no dormir, encenderse tras un corte de luz, Ghostty al iniciar sesión)"
+  if [ "$SO" != Darwin ]; then
+    aviso "--servidor solo existe en macOS; se omite."
+  else
+    if pmset -g batt 2>/dev/null | grep -q InternalBattery; then
+      aviso "Esta Mac tiene batería: sin reposo gastará más. Pensado para una Mac que se queda enchufada."
+    fi
+    dormir="$(pmset -g | awk '$1 == "sleep" { print $2 }')"
+    reiniciar="$(pmset -g | awk '$1 == "autorestart" { print $2 }')"
+    if [ "$dormir" = 0 ] && [ "$reiniciar" = 1 ]; then
+      info "al día: sleep 0 autorestart 1"
+    elif [ "$SIMULAR" = 1 ]; then
+      info "[simular] haría: sudo pmset -a sleep 0 autorestart 1"
+    elif [ "$NO_INTERACTIVO" = 1 ]; then
+      if ! hacer sudo -n pmset -a sleep 0 autorestart 1 2>/dev/null; then
+        aviso "pmset necesita tu contraseña. Corre tú en una terminal:"
+        info "sudo pmset -a sleep 0 autorestart 1"
+      fi
+    else
+      hacer sudo pmset -a sleep 0 autorestart 1 || aviso "pmset falló"
+    fi
+    info "La pantalla sigue apagándose sola; solo la Mac deja de dormir."
+    info "Ítems de inicio (Ajustes del Sistema > General): Ghostty abre herdr y su bot."
+    if ! ghostty_app && [ "$SIMULAR" = 0 ]; then
+      aviso "No está Ghostty; no lo agrego a los ítems de inicio."
+    elif osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q Ghostty; then
+      info "al día: Ghostty ya está en los ítems de inicio."
+    else
+      hacer osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/Ghostty.app", hidden:false}' >/dev/null \
+        || aviso "No pude agregar Ghostty a los ítems de inicio (macOS puede pedir permiso de Automatización)."
+    fi
+    if fdesetup status 2>/dev/null | grep -q "is On"; then
+      info "FileVault está activado: tras un reinicio, la Mac espera tu contraseña y herdr"
+      info "arranca cuando inicias sesión."
+    fi
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 paso "Claude Code"
 if ! tiene claude && [ -x "$HOME/.local/bin/claude" ]; then
   export PATH="$HOME/.local/bin:$PATH"
@@ -283,4 +385,7 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SUPONER_CBM" = 1 ] && args+=(--suponer-codebase-memory)
 [ "$SIN_SKILLS" = 1 ] && args+=(--sin-skills)
 [ "$SALTAR_AVISO" = 1 ] && args+=(--saltar-aviso-permisos)
+[ "$SIN_HERDR" = 1 ] && args+=(--sin-herdr)
+[ "$SIN_PLUGINS_HERDR" = 1 ] && args+=(--sin-plugins-herdr)
+[ "$CON_GHOSTTY" = 1 ] && args+=(--ghostty)
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"
