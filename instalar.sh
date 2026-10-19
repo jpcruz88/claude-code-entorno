@@ -20,9 +20,6 @@
 #                            para la terminal
 #   --sin-stats              (macOS) no instala Stats, el monitor de CPU, GPU, RAM y
 #                            disco en la barra de menú
-#   --sin-maccy              (macOS) no instala Maccy, el historial del portapapeles
-#   --tailscale              (macOS) instala Tailscale, para entrar a esta Mac desde
-#                            otros equipos. Apagado si no lo pones
 #   --servidor               (macOS) la Mac nunca duerme, se enciende sola tras un
 #                            corte de luz y abre Ghostty al iniciar sesión. Para una
 #                            Mac que se queda encendida (no para un portátil)
@@ -46,9 +43,7 @@ SIN_HERDR=0
 SIN_GHOSTTY=0
 SIN_PLUGINS_HERDR=0
 SIN_STATS=0
-SIN_MACCY=0
 SIN_TERMINAL=0
-TAILSCALE=0
 SERVIDOR=0
 NO_INTERACTIVO=0
 MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
@@ -67,9 +62,7 @@ for arg in "$@"; do
     --sin-ghostty) SIN_GHOSTTY=1 ;;
     --sin-plugins-herdr) SIN_PLUGINS_HERDR=1 ;;
     --sin-stats) SIN_STATS=1 ;;
-    --sin-maccy) SIN_MACCY=1 ;;
     --sin-terminal) SIN_TERMINAL=1 ;;
-    --tailscale) TAILSCALE=1 ;;
     --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
@@ -287,7 +280,7 @@ fi
 
 # ---------------------------------------------------------------------------
 if [ "$SO" = Darwin ]; then
-  paso "Apps de la barra de menú (Stats, Maccy y Tailscale)"
+  paso "Monitor en la barra de menú (Stats)"
   # Dónde está <Nombre>.app (CARPETA_APPS solo la cambian las pruebas).
   ruta_app() {
     local d
@@ -325,7 +318,7 @@ if [ "$SO" = Darwin ]; then
   }
 
   if [ "$SIN_STATS" = 1 ]; then
-    info "Stats: se omite (--sin-stats)."
+    info "Se omite (--sin-stats)."
   elif instalar_app Stats stats; then
     # CPU, GPU, RAM y disco a la vista; la red, apagada. Solo se escriben los que
     # falten, para no pisar lo que cambies después en los ajustes de Stats.
@@ -339,20 +332,6 @@ if [ "$SO" = Darwin ]; then
       info "Stats ya estaba abierto: ciérralo y ábrelo para ver los módulos nuevos."
     fi
     iniciar_app Stats
-  fi
-
-  if [ "$SIN_MACCY" = 1 ]; then
-    info "Maccy: se omite (--sin-maccy)."
-  elif instalar_app Maccy maccy; then
-    iniciar_app Maccy
-    info "Maccy: shift+cmd+c abre el historial del portapapeles. Para pegar con Enter,"
-    info "la primera vez pide permiso de Accesibilidad."
-  fi
-
-  if [ "$TAILSCALE" = 1 ] && instalar_app Tailscale tailscale-app; then
-    iniciar_app Tailscale
-    info "Tailscale: inicia sesión desde su ícono en la barra de menú (lo haces tú)."
-    info "Para entrar a esta Mac por SSH, ver README, «Entrar a esta Mac desde otro equipo»."
   fi
 fi
 

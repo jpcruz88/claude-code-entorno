@@ -68,8 +68,8 @@ dices que sí.
 | herdr | `herdr/config.toml` | Organizador de terminales para agentes, con tema tipo VS Code, atajos `ctrl+alt`, lazygit y btop en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
 | Ghostty | `ghostty/config` | Terminal con el tema Dark Modern de VS Code y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
-| Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y apps de Mac](#terminal-y-apps-de-mac). |
-| Apps de la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (uso de CPU, GPU, RAM y disco) y [Maccy](https://github.com/p0deje/Maccy) (historial del portapapeles); arrancan al iniciar sesión. Con `--tailscale`, también [Tailscale](https://tailscale.com), para entrar a la Mac desde otros equipos. Solo Mac. Opcionales: `--sin-stats`, `--sin-maccy`. |
+| Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
+| Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 
 ## Qué NO incluye
@@ -209,8 +209,7 @@ cd claude-code-entorno
 
 - En Mac instala lo que falte con **Homebrew** (git, node, python, jq, uv y, para
   herdr, herdr, lazygit, btop, Ghostty y la fuente JetBrains Mono Nerd Font; además,
-  eza, bat, zoxide, fzf, atuin, Stats, Maccy y, con `--tailscale`, Tailscale). Si no
-  hay Homebrew, explica cómo ponerlo.
+  eza, bat, zoxide, fzf, atuin y Stats). Si no hay Homebrew, explica cómo ponerlo.
 - En Linux usa `apt-get` (pide `sudo`). La versión de Node.js de apt suele ser
   vieja: si avisa, instalar Node.js LTS desde <https://nodejs.org>.
 - Opciones:
@@ -227,8 +226,6 @@ cd claude-code-entorno
   | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
   | `--sin-terminal` | No instala eza, bat, zoxide, fzf ni atuin, ni su archivo para la terminal. |
   | `--sin-stats` | Solo macOS: no instala Stats, el monitor de la barra de menú. |
-  | `--sin-maccy` | Solo macOS: no instala Maccy, el historial del portapapeles. |
-  | `--tailscale` | Solo macOS: instala Tailscale, para entrar a esta Mac desde otros equipos (ver [Entrar a esta Mac desde otro equipo](#entrar-a-esta-mac-desde-otro-equipo)). Pide tu contraseña. Apagado si no lo pones. |
   | `--servidor` | Solo macOS: la Mac nunca duerme, se enciende sola tras un corte de luz y abre Ghostty al iniciar sesión (ver [Modo servidor](#modo-servidor)). Apagado si no lo pones. |
 
 - Clave de Context7: la pide y ofrece guardarla en `~/.zshrc` (o `~/.bashrc`).
@@ -274,8 +271,7 @@ cd claude-code-entorno
 11. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
-herramientas de terminal y las apps de la barra de menú (ver
-[Terminal y apps de Mac](#terminal-y-apps-de-mac)).
+herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
 
 Con `--servidor`, `instalar.sh` además ajusta la energía y los ítems de inicio
 antes del paso 5 (ver [Modo servidor](#modo-servidor)).
@@ -486,7 +482,7 @@ activado, tras un reinicio la Mac espera tu contraseña; todo arranca cuando ini
 sesión. Para deshacerlo: `sudo pmset -a sleep 1 autorestart 0` y quita Ghostty en
 Ajustes del Sistema → General → Ítems de inicio.
 
-## Terminal y apps de Mac
+## Terminal y Stats
 
 ### Terminal
 
@@ -507,41 +503,13 @@ No cambia `ls` ni `cat`: Claude Code y los scripts los usan y esperan su salida 
 siempre. Para pasar a atuin el historial que ya tenías: `atuin import auto` (se
 queda en tu computadora; atuin solo sincroniza si creas una cuenta).
 
-### Stats y Maccy
+### Stats
 
-- **Stats**: CPU, GPU, RAM y disco en la barra de arriba. El instalador le enciende
-  esos cuatro y le apaga la red (`defaults write eu.exelban.Stats …`), solo si
-  todavía no los tenía: si después cambias algo, no lo pisa. Haz clic en un número
-  para ver el detalle; en el engrane cambias el estilo o activas más módulos
-  (temperatura, red). El `SSD` es el espacio ocupado del disco.
-- **Maccy**: `shift+cmd+c` abre el historial de lo que copiaste; escribe para
-  filtrar y Enter para pegar. Para pegar, la primera vez pide permiso de
-  Accesibilidad. No guarda lo que los gestores de contraseñas marcan como
-  confidencial.
-
-Las dos se agregan a los ítems de inicio y se abren al terminar la instalación.
-
-### Entrar a esta Mac desde otro equipo
-
-Con `--tailscale`, el instalador pone [Tailscale](https://tailscale.com): una red
-privada entre tus equipos que funciona desde cualquier lugar, sin abrir puertos del
-router. El instalador de Tailscale pide tu contraseña de la Mac; en modo no
-interactivo no puede, y entonces lo corres tú: `brew install --cask tailscale-app`.
-
-1. Abre Tailscale desde su ícono en la barra de menú e inicia sesión (Google,
-   GitHub, Microsoft o Apple).
-2. Instala Tailscale en la laptop o el celular e inicia sesión con **la misma
-   cuenta**. En la app ves el nombre de la Mac (por ejemplo `mac-mini`).
-3. Activa el SSH de macOS: Ajustes del Sistema → General → Compartir → **Inicio de
-   sesión remoto**, solo para tu usuario. La app de Tailscale para Mac no puede ser
-   servidor de «Tailscale SSH»; por eso se usa el de macOS.
-4. Desde la laptop: `ssh <tu-usuario>@<nombre-de-la-mac>`. Para ver tus agentes de
-   herdr de la Mac en la laptop: `herdr --remote <tu-usuario>@<nombre-de-la-mac>`.
-   Desde el celular, con una app de SSH (Termius o Blink, por ejemplo).
-
-⚠️ El Inicio de sesión remoto también acepta conexiones desde tu red local (el wifi
-de tu casa), no solo desde Tailscale: usa una contraseña fuerte o, mejor, llaves
-SSH. Para apagarlo, desactiva el mismo interruptor.
+CPU, GPU, RAM y disco en la barra de arriba. El instalador le enciende esos cuatro
+y le apaga la red (`defaults write eu.exelban.Stats …`), solo si todavía no los
+tenía: si después cambias algo, no lo pisa. Lo agrega a los ítems de inicio y lo
+abre. Haz clic en un número para ver el detalle; en el engrane cambias el estilo o
+activas más módulos (temperatura, red). El `SSD` es el espacio ocupado del disco.
 
 ## Mantenerlo al día
 
@@ -653,7 +621,7 @@ estado (con un JSON como el que manda Claude Code), la fusión de settings, la
 exportación, la revisión de privacidad y los instaladores en modo no interactivo:
 `instalar.sh` se corre de verdad con `HOME` en una carpeta temporal y un `claude`
 de mentira (sin internet ni tocar tu configuración); el paso de herdr se prueba
-igual, con `herdr` y `npx` de mentira (`pruebas/test_herdr.py`); las apps de Mac,
+igual, con `herdr` y `npx` de mentira (`pruebas/test_herdr.py`); el paso de Stats,
 con `brew`, `defaults`, `osascript` y `open` de mentira (así no tocan tus
 preferencias); `terminal/terminal.sh` se carga en zsh y bash con herramientas de
 mentira (`pruebas/test_terminal.py`); y de

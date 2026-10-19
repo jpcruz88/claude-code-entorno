@@ -36,10 +36,8 @@ ahora.
      Telegram de herdr (código de la comunidad)? Si no: `--sin-plugins-herdr`.
    - ¿Instalo las herramientas de terminal (eza, bat, zoxide, fzf y atuin) y las
      cargo desde su `.zshrc`? Si no: `--sin-terminal`.
-   - Solo en Mac: ¿pongo Stats (CPU, GPU, RAM y disco en la barra de menú) y Maccy
-     (historial del portapapeles)? Si no: `--sin-stats` / `--sin-maccy`.
-   - Solo en Mac: ¿quiere entrar a esta Mac desde otros equipos (Tailscale)? Solo
-     si dice que sí: `--tailscale`.
+   - Solo en Mac: ¿pongo Stats (CPU, GPU, RAM y disco en la barra de menú)? Si no:
+     `--sin-stats`.
    - Solo en Mac: ¿esta Mac se queda siempre encendida (una Mac mini, no un
      portátil)? Solo si dice que sí: `--servidor` (no duerme, se enciende tras un
      corte de luz y abre Ghostty al iniciar sesión).
@@ -254,10 +252,6 @@ Los mismos pasos, con `instalar.sh`:
    `herdr plugin action invoke permgps.telegram-agents.setup` en un panel de herdr.
    Si usó `--servidor` y el resumen dice que pmset necesita su contraseña, que
    corra él `sudo pmset -a sleep 0 autorestart 1` en una terminal.
-   Si usó `--tailscale` y `brew install --cask tailscale-app` falló porque pide
-   contraseña, que lo corra él en una terminal y vuelvas a correr el instalador.
-   Después, explícale los pasos del README («Entrar a esta Mac desde otro equipo»):
-   iniciar sesión en Tailscale y activar él mismo el Inicio de sesión remoto.
 
 ## Cómo actualizar después
 
