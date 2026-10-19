@@ -71,6 +71,7 @@ dices que sí.
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
+| Conectar dos Macs | `conectar.sh` | Usa desde esta Mac el herdr (y los agentes) de otra, por SSH. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
 
 ## Qué NO incluye
 
@@ -482,6 +483,69 @@ activado, tras un reinicio la Mac espera tu contraseña; todo arranca cuando ini
 sesión. Para deshacerlo: `sudo pmset -a sleep 1 autorestart 0` y quita Ghostty en
 Ajustes del Sistema → General → Ítems de inicio.
 
+## Conectar dos Macs
+
+Con herdr puedes trabajar en otra Mac desde esta: sus espacios y agentes aparecen
+en tu herdr junto a los de esta Mac («Local») y siguen corriendo allá aunque
+cierres esta Mac o se corte la conexión. Va por SSH, y `conectar.sh` hace los
+pasos por ti.
+
+Cada Mac tiene un papel:
+
+| | La Mac que trabaja | La Mac desde la que trabajas |
+|---|---|---|
+| Qué es | Donde corren los agentes; por ejemplo, la Mac mini siempre encendida (`--servidor`). | La que tienes delante; por ejemplo, la portátil. |
+| Qué corres en ella | `./conectar.sh` | `./conectar.sh <usuario>@<mac-que-trabaja>.local` |
+| Qué hace | Te dice su dirección y si acepta conexiones. No cambia nada. | Crea tu llave SSH, la copia a la otra Mac y agrega la otra Mac a herdr. |
+
+Las dos necesitan herdr, que instala `./instalar.sh`. Si quieres trabajar en cada
+una desde la otra, haz los pasos también al revés.
+
+### Paso a paso
+
+1. **En la Mac que trabaja**, activa Ajustes del Sistema → General → Compartir →
+   **Inicio de sesión remoto**.
+2. Ahí mismo, en la carpeta del repo, corre `./conectar.sh`. Debe decir que
+   «Inicio de sesión remoto» está activado y te da su dirección, con la forma
+   `<usuario>@<mac-que-trabaja>.local`.
+3. **En la Mac desde la que trabajas**, en la carpeta del repo, corre
+   `./conectar.sh` con esa dirección:
+   `./conectar.sh <usuario>@<mac-que-trabaja>.local`. Te pide una sola vez la
+   contraseña de la otra Mac (la de iniciar sesión en ella).
+4. Abre herdr: los espacios y agentes de la otra Mac aparecen junto a los de
+   «Local».
+
+`./conectar.sh` se puede repetir: lo que ya está hecho se salta. Si algo falla,
+te dice qué revisar.
+
+**Dale a cada Mac un nombre claro**, para saber siempre cuál es cuál (por ejemplo,
+«Mac mini» y «MacBook»). El nombre se cambia en Ajustes del Sistema → General →
+Información, y la dirección en General → Compartir → «Nombre de host local». Es lo
+que muestran `./conectar.sh` y herdr.
+
+| Para | Comando |
+|---|---|
+| Ver la dirección de esta Mac | `./conectar.sh` |
+| Ver las Macs que esta ya puede abrir | `herdr machine list` |
+| Abrir solo la otra Mac en esta terminal | `herdr --remote <usuario>@<mac-que-trabaja>.local` |
+| Quitar una Mac de herdr (allá todo sigue corriendo) | `herdr machine remove <id>` (el id sale en `herdr machine list`) |
+
+### Desde fuera de casa
+
+La dirección `.local` solo funciona si las dos Macs están en la misma red. Desde
+fuera hace falta una VPN entre las dos, por ejemplo WireGuard en tu router o
+Tailscale. No abras el puerto 22 de tu router a internet.
+
+### Seguridad
+
+- La llave de esta Mac (`~/.ssh/id_ed25519`) se crea sin contraseña, para que
+  herdr se reconecte solo. La protege el cifrado del disco (FileVault), pero
+  cualquiera que use esta Mac con tu sesión abierta puede entrar a la otra.
+- Para quitarle el acceso a una Mac: en la Mac que trabaja, borra de
+  `~/.ssh/authorized_keys` la línea que termina con la dirección de la Mac que
+  quieres quitar.
+- herdr no guarda contraseñas ni llaves: usa las de SSH.
+
 ## Terminal y Stats
 
 ### Terminal
@@ -624,7 +688,9 @@ de mentira (sin internet ni tocar tu configuración); el paso de herdr se prueba
 igual, con `herdr` y `npx` de mentira (`pruebas/test_herdr.py`); el paso de Stats,
 con `brew`, `defaults`, `osascript` y `open` de mentira (así no tocan tus
 preferencias); `terminal/terminal.sh` se carga en zsh y bash con herramientas de
-mentira (`pruebas/test_terminal.py`); y de
+mentira (`pruebas/test_terminal.py`); `conectar.sh`, con `ssh`, `ssh-keygen`,
+`ssh-copy-id` y `herdr` de mentira (no se conecta a ninguna Mac ni crea llaves
+reales, `pruebas/test_conectar.py`); y de
 `instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan instalar nada; las de la
 línea de estado necesitan `bash` y `jq`, y las de `instalar.sh` se omiten en
 Windows o si falta alguno de los programas que instalaría.
@@ -635,6 +701,7 @@ Windows o si falta alguno de los programas que instalaría.
 ├── AGENTS.md / CLAUDE.md          instrucciones para el agente que instala
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
 ├── exportar.sh                    regenera el repo desde la Mac principal
+├── conectar.sh                    conecta el herdr de esta Mac con el de otra (SSH)
 ├── plugins.txt                    plugins a instalar
 ├── claude/
 │   ├── settings.base.json         ajustes genéricos
