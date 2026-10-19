@@ -73,6 +73,7 @@ class Instalador:
         self.sin_herdr = a.sin_herdr
         self.sin_plugins_herdr = a.sin_plugins_herdr
         self.con_ghostty = a.ghostty
+        self.sin_terminal = a.sin_terminal
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
         self.fallos = []
@@ -477,7 +478,42 @@ class Instalador:
                               self.home / ".config" / "ghostty" / "config",
                               plantilla.relative_to(REPO))
 
-    # ------------------------------------------------------------ 8. git
+    # ------------------------------------------------------------ 8. terminal
+    def terminal(self):
+        """Copia terminal/terminal.sh (eza, bat, zoxide, fzf, atuin) y lo carga desde el rc."""
+        if self.plataforma != "unix":
+            return
+        self.paso("Archivo de la terminal (terminal/terminal.sh en tu .zshrc o .bashrc)")
+        if self.sin_terminal:
+            self.info("Se omite (--sin-terminal).")
+            return
+        origen = REPO / "terminal" / "terminal.sh"
+        destino = self.home / ".config" / "claude-code-entorno" / "terminal.sh"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), destino,
+                              origen.relative_to(REPO))
+        shell = Path(os.environ.get("SHELL") or "bash").name
+        rc = self.home / (".zshrc" if shell == "zsh" else ".bashrc")
+        linea = ('[ -f "$HOME/.config/claude-code-entorno/terminal.sh" ] && '
+                 '. "$HOME/.config/claude-code-entorno/terminal.sh"')
+        texto = rc.read_text(encoding="utf-8") if rc.exists() else ""
+        if linea in texto:
+            self.info("al día: %s ya lo carga" % rc)
+        elif self.simular:
+            self.info("[simular] agregaría a %s: %s" % (rc, linea))
+        else:
+            separador = "\n" if texto and not texto.endswith("\n") else ""
+            with rc.open("a", encoding="utf-8") as f:
+                f.write("%s\n# Herramientas de terminal de claude-code-entorno (ver su README)\n%s\n"
+                        % (separador, linea))
+            self.info("agregado a %s" % rc)
+            self.pendientes.append("Abre una terminal nueva para usar ll, z, ctrl+t (fzf) y "
+                                   "ctrl+r (atuin); ver README, «Terminal».")
+        faltan = [p for p in ("eza", "bat", "zoxide", "fzf", "atuin") if not self.buscar(p)]
+        if faltan:
+            self.aviso("Faltan %s: la terminal se salta lo que no esté instalado."
+                       % ", ".join(faltan))
+
+    # ------------------------------------------------------------ 9. git
     def git(self):
         self.paso("Gitignore global")
         origen = REPO / "git" / "gitignore_global"
@@ -554,6 +590,8 @@ def main(argv=None):
                    help="no instala los plugins de herdr/plugins.txt")
     p.add_argument("--ghostty", action="store_true",
                    help="instala la config de Ghostty (la pide instalar.sh si hay Ghostty)")
+    p.add_argument("--sin-terminal", action="store_true",
+                   help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
     p.add_argument("--git-bash", default=None,
                    help="ruta a bash.exe si no está en el lugar de siempre (Windows)")
     a = p.parse_args(argv)
@@ -561,7 +599,7 @@ def main(argv=None):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
     for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
-                 inst.herdr, inst.ghostty, inst.git):
+                 inst.herdr, inst.ghostty, inst.terminal, inst.git):
         try:
             paso()
         except Exception as e:  # un paso roto no impide los demás

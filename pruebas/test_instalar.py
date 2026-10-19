@@ -21,8 +21,10 @@ RAIZ = Path(__file__).resolve().parent.parent
 INSTALAR_SH = RAIZ / "instalar.sh"
 INSTALAR_PS1 = RAIZ / "instalar.ps1"
 # Sin herdr: su paso llamaría a brew y a herdr de verdad (se prueba en test_herdr.py).
-# Sin Stats: tocaría tus preferencias reales de macOS (se prueba en InstalarStats).
-OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats"]
+# Sin apps de Mac: tocarían tus preferencias reales de macOS (se prueban en InstalarAppsMac).
+# Sin herramientas de terminal: agregarían una línea al .bashrc (se prueba en test_terminal.py).
+OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats",
+            "--sin-maccy", "--sin-terminal"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh
@@ -41,6 +43,8 @@ BREW_FALSO = """#!/bin/sh
 echo "$*" >> "$HOME/llamadas-brew.txt"
 case "$*" in
   "install --cask stats") mkdir -p "$HOME/Applications/Stats.app" ;;
+  "install --cask maccy") mkdir -p "$HOME/Applications/Maccy.app" ;;
+  "install --cask tailscale-app") mkdir -p "$HOME/Applications/Tailscale.app" ;;
 esac
 exit 0
 """
@@ -55,11 +59,13 @@ case "$1" in
 esac
 """
 
+# Guarda el nombre de cada app agregada a los ítems de inicio, una por línea.
 OSASCRIPT_FALSO = """#!/bin/sh
 echo "$*" >> "$HOME/llamadas-osascript.txt"
 case "$*" in
-  *"make login item"*) echo "Stats" >> "$HOME/items-de-inicio.txt" ;;
-  *"every login item"*) cat "$HOME/items-de-inicio.txt" 2>/dev/null ;;
+  *"make login item"*)
+    echo "$*" | sed -n 's|.*path:"[^"]*/\\([^"/]*\\)\\.app".*|\\1|p' >> "$HOME/items-de-inicio.txt" ;;
+  *"every login item"*) tr '\\n' ',' < "$HOME/items-de-inicio.txt" 2>/dev/null ;;
 esac
 exit 0
 """
@@ -69,7 +75,7 @@ echo "$*" >> "$HOME/llamadas-open.txt"
 exit 0
 """
 
-# Stats nunca está abierto (el de verdad puede estarlo en esta Mac).
+# Ninguna app está abierta (las de verdad pueden estarlo en esta Mac).
 PGREP_FALSO = """#!/bin/sh
 exit 1
 """
@@ -183,7 +189,7 @@ class InstalarShNoInteractivo(BaseInstalarSh):
     def test_ayuda_lista_las_opciones_nuevas(self):
         salida = self.correr(["--ayuda"], stdin=subprocess.DEVNULL)
         for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor",
-                       "--sin-stats"):
+                       "--sin-stats", "--sin-maccy", "--tailscale", "--sin-terminal"):
             self.assertIn(opcion, salida)
 
     @unittest.skipUnless(sys.platform == "darwin", "el modo servidor solo existe en macOS")
@@ -197,11 +203,12 @@ class InstalarShNoInteractivo(BaseInstalarSh):
 
 
 @unittest.skipUnless(programas_listos() and sys.platform == "darwin",
-                     "Stats solo existe en macOS (y hacen falta git, jq, uv, Node.js y Python)")
-class InstalarStats(BaseInstalarSh):
-    """El monitor de la barra de menú, con brew, defaults, osascript y open de mentira."""
+                     "las apps de Mac solo existen en macOS (y hacen falta git, jq, uv, Node.js y Python)")
+class InstalarAppsMac(BaseInstalarSh):
+    """Stats, Maccy y Tailscale, con brew, defaults, osascript, open y pgrep de mentira."""
 
-    OPCIONES = ["--no-interactivo", "--sin-skills", "--sin-codebase-memory", "--sin-herdr"]
+    OPCIONES = ["--no-interactivo", "--sin-skills", "--sin-codebase-memory", "--sin-herdr",
+                "--sin-terminal"]
     MODULOS = ["eu.exelban.Stats CPU_state true", "eu.exelban.Stats GPU_state true",
                "eu.exelban.Stats RAM_state true", "eu.exelban.Stats Disk_state true",
                "eu.exelban.Stats Network_state false"]
@@ -212,53 +219,77 @@ class InstalarStats(BaseInstalarSh):
                               ("osascript", OSASCRIPT_FALSO), ("open", OPEN_FALSO),
                               ("pgrep", PGREP_FALSO)):
             self.falso(nombre, guion)
-        # Una carpeta de apps vacía: así no cuenta el Stats que ya tengas instalado.
+        # Una carpeta de apps vacía: así no cuentan las apps que ya tengas instaladas.
         self.env["CARPETA_APPS"] = str(self.tmp / "Applications")
 
-    def correr_stats(self, *extra):
+    def correr_apps(self, *extra):
         return self.correr(self.OPCIONES + list(extra), stdin=subprocess.DEVNULL)
 
+    def items_de_inicio(self):
+        return sorted(self.leer("items-de-inicio.txt").splitlines())
+
+    def abiertas(self):
+        return self.leer("llamadas-open.txt")
+
     def test_instala_stats_con_cpu_gpu_ram_y_disco(self):
-        self.correr_stats()
+        self.correr_apps()
         self.assertIn("install --cask stats", self.leer("llamadas-brew.txt"))
         self.assertEqual(sorted(self.leer("defaults.txt").splitlines()), sorted(self.MODULOS))
-        self.assertEqual(self.leer("items-de-inicio.txt"), "Stats\n")
-        self.assertIn(str(self.home / "Applications" / "Stats.app"),
-                      self.leer("llamadas-osascript.txt"))
-        self.assertIn("Stats", self.leer("llamadas-open.txt"))
+        self.assertIn("Stats", self.items_de_inicio())
+        self.assertIn(str(self.home / "Applications" / "Stats.app"), self.abiertas())
+
+    def test_instala_maccy_y_lo_abre_al_iniciar_sesion(self):
+        self.correr_apps()
+        self.assertIn("install --cask maccy", self.leer("llamadas-brew.txt"))
+        self.assertIn("Maccy", self.items_de_inicio())
+        self.assertIn(str(self.home / "Applications" / "Maccy.app"), self.abiertas())
+
+    def test_tailscale_solo_si_lo_pides(self):
+        self.correr_apps()
+        self.assertNotIn("tailscale", self.leer("llamadas-brew.txt"))
+        self.assertNotIn("Tailscale", self.items_de_inicio())
+        self.correr_apps("--tailscale")
+        self.assertIn("install --cask tailscale-app", self.leer("llamadas-brew.txt"))
+        self.assertIn("Tailscale", self.items_de_inicio())
+        self.assertIn(str(self.home / "Applications" / "Tailscale.app"), self.abiertas())
 
     def test_segunda_corrida_no_repite_nada(self):
-        self.correr_stats()
-        salida = self.correr_stats()
-        self.assertEqual(self.leer("llamadas-brew.txt").count("install --cask stats"), 1)
+        self.correr_apps("--tailscale")
+        salida = self.correr_apps("--tailscale")
+        brew = self.leer("llamadas-brew.txt")
+        for cask in ("stats", "maccy", "tailscale-app"):
+            self.assertEqual(brew.count("install --cask %s\n" % cask), 1, cask)
         self.assertEqual(len(self.leer("defaults.txt").splitlines()), len(self.MODULOS))
-        self.assertEqual(self.leer("items-de-inicio.txt"), "Stats\n")
+        self.assertEqual(self.items_de_inicio(), ["Maccy", "Stats", "Tailscale"])
         self.assertIn("al día: módulos de Stats", salida)
 
     def test_respeta_lo_que_cambiaste_en_stats(self):
         (self.home / "defaults.txt").write_text("eu.exelban.Stats Network_state true\n",
                                                 encoding="utf-8")
-        self.correr_stats()
+        self.correr_apps()
         modulos = self.leer("defaults.txt").splitlines()
         self.assertIn("eu.exelban.Stats Network_state true", modulos)
         self.assertNotIn("eu.exelban.Stats Network_state false", modulos)
         self.assertIn("eu.exelban.Stats GPU_state true", modulos)
 
-    def test_sin_stats_no_toca_nada(self):
-        salida = self.correr_stats("--sin-stats")
-        self.assertIn("Se omite (--sin-stats).", salida)
+    def test_sin_stats_ni_maccy_no_toca_nada(self):
+        salida = self.correr_apps("--sin-stats", "--sin-maccy")
+        self.assertIn("Stats: se omite (--sin-stats).", salida)
+        self.assertIn("Maccy: se omite (--sin-maccy).", salida)
         for archivo in ("llamadas-brew.txt", "llamadas-defaults.txt",
                         "llamadas-osascript.txt", "llamadas-open.txt"):
             self.assertEqual(self.leer(archivo), "", archivo)
 
     def test_simular_no_cambia_nada(self):
-        salida = self.correr_stats("--simular")
-        self.assertIn("[simular] haría: brew install --cask stats", salida)
+        salida = self.correr_apps("--simular", "--tailscale")
+        for cask in ("stats", "maccy", "tailscale-app"):
+            self.assertIn("[simular] haría: brew install --cask %s" % cask, salida)
         self.assertIn("[simular] haría: defaults write eu.exelban.Stats GPU_state -bool true", salida)
+        self.assertIn("[simular] haría: agregar Maccy a los ítems de inicio", salida)
         self.assertNotIn("install", self.leer("llamadas-brew.txt"))
         self.assertEqual(self.leer("defaults.txt"), "")
         self.assertEqual(self.leer("items-de-inicio.txt"), "")
-        self.assertEqual(self.leer("llamadas-open.txt"), "")
+        self.assertEqual(self.abiertas(), "")
 
 
 class InstalarPs1(unittest.TestCase):

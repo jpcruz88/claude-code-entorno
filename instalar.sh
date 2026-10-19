@@ -16,8 +16,13 @@
 #   --sin-herdr              no instala herdr (ni su config, skill, plugins) ni Ghostty
 #   --sin-ghostty            no instala Ghostty ni su config (sí herdr)
 #   --sin-plugins-herdr      no instala los plugins de herdr (el de Telegram)
+#   --sin-terminal           no instala eza, bat, zoxide, fzf ni atuin, ni su archivo
+#                            para la terminal
 #   --sin-stats              (macOS) no instala Stats, el monitor de CPU, GPU, RAM y
 #                            disco en la barra de menú
+#   --sin-maccy              (macOS) no instala Maccy, el historial del portapapeles
+#   --tailscale              (macOS) instala Tailscale, para entrar a esta Mac desde
+#                            otros equipos. Apagado si no lo pones
 #   --servidor               (macOS) la Mac nunca duerme, se enciende sola tras un
 #                            corte de luz y abre Ghostty al iniciar sesión. Para una
 #                            Mac que se queda encendida (no para un portátil)
@@ -41,6 +46,9 @@ SIN_HERDR=0
 SIN_GHOSTTY=0
 SIN_PLUGINS_HERDR=0
 SIN_STATS=0
+SIN_MACCY=0
+SIN_TERMINAL=0
+TAILSCALE=0
 SERVIDOR=0
 NO_INTERACTIVO=0
 MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
@@ -59,6 +67,9 @@ for arg in "$@"; do
     --sin-ghostty) SIN_GHOSTTY=1 ;;
     --sin-plugins-herdr) SIN_PLUGINS_HERDR=1 ;;
     --sin-stats) SIN_STATS=1 ;;
+    --sin-maccy) SIN_MACCY=1 ;;
+    --sin-terminal) SIN_TERMINAL=1 ;;
+    --tailscale) TAILSCALE=1 ;;
     --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
@@ -256,48 +267,92 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+paso "Herramientas de terminal (eza, bat, zoxide, fzf y atuin)"
+herramientas=(eza bat zoxide fzf atuin)
+if [ "$SIN_TERMINAL" = 1 ]; then
+  info "Se omite (--sin-terminal)."
+else
+  faltan=()
+  for h in "${herramientas[@]}"; do tiene "$h" || faltan+=("$h"); done
+  if [ ${#faltan[@]} = 0 ]; then
+    info "Ya están todas."
+  elif [ "$SO" != Darwin ]; then
+    aviso "Faltan ${faltan[*]}: instálalas con tu gestor de paquetes (la terminal se las salta)."
+  elif ! tiene brew; then
+    aviso "Faltan ${faltan[*]} y no está Homebrew; se omiten (ver arriba cómo instalarlo)."
+  else
+    hacer brew install "${faltan[@]}" || aviso "brew install falló"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 if [ "$SO" = Darwin ]; then
-  paso "Monitor en la barra de menú (Stats)"
-  # Dónde está Stats.app (CARPETA_APPS solo la cambian las pruebas).
-  ruta_stats() {
+  paso "Apps de la barra de menú (Stats, Maccy y Tailscale)"
+  # Dónde está <Nombre>.app (CARPETA_APPS solo la cambian las pruebas).
+  ruta_app() {
     local d
     for d in "${CARPETA_APPS:-/Applications}" "$HOME/Applications"; do
-      [ -d "$d/Stats.app" ] && { echo "$d/Stats.app"; return 0; }
+      [ -d "$d/$1.app" ] && { echo "$d/$1.app"; return 0; }
     done
     return 1
   }
-  if [ "$SIN_STATS" = 1 ]; then
-    info "Se omite (--sin-stats)."
-  else
-    if ruta_stats >/dev/null; then
-      info "Stats ya está."
+  # instalar_app <Nombre> <cask>: la instala con brew si falta. Falla si no quedó.
+  instalar_app() {
+    if ruta_app "$1" >/dev/null; then
+      info "$1 ya está."
     elif ! tiene brew; then
-      aviso "Falta Stats y no está Homebrew; se omite (ver arriba cómo instalarlo)."
+      aviso "Falta $1 y no está Homebrew; se omite (ver arriba cómo instalarlo)."
     else
-      hacer brew install --cask stats || aviso "brew install --cask stats falló"
+      hacer brew install --cask "$2" \
+        || aviso "brew install --cask $2 falló (si pide tu contraseña, córrelo tú en una terminal)"
     fi
-    if ruta_stats >/dev/null || [ "$SIMULAR" = 1 ]; then
-      app="$(ruta_stats || echo /Applications/Stats.app)"
-      # CPU, GPU, RAM y disco a la vista; la red, apagada. Solo se escriben los que
-      # falten, para no pisar lo que cambies después en los ajustes de Stats.
-      escritos=0
-      for modulo in CPU_state:true GPU_state:true RAM_state:true Disk_state:true Network_state:false; do
-        defaults read eu.exelban.Stats "${modulo%%:*}" >/dev/null 2>&1 && continue
-        hacer defaults write eu.exelban.Stats "${modulo%%:*}" -bool "${modulo#*:}" && escritos=1
-      done
-      [ "$escritos" = 0 ] && info "al día: módulos de Stats"
-      if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q Stats; then
-        info "al día: Stats ya está en los ítems de inicio."
-      else
-        hacer osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$app\", hidden:true}" >/dev/null \
-          || aviso "No pude agregar Stats a los ítems de inicio (macOS puede pedir permiso de Automatización)."
-      fi
-      if ! pgrep -xq Stats; then
-        hacer open -a "$app" || aviso "No pude abrir Stats."
-      elif [ "$escritos" = 1 ]; then
-        info "Stats ya estaba abierto: ciérralo y ábrelo para ver los módulos nuevos."
-      fi
+    ruta_app "$1" >/dev/null || [ "$SIMULAR" = 1 ]
+  }
+  # iniciar_app <Nombre>: la agrega a los ítems de inicio y la abre si no está abierta.
+  iniciar_app() {
+    local app
+    app="$(ruta_app "$1" || echo "/Applications/$1.app")"
+    if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "$1"; then
+      info "al día: $1 ya está en los ítems de inicio."
+    elif [ "$SIMULAR" = 1 ]; then
+      info "[simular] haría: agregar $1 a los ítems de inicio"
+    else
+      osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$app\", hidden:true}" >/dev/null \
+        && info "$1: agregada a los ítems de inicio." \
+        || aviso "No pude agregar $1 a los ítems de inicio (macOS puede pedir permiso de Automatización)."
     fi
+    pgrep -xq "$1" || hacer open -a "$app" || aviso "No pude abrir $1."
+  }
+
+  if [ "$SIN_STATS" = 1 ]; then
+    info "Stats: se omite (--sin-stats)."
+  elif instalar_app Stats stats; then
+    # CPU, GPU, RAM y disco a la vista; la red, apagada. Solo se escriben los que
+    # falten, para no pisar lo que cambies después en los ajustes de Stats.
+    escritos=0
+    for modulo in CPU_state:true GPU_state:true RAM_state:true Disk_state:true Network_state:false; do
+      defaults read eu.exelban.Stats "${modulo%%:*}" >/dev/null 2>&1 && continue
+      hacer defaults write eu.exelban.Stats "${modulo%%:*}" -bool "${modulo#*:}" && escritos=1
+    done
+    [ "$escritos" = 0 ] && info "al día: módulos de Stats"
+    if [ "$escritos" = 1 ] && pgrep -xq Stats; then
+      info "Stats ya estaba abierto: ciérralo y ábrelo para ver los módulos nuevos."
+    fi
+    iniciar_app Stats
+  fi
+
+  if [ "$SIN_MACCY" = 1 ]; then
+    info "Maccy: se omite (--sin-maccy)."
+  elif instalar_app Maccy maccy; then
+    iniciar_app Maccy
+    info "Maccy: shift+cmd+c abre el historial del portapapeles. Para pegar con Enter,"
+    info "la primera vez pide permiso de Accesibilidad."
+  fi
+
+  if [ "$TAILSCALE" = 1 ] && instalar_app Tailscale tailscale-app; then
+    iniciar_app Tailscale
+    info "Tailscale: inicia sesión desde su ícono en la barra de menú (lo haces tú)."
+    info "Para entrar a esta Mac por SSH, ver README, «Entrar a esta Mac desde otro equipo»."
   fi
 fi
 
@@ -438,4 +493,5 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SIN_HERDR" = 1 ] && args+=(--sin-herdr)
 [ "$SIN_PLUGINS_HERDR" = 1 ] && args+=(--sin-plugins-herdr)
 [ "$CON_GHOSTTY" = 1 ] && args+=(--ghostty)
+[ "$SIN_TERMINAL" = 1 ] && args+=(--sin-terminal)
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"
