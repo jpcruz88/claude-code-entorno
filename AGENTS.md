@@ -34,6 +34,8 @@ ahora.
      `-SinCodebaseMemory` / `--sin-codebase-memory`.
    - Solo en Mac: ¿instalo herdr y Ghostty? Si no: `--sin-herdr`. ¿Y el plugin de
      Telegram de herdr (código de la comunidad)? Si no: `--sin-plugins-herdr`.
+   - Solo en Mac: ¿pongo el monitor de CPU, GPU, RAM y disco en la barra de menú
+     (Stats, código abierto)? Si no: `--sin-stats`.
    - Solo en Mac: ¿esta Mac se queda siempre encendida (una Mac mini, no un
      portátil)? Solo si dice que sí: `--servidor` (no duerme, se enciende tras un
      corte de luz y abre Ghostty al iniciar sesión).

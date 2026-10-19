@@ -21,7 +21,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 INSTALAR_SH = RAIZ / "instalar.sh"
 INSTALAR_PS1 = RAIZ / "instalar.ps1"
 # Sin herdr: su paso llamaría a brew y a herdr de verdad (se prueba en test_herdr.py).
-OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr"]
+# Sin Stats: tocaría tus preferencias reales de macOS (se prueba en InstalarStats).
+OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh
@@ -32,6 +33,45 @@ case "$*" in
   "mcp get"*) exit 1 ;;
 esac
 exit 0
+"""
+
+# Programas de macOS de mentira para el paso de Stats: anotan cada llamada y guardan
+# su estado en HOME, así nunca tocan tus preferencias, tus ítems de inicio ni brew.
+BREW_FALSO = """#!/bin/sh
+echo "$*" >> "$HOME/llamadas-brew.txt"
+case "$*" in
+  "install --cask stats") mkdir -p "$HOME/Applications/Stats.app" ;;
+esac
+exit 0
+"""
+
+# Guarda «dominio clave valor» por línea en $HOME/defaults.txt.
+DEFAULTS_FALSO = """#!/bin/sh
+echo "$*" >> "$HOME/llamadas-defaults.txt"
+case "$1" in
+  read) grep -q "^$2 $3 " "$HOME/defaults.txt" 2>/dev/null ;;
+  write) echo "$2 $3 $5" >> "$HOME/defaults.txt" ;;
+  *) exit 1 ;;
+esac
+"""
+
+OSASCRIPT_FALSO = """#!/bin/sh
+echo "$*" >> "$HOME/llamadas-osascript.txt"
+case "$*" in
+  *"make login item"*) echo "Stats" >> "$HOME/items-de-inicio.txt" ;;
+  *"every login item"*) cat "$HOME/items-de-inicio.txt" 2>/dev/null ;;
+esac
+exit 0
+"""
+
+OPEN_FALSO = """#!/bin/sh
+echo "$*" >> "$HOME/llamadas-open.txt"
+exit 0
+"""
+
+# Stats nunca está abierto (el de verdad puede estarlo en esta Mac).
+PGREP_FALSO = """#!/bin/sh
+exit 1
 """
 
 # Lo mismo que revisa instalar.sh antes de intentar instalar algo.
@@ -50,21 +90,17 @@ def programas_listos():
     return r.returncode == 0
 
 
-@unittest.skipUnless(programas_listos(),
-                     "hace falta macOS o Linux con git, jq, uv, Node.js 18+ y Python 3.8+")
-class InstalarShNoInteractivo(unittest.TestCase):
+class BaseInstalarSh(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.home = self.tmp / "home"
-        bin_falso = self.tmp / "bin"
+        self.bin = self.tmp / "bin"
         self.home.mkdir()
-        bin_falso.mkdir()
-        claude = bin_falso / "claude"
-        claude.write_text(CLAUDE_FALSO, encoding="utf-8")
-        claude.chmod(0o755)
+        self.bin.mkdir()
+        self.falso("claude", CLAUDE_FALSO)
         # Entorno mínimo: nada de la configuración real (ni la clave de Context7).
         self.env = {"HOME": str(self.home), "SHELL": "/bin/bash",
-                    "PATH": str(bin_falso) + os.pathsep + os.environ.get("PATH", ""),
+                    "PATH": str(self.bin) + os.pathsep + os.environ.get("PATH", ""),
                     "TMPDIR": str(self.tmp), "PYTHONIOENCODING": "utf-8"}
         for nombre in ("LANG", "LC_ALL"):
             if os.environ.get(nombre):
@@ -72,6 +108,11 @@ class InstalarShNoInteractivo(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
+
+    def falso(self, nombre, guion):
+        ruta = self.bin / nombre
+        ruta.write_text(guion, encoding="utf-8")
+        ruta.chmod(0o755)
 
     def correr(self, opciones, stdin):
         """Corre instalar.sh; si se quedara esperando una respuesta, el tiempo se agota."""
@@ -82,6 +123,14 @@ class InstalarShNoInteractivo(unittest.TestCase):
         self.assertEqual(r.returncode, 0, salida)
         return salida
 
+    def leer(self, nombre):
+        archivo = self.home / nombre
+        return archivo.read_text(encoding="utf-8") if archivo.exists() else ""
+
+
+@unittest.skipUnless(programas_listos(),
+                     "hace falta macOS o Linux con git, jq, uv, Node.js 18+ y Python 3.8+")
+class InstalarShNoInteractivo(BaseInstalarSh):
     def comprobar_instalacion(self, salida):
         self.assertIn("Modo no interactivo: no la pido", salida)
         self.assertIn("CONTEXT7_API_KEY", salida)  # explica cómo ponerla después
@@ -133,7 +182,8 @@ class InstalarShNoInteractivo(unittest.TestCase):
 
     def test_ayuda_lista_las_opciones_nuevas(self):
         salida = self.correr(["--ayuda"], stdin=subprocess.DEVNULL)
-        for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor"):
+        for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor",
+                       "--sin-stats"):
             self.assertIn(opcion, salida)
 
     @unittest.skipUnless(sys.platform == "darwin", "el modo servidor solo existe en macOS")
@@ -144,6 +194,71 @@ class InstalarShNoInteractivo(unittest.TestCase):
         self.assertIn("sleep 0 autorestart 1", salida)  # «al día» o «[simular] haría»
         self.assertNotIn("$ sudo", salida)  # en simulación nunca se ejecuta sudo
         self.assertIn("Ítems de inicio", salida)
+
+
+@unittest.skipUnless(programas_listos() and sys.platform == "darwin",
+                     "Stats solo existe en macOS (y hacen falta git, jq, uv, Node.js y Python)")
+class InstalarStats(BaseInstalarSh):
+    """El monitor de la barra de menú, con brew, defaults, osascript y open de mentira."""
+
+    OPCIONES = ["--no-interactivo", "--sin-skills", "--sin-codebase-memory", "--sin-herdr"]
+    MODULOS = ["eu.exelban.Stats CPU_state true", "eu.exelban.Stats GPU_state true",
+               "eu.exelban.Stats RAM_state true", "eu.exelban.Stats Disk_state true",
+               "eu.exelban.Stats Network_state false"]
+
+    def setUp(self):
+        super().setUp()
+        for nombre, guion in (("brew", BREW_FALSO), ("defaults", DEFAULTS_FALSO),
+                              ("osascript", OSASCRIPT_FALSO), ("open", OPEN_FALSO),
+                              ("pgrep", PGREP_FALSO)):
+            self.falso(nombre, guion)
+        # Una carpeta de apps vacía: así no cuenta el Stats que ya tengas instalado.
+        self.env["CARPETA_APPS"] = str(self.tmp / "Applications")
+
+    def correr_stats(self, *extra):
+        return self.correr(self.OPCIONES + list(extra), stdin=subprocess.DEVNULL)
+
+    def test_instala_stats_con_cpu_gpu_ram_y_disco(self):
+        self.correr_stats()
+        self.assertIn("install --cask stats", self.leer("llamadas-brew.txt"))
+        self.assertEqual(sorted(self.leer("defaults.txt").splitlines()), sorted(self.MODULOS))
+        self.assertEqual(self.leer("items-de-inicio.txt"), "Stats\n")
+        self.assertIn(str(self.home / "Applications" / "Stats.app"),
+                      self.leer("llamadas-osascript.txt"))
+        self.assertIn("Stats", self.leer("llamadas-open.txt"))
+
+    def test_segunda_corrida_no_repite_nada(self):
+        self.correr_stats()
+        salida = self.correr_stats()
+        self.assertEqual(self.leer("llamadas-brew.txt").count("install --cask stats"), 1)
+        self.assertEqual(len(self.leer("defaults.txt").splitlines()), len(self.MODULOS))
+        self.assertEqual(self.leer("items-de-inicio.txt"), "Stats\n")
+        self.assertIn("al día: módulos de Stats", salida)
+
+    def test_respeta_lo_que_cambiaste_en_stats(self):
+        (self.home / "defaults.txt").write_text("eu.exelban.Stats Network_state true\n",
+                                                encoding="utf-8")
+        self.correr_stats()
+        modulos = self.leer("defaults.txt").splitlines()
+        self.assertIn("eu.exelban.Stats Network_state true", modulos)
+        self.assertNotIn("eu.exelban.Stats Network_state false", modulos)
+        self.assertIn("eu.exelban.Stats GPU_state true", modulos)
+
+    def test_sin_stats_no_toca_nada(self):
+        salida = self.correr_stats("--sin-stats")
+        self.assertIn("Se omite (--sin-stats).", salida)
+        for archivo in ("llamadas-brew.txt", "llamadas-defaults.txt",
+                        "llamadas-osascript.txt", "llamadas-open.txt"):
+            self.assertEqual(self.leer(archivo), "", archivo)
+
+    def test_simular_no_cambia_nada(self):
+        salida = self.correr_stats("--simular")
+        self.assertIn("[simular] haría: brew install --cask stats", salida)
+        self.assertIn("[simular] haría: defaults write eu.exelban.Stats GPU_state -bool true", salida)
+        self.assertNotIn("install", self.leer("llamadas-brew.txt"))
+        self.assertEqual(self.leer("defaults.txt"), "")
+        self.assertEqual(self.leer("items-de-inicio.txt"), "")
+        self.assertEqual(self.leer("llamadas-open.txt"), "")
 
 
 class InstalarPs1(unittest.TestCase):

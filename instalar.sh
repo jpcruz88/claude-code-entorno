@@ -16,6 +16,8 @@
 #   --sin-herdr              no instala herdr (ni su config, skill, plugins) ni Ghostty
 #   --sin-ghostty            no instala Ghostty ni su config (sí herdr)
 #   --sin-plugins-herdr      no instala los plugins de herdr (el de Telegram)
+#   --sin-stats              (macOS) no instala Stats, el monitor de CPU, GPU, RAM y
+#                            disco en la barra de menú
 #   --servidor               (macOS) la Mac nunca duerme, se enciende sola tras un
 #                            corte de luz y abre Ghostty al iniciar sesión. Para una
 #                            Mac que se queda encendida (no para un portátil)
@@ -38,6 +40,7 @@ SALTAR_AVISO=0
 SIN_HERDR=0
 SIN_GHOSTTY=0
 SIN_PLUGINS_HERDR=0
+SIN_STATS=0
 SERVIDOR=0
 NO_INTERACTIVO=0
 MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
@@ -55,6 +58,7 @@ for arg in "$@"; do
     --sin-herdr) SIN_HERDR=1 ;;
     --sin-ghostty) SIN_GHOSTTY=1 ;;
     --sin-plugins-herdr) SIN_PLUGINS_HERDR=1 ;;
+    --sin-stats) SIN_STATS=1 ;;
     --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
@@ -249,6 +253,52 @@ else
     tiene "$p" || aviso "Falta $p (lo usan las ventanas flotantes de herdr): instálalo con tu gestor de paquetes."
   done
   [ "$SIN_GHOSTTY" = 0 ] && tiene ghostty && CON_GHOSTTY=1
+fi
+
+# ---------------------------------------------------------------------------
+if [ "$SO" = Darwin ]; then
+  paso "Monitor en la barra de menú (Stats)"
+  # Dónde está Stats.app (CARPETA_APPS solo la cambian las pruebas).
+  ruta_stats() {
+    local d
+    for d in "${CARPETA_APPS:-/Applications}" "$HOME/Applications"; do
+      [ -d "$d/Stats.app" ] && { echo "$d/Stats.app"; return 0; }
+    done
+    return 1
+  }
+  if [ "$SIN_STATS" = 1 ]; then
+    info "Se omite (--sin-stats)."
+  else
+    if ruta_stats >/dev/null; then
+      info "Stats ya está."
+    elif ! tiene brew; then
+      aviso "Falta Stats y no está Homebrew; se omite (ver arriba cómo instalarlo)."
+    else
+      hacer brew install --cask stats || aviso "brew install --cask stats falló"
+    fi
+    if ruta_stats >/dev/null || [ "$SIMULAR" = 1 ]; then
+      app="$(ruta_stats || echo /Applications/Stats.app)"
+      # CPU, GPU, RAM y disco a la vista; la red, apagada. Solo se escriben los que
+      # falten, para no pisar lo que cambies después en los ajustes de Stats.
+      escritos=0
+      for modulo in CPU_state:true GPU_state:true RAM_state:true Disk_state:true Network_state:false; do
+        defaults read eu.exelban.Stats "${modulo%%:*}" >/dev/null 2>&1 && continue
+        hacer defaults write eu.exelban.Stats "${modulo%%:*}" -bool "${modulo#*:}" && escritos=1
+      done
+      [ "$escritos" = 0 ] && info "al día: módulos de Stats"
+      if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q Stats; then
+        info "al día: Stats ya está en los ítems de inicio."
+      else
+        hacer osascript -e "tell application \"System Events\" to make login item at end with properties {path:\"$app\", hidden:true}" >/dev/null \
+          || aviso "No pude agregar Stats a los ítems de inicio (macOS puede pedir permiso de Automatización)."
+      fi
+      if ! pgrep -xq Stats; then
+        hacer open -a "$app" || aviso "No pude abrir Stats."
+      elif [ "$escritos" = 1 ]; then
+        info "Stats ya estaba abierto: ciérralo y ábrelo para ver los módulos nuevos."
+      fi
+    fi
+  fi
 fi
 
 # ---------------------------------------------------------------------------

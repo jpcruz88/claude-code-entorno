@@ -68,6 +68,7 @@ dices que sí.
 | herdr | `herdr/config.toml` | Organizador de terminales para agentes, con tema tipo VS Code, atajos `ctrl+alt`, lazygit y btop en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
 | Ghostty | `ghostty/config` | Terminal con el tema Dark Modern de VS Code y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 
 ## Qué NO incluye
@@ -206,8 +207,8 @@ cd claude-code-entorno
 ```
 
 - En Mac instala lo que falte con **Homebrew** (git, node, python, jq, uv y, para
-  herdr, herdr, lazygit, btop, Ghostty y la fuente JetBrains Mono Nerd Font). Si
-  no hay Homebrew, explica cómo ponerlo.
+  herdr, herdr, lazygit, btop, Ghostty y la fuente JetBrains Mono Nerd Font; además,
+  Stats). Si no hay Homebrew, explica cómo ponerlo.
 - En Linux usa `apt-get` (pide `sudo`). La versión de Node.js de apt suele ser
   vieja: si avisa, instalar Node.js LTS desde <https://nodejs.org>.
 - Opciones:
@@ -222,6 +223,7 @@ cd claude-code-entorno
   | `--sin-herdr` | No instala herdr, su config, su skill ni sus plugins, ni Ghostty. |
   | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
   | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
+  | `--sin-stats` | Solo macOS: no instala Stats, el monitor de la barra de menú. |
   | `--servidor` | Solo macOS: la Mac nunca duerme, se enciende sola tras un corte de luz y abre Ghostty al iniciar sesión (ver [Modo servidor](#modo-servidor)). Apagado si no lo pones. |
 
 - Clave de Context7: la pide y ofrece guardarla en `~/.zshrc` (o `~/.bashrc`).
@@ -262,6 +264,13 @@ cd claude-code-entorno
 9. **Ghostty** (solo Mac, si está o se acaba de instalar): copia `ghostty/config`
    con la ruta de herdr de esa computadora.
 10. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+
+En Mac, antes del paso 5, `instalar.sh` también instala **Stats**
+(`brew install --cask stats`), le enciende CPU, GPU, RAM y disco y le apaga la red
+(`defaults write eu.exelban.Stats …`), lo agrega a los ítems de inicio y lo abre.
+Solo escribe los ajustes que falten: si después cambias algo en Stats, no lo pisa.
+Para cambiar el estilo o ver más módulos (temperatura, red), haz clic en un número
+de la barra y luego en el engrane.
 
 Con `--servidor`, `instalar.sh` además ajusta la energía y los ítems de inicio
 antes del paso 5 (ver [Modo servidor](#modo-servidor)).
