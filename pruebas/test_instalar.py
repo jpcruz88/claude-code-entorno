@@ -102,10 +102,18 @@ class BaseInstalarSh(unittest.TestCase):
         self.home.mkdir()
         self.bin.mkdir()
         self.falso("claude", CLAUDE_FALSO)
+        # Siempre de mentira, aunque la prueba no los espere: ninguna corrida debe
+        # instalar apps, ni tocar tus preferencias o tus ítems de inicio.
+        for nombre, guion in (("brew", BREW_FALSO), ("defaults", DEFAULTS_FALSO),
+                              ("osascript", OSASCRIPT_FALSO), ("open", OPEN_FALSO),
+                              ("pgrep", PGREP_FALSO)):
+            self.falso(nombre, guion)
         # Entorno mínimo: nada de la configuración real (ni la clave de Context7).
         self.env = {"HOME": str(self.home), "SHELL": "/bin/bash",
                     "PATH": str(self.bin) + os.pathsep + os.environ.get("PATH", ""),
-                    "TMPDIR": str(self.tmp), "PYTHONIOENCODING": "utf-8"}
+                    "TMPDIR": str(self.tmp), "PYTHONIOENCODING": "utf-8",
+                    # Una carpeta de apps vacía: así no cuentan las que ya tengas.
+                    "CARPETA_APPS": str(self.tmp / "Applications")}
         for nombre in ("LANG", "LC_ALL"):
             if os.environ.get(nombre):
                 self.env[nombre] = os.environ[nombre]
@@ -203,22 +211,13 @@ class InstalarShNoInteractivo(BaseInstalarSh):
 @unittest.skipUnless(programas_listos() and sys.platform == "darwin",
                      "Stats solo existe en macOS (y hacen falta git, jq, uv, Node.js y Python)")
 class InstalarStats(BaseInstalarSh):
-    """El monitor de la barra de menú, con brew, defaults, osascript, open y pgrep de mentira."""
+    """El monitor de la barra de menú (brew, defaults, osascript y open son de mentira)."""
 
     OPCIONES = ["--no-interactivo", "--sin-skills", "--sin-codebase-memory", "--sin-herdr",
                 "--sin-terminal"]
     MODULOS = ["eu.exelban.Stats CPU_state true", "eu.exelban.Stats GPU_state true",
                "eu.exelban.Stats RAM_state true", "eu.exelban.Stats Disk_state true",
                "eu.exelban.Stats Network_state false"]
-
-    def setUp(self):
-        super().setUp()
-        for nombre, guion in (("brew", BREW_FALSO), ("defaults", DEFAULTS_FALSO),
-                              ("osascript", OSASCRIPT_FALSO), ("open", OPEN_FALSO),
-                              ("pgrep", PGREP_FALSO)):
-            self.falso(nombre, guion)
-        # Una carpeta de apps vacía: así no cuenta el Stats que ya tengas instalado.
-        self.env["CARPETA_APPS"] = str(self.tmp / "Applications")
 
     def correr_stats(self, *extra):
         return self.correr(self.OPCIONES + list(extra), stdin=subprocess.DEVNULL)
