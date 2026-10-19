@@ -71,7 +71,7 @@ dices que sí.
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
-| Conectar dos Macs | `conectar.sh` | Usa desde esta Mac el herdr (y los agentes) de otra, por SSH. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
+| Conectar dos Macs | `conectar.sh` | Asistente para usar desde esta Mac el herdr (y los agentes) de otra, por SSH: eliges la Mac de una lista de las de tu red. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
 
 ## Qué NO incluye
 
@@ -487,48 +487,45 @@ Ajustes del Sistema → General → Ítems de inicio.
 
 Con herdr puedes trabajar en otra Mac desde esta: sus espacios y agentes aparecen
 en tu herdr junto a los de esta Mac («Local») y siguen corriendo allá aunque
-cierres esta Mac o se corte la conexión. Va por SSH, y `conectar.sh` hace los
-pasos por ti.
+cierres esta Mac o se corte la conexión. Va por SSH, y `./conectar.sh` es un
+asistente que te guía: pregunta qué quieres hacer y a qué Mac te conectas.
 
 Cada Mac tiene un papel:
 
-| | La Mac que trabaja | La Mac desde la que trabajas |
+| | La Mac que controlas | La Mac desde la que controlas |
 |---|---|---|
 | Qué es | Donde corren los agentes; por ejemplo, la Mac mini siempre encendida (`--servidor`). | La que tienes delante; por ejemplo, la portátil. |
-| Qué corres en ella | `./conectar.sh` | `./conectar.sh <usuario>@<mac-que-trabaja>.local` |
-| Qué hace | Te dice su dirección y si acepta conexiones. No cambia nada. | Crea tu llave SSH, la copia a la otra Mac y agrega la otra Mac a herdr. |
+| En el asistente | Opción **2**: dice si acepta conexiones y cómo activarlas. No cambia nada. | Opción **1**: eliges la otra Mac de una lista; crea tu llave SSH, la copia allá y agrega la otra Mac a herdr. |
 
-Las dos necesitan herdr, que instala `./instalar.sh`. Si quieres trabajar en cada
-una desde la otra, haz los pasos también al revés.
+Las dos necesitan herdr, que instala `./instalar.sh`. Para controlar cada una
+desde la otra, haz los pasos también al revés.
 
 ### Paso a paso
 
-1. **En la Mac que trabaja**, activa Ajustes del Sistema → General → Compartir →
-   **Inicio de sesión remoto**.
-2. Ahí mismo, en la carpeta del repo, corre `./conectar.sh`. Debe decir que
-   «Inicio de sesión remoto» está activado y te da su dirección, con la forma
-   `<usuario>@<mac-que-trabaja>.local`.
-3. **En la Mac desde la que trabajas**, en la carpeta del repo, corre
-   `./conectar.sh` con esa dirección:
-   `./conectar.sh <usuario>@<mac-que-trabaja>.local`. Te pide una sola vez la
-   contraseña de la otra Mac (la de iniciar sesión en ella).
+1. **En la Mac que vas a controlar**, corre `./conectar.sh` en la carpeta del repo
+   y elige **2**. Si dice que no acepta conexiones, activa Ajustes del Sistema →
+   General → Compartir → **Inicio de sesión remoto** y vuelve a correrlo.
+2. **En la Mac desde la que vas a controlar**, corre `./conectar.sh` y elige **1**.
+   Busca en tu red las Macs que aceptan conexiones y te las muestra con su nombre
+   y su dirección: elige su número. Si no sale, puedes escribir su dirección a
+   mano (la muestra la opción 2 en la otra Mac).
+3. Te pregunta tu usuario en esa Mac (Enter si es el mismo que en esta) y te
+   enseña un resumen: desde qué Mac y a cuál te vas a conectar. Si dices que sí,
+   te pide una sola vez la contraseña de la otra Mac (la de iniciar sesión en
+   ella).
 4. Abre herdr: los espacios y agentes de la otra Mac aparecen junto a los de
    «Local».
 
 `./conectar.sh` se puede repetir: lo que ya está hecho se salta. Si algo falla,
-te dice qué revisar.
-
-**Dale a cada Mac un nombre claro**, para saber siempre cuál es cuál (por ejemplo,
-«Mac mini» y «MacBook»). El nombre se cambia en Ajustes del Sistema → General →
-Información, y la dirección en General → Compartir → «Nombre de host local». Es lo
-que muestran `./conectar.sh` y herdr.
+te dice qué revisar. La opción **3** muestra las Macs que esta controla y te deja
+quitar una (allá todo sigue corriendo).
 
 | Para | Comando |
 |---|---|
-| Ver la dirección de esta Mac | `./conectar.sh` |
-| Ver las Macs que esta ya puede abrir | `herdr machine list` |
-| Abrir solo la otra Mac en esta terminal | `herdr --remote <usuario>@<mac-que-trabaja>.local` |
-| Quitar una Mac de herdr (allá todo sigue corriendo) | `herdr machine remove <id>` (el id sale en `herdr machine list`) |
+| Abrir el asistente | `./conectar.sh` |
+| Controlar una Mac sin preguntas (para scripts) | `./conectar.sh <usuario>@<mac>.local` |
+| Ver las Macs que esta controla | `herdr machine list` |
+| Abrir solo la otra Mac en esta terminal | `herdr --remote <usuario>@<mac>.local` |
 
 ### Desde fuera de casa
 
@@ -688,12 +685,15 @@ de mentira (sin internet ni tocar tu configuración); el paso de herdr se prueba
 igual, con `herdr` y `npx` de mentira (`pruebas/test_herdr.py`); el paso de Stats,
 con `brew`, `defaults`, `osascript` y `open` de mentira (así no tocan tus
 preferencias); `terminal/terminal.sh` se carga en zsh y bash con herramientas de
-mentira (`pruebas/test_terminal.py`); `conectar.sh`, con `ssh`, `ssh-keygen`,
-`ssh-copy-id` y `herdr` de mentira (no se conecta a ninguna Mac ni crea llaves
-reales, `pruebas/test_conectar.py`); y de
-`instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan instalar nada; las de la
-línea de estado necesitan `bash` y `jq`, y las de `instalar.sh` se omiten en
-Windows o si falta alguno de los programas que instalaría.
+mentira (`pruebas/test_terminal.py`); `conectar.sh` y su asistente, con `ssh`,
+`ssh-keygen`, `ssh-copy-id`, `dns-sd` y `herdr` de mentira (no se conecta a
+ninguna Mac ni crea llaves reales, `pruebas/test_conectar.py`); en los `.sh` se
+revisa que ninguna variable quede pegada a «», tildes o eñes, que el bash de
+macOS lee mal en una terminal con UTF-8 (`pruebas/test_scripts_shell.py`); y de
+`instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan
+instalar nada; las de la línea de estado necesitan `bash` y `jq`, y las de
+`instalar.sh` se omiten en Windows o si falta alguno de los programas que
+instalaría.
 
 ## Estructura
 
@@ -701,7 +701,7 @@ Windows o si falta alguno de los programas que instalaría.
 ├── AGENTS.md / CLAUDE.md          instrucciones para el agente que instala
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
 ├── exportar.sh                    regenera el repo desde la Mac principal
-├── conectar.sh                    conecta el herdr de esta Mac con el de otra (SSH)
+├── conectar.sh                    asistente para controlar el herdr de otra Mac (SSH)
 ├── plugins.txt                    plugins a instalar
 ├── claude/
 │   ├── settings.base.json         ajustes genéricos

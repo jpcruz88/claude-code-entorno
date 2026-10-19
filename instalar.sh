@@ -101,7 +101,7 @@ claves_relevantes() {
   for k in disableAllHooks allowManagedHooksOnly strictKnownMarketplaces \
            allowManagedMcpServersOnly allowedMcpServers deniedMcpServers \
            allowManagedPermissionRulesOnly enabledPlugins; do
-    grep -q "$k" <<<"$contenido" && info "  contiene «$k»"
+    grep -q "$k" <<<"$contenido" && info "  contiene «${k}»"
   done
   return 0
 }

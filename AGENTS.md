@@ -253,9 +253,10 @@ Los mismos pasos, con `instalar.sh`:
    Si usó `--servidor` y el resumen dice que pmset necesita su contraseña, que
    corra él `sudo pmset -a sleep 0 autorestart 1` en una terminal.
    Si quiere usar desde esta Mac el herdr de otra, explícale «Conectar dos Macs»
-   del README. `./conectar.sh <usuario>@<mac>.local` lo corre él, porque pide la
-   contraseña de la otra Mac; tú solo puedes correr `./conectar.sh` sin nada, que
-   no cambia nada y muestra la dirección de esta Mac.
+   del README: corre él `./conectar.sh`, un asistente que le pregunta qué Mac
+   controlar y le pide la contraseña de la otra Mac. Tú solo puedes correr
+   `./conectar.sh` sin nada: sin terminal no pregunta, no cambia nada y muestra la
+   dirección de esta Mac.
 
 ## Cómo actualizar después
 
