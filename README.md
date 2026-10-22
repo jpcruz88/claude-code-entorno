@@ -543,6 +543,186 @@ Tailscale. No abras el puerto 22 de tu router a internet.
   quieres quitar.
 - herdr no guarda contraseñas ni llaves: usa las de SSH.
 
+## Universal Control
+
+Universal Control es la función de macOS que deja mover el cursor y el teclado de
+una Mac a otra, cada una con su monitor. Cuando falla, nada en los Ajustes del
+Sistema dice por qué: la causa está en los registros del sistema. `universal-control.sh`
+automatiza esa revisión. Cada vez que inicias sesión en la Mac que tiene el teclado
+y el mouse, revisa las dos Macs y **solo avisa si algo impide que funcione**,
+diciendo qué hacer. Si todo está bien, no dice nada.
+
+Solo mira: nunca cambia ajustes, nunca reinicia nada y nunca detiene procesos.
+Aquí la **Mac que manda** es la que tiene el teclado y el mouse (se instala en
+ella) y la **Mac que recibe** es la otra, a la que entra por SSH.
+
+### Requisitos
+
+En las dos Macs:
+
+1. La misma cuenta de Apple.
+2. La misma versión de macOS, incluso en el último número.
+3. Wi-Fi y Bluetooth encendidos. Wi-Fi tiene que estar encendido aunque la Mac use
+   cable.
+4. Handoff encendido.
+5. Las opciones de Universal Control encendidas (Ajustes del Sistema → Pantallas →
+   Avanzado).
+6. Compartir Internet **apagado**.
+7. Un monitor conectado en cada una.
+
+Y además:
+
+8. La Mac que recibe acepta conexiones por SSH (Ajustes del Sistema → General →
+   Compartir → Sesión remota; en versiones anteriores de macOS se llama «Inicio de
+   sesión remoto»), tu llave ya está copiada allá y el usuario
+   con el que entras es **administrador**. Sin eso el programa no puede leer los
+   registros de esa Mac.
+
+### Paso a paso
+
+Todo se hace en la Mac que manda, en la carpeta del repo.
+
+1. **Activa Universal Control** en las dos Macs, como en los requisitos 3 a 6.
+2. **Deja la llave SSH.** Si aún no entras a la otra Mac sin contraseña, corre
+   `./conectar.sh` (ver «Conectar dos Macs») o haz un `ssh-copy-id` a mano.
+3. **Dile cuál es la otra Mac:**
+
+   ```bash
+   ./universal-control.sh --configurar <usuario>@<mac>.local
+   ```
+
+   Antes de guardar entra a esa Mac por SSH, sin contraseña y sin preguntar nada,
+   para leer su nombre. Si no puede entrar, no guarda nada y te explica qué
+   revisar y cómo dejar la llave. Se usa el nombre `.local` y no la IP porque la IP
+   cambia al reiniciar.
+4. **Instala el aviso al iniciar sesión:**
+
+   ```bash
+   ./universal-control.sh --instalar
+   ```
+
+   Crea una tarea de inicio de sesión de macOS (launchd) que corre el programa cada
+   vez que entras. Repetir el comando da el mismo resultado.
+5. **Para quitarlo:**
+
+   ```bash
+   ./universal-control.sh --quitar
+   ```
+
+   Descarga la tarea y borra su archivo. Sale bien aunque no hubiera nada instalado.
+6. **Para correrlo a mano** y ver el reporte completo en la terminal:
+
+   ```bash
+   ./universal-control.sh
+   ```
+
+   Escribe una línea por revisión y por Mac, y al final «Universal Control listo.»
+   o «No quedó: …» con la causa. Sale con 0 si está listo, 1 si no, y 2 si falta
+   configurar o usaste mal el comando.
+
+| Para | Comando |
+|---|---|
+| Revisar a mano | `./universal-control.sh` |
+| Ver el estado solo de esta Mac | `./universal-control.sh --estado` |
+| Guardar la otra Mac | `./universal-control.sh --configurar <usuario>@<mac>.local` |
+| Instalar el aviso al iniciar sesión | `./universal-control.sh --instalar` |
+| Quitar el aviso al iniciar sesión | `./universal-control.sh --quitar` |
+| Ver la ayuda completa | `./universal-control.sh --ayuda` |
+
+### Qué hace al iniciar sesión
+
+La tarea corre `./universal-control.sh --al-iniciar`, que no abre nada, no pregunta
+nada y no se queda esperando una entrada. Las dos Macs tienen que estar prendidas,
+con la sesión iniciada. Como cada una puede tardar en arrancar, repite la revisión
+cada 15 segundos durante hasta 5 minutos, hasta que las dos se hayan unido:
+
+- **Si todo está bien**, no muestra nada. Solo escribe el reporte en un archivo.
+- **Si algo falla al terminar la espera**, manda **una** notificación de macOS con
+  la causa más importante y qué hacer.
+- **Si la otra Mac no responde** (apagada, sin red o esperando su contraseña de
+  inicio), también avisa.
+- **Si no has configurado la otra Mac**, avisa «Falta configurar Universal Control»
+  y no espera.
+
+Los registros de Universal Control son los que deciden si hay aviso. Si dicen que
+las dos Macs ya formaron un grupo, no avisa, aunque algún ajuste se vea mal o no se
+haya podido leer; eso queda solo en el reporte. Los ajustes sirven para explicar la
+causa cuando el grupo no se formó. Si quieres otros tiempos, puedes cambiarlos con
+las variables `UC_ESPERA` (segundos de espera, 300 por omisión) y `UC_INTERVALO`
+(segundos entre revisiones, 15 por omisión). Solo cambian los tiempos cuando corres
+`--al-iniciar` a mano; la tarea instalada siempre usa 300 s y 15 s.
+
+La tarea guarda la ruta del programa. Si mueves la carpeta del repo, vuelve a correr
+`./universal-control.sh --instalar`.
+
+### Qué hacer con cada aviso
+
+Si hay varias fallas, el programa reporta solo la primera de esta lista, porque las
+de abajo suelen ser consecuencia de las de arriba:
+
+| Aviso | Qué pasa y qué hacer |
+|---|---|
+| «… no responde: ¿está prendida y con sesión iniciada?» | No hay conexión por SSH con la otra Mac. Prende la Mac, inicia sesión (con FileVault no responde hasta que pones la contraseña) y revisa que tenga Sesión remota (Inicio de sesión remoto en versiones anteriores de macOS) y que la llave siga copiada. |
+| «… no aceptó la llave SSH: corre ./conectar.sh …» | La otra Mac sí respondió, pero rechazó tu llave («Permission denied») o su huella ya no coincide («Host key verification failed»). El reporte trae la línea de error de SSH. Corre `./conectar.sh <usuario>@<mac>.local` para dejar la llave de nuevo. |
+| «No puedo leer los registros de …: el usuario … tiene que ser administrador» | El usuario con el que entras por SSH no es administrador y no puede leer los registros. Usa otro usuario con `--configurar` o hazlo administrador. |
+| «… no tiene sesión iniciada en una cuenta de Apple» | Entra con tu cuenta de Apple en esa Mac. |
+| «Las dos Mac tienen cuentas de Apple distintas» | Entra con la misma cuenta en las dos. |
+| «Versiones distintas: <versión> en <esta Mac>, <versión> en <la otra>. Actualiza la que va atrás» | Una Mac tiene otra versión de macOS. Actualiza la que va atrás. |
+| «Apaga Compartir Internet en …» | Ajustes del Sistema → General → Compartir → Compartir Internet. |
+| «Enciende … en …» | Wi-Fi, Bluetooth, Handoff o Universal Control están apagados. Enciéndelo. |
+| «… no tiene monitor» | Conecta un monitor a esa Mac. |
+| «Inicia sesión en …» | La sesión de la otra Mac está bloqueada o cerrada. Desbloquéala. |
+| «… no ve a … por Bluetooth: reinicia …» | Una Mac no detecta a la otra como disponible. Reinicia la Mac que nombra el aviso. |
+| «Las Mac no se unieron: reinicia las dos» | Todo lo demás está bien, pero no se formó el grupo. Reinicia las dos. |
+
+### Lo que aprendimos
+
+Configurarlo costó una tarde, con estos hallazgos:
+
+- **Compartir Internet con el interruptor encendido cuenta como encendido, aunque
+  no tenga ningún puerto marcado.** En ese caso el sistema sigue con el proceso
+  `InternetSharing` corriendo y Universal Control no funciona. Apaga el interruptor
+  principal.
+- **Con versiones distintas de macOS, la Mac vieja nunca detectó a la nueva.** Antes
+  de buscar otras causas, deja las dos en la misma versión.
+- **Cuando una Mac no ve a la otra por Bluetooth, reiniciar la que no se ve lo
+  arregla.** Una Mac con casi 5 días sin reiniciarse tras su actualización no
+  avisaba por Bluetooth: la otra la veía solo por Wi-Fi, y eso no basta para saber
+  si está activa. Al reiniciarla, las dos formaron un grupo. Apagar y prender
+  Handoff no cambió nada.
+- **En zsh, `log` es un comando interno.** Si lees los registros a mano, usa la ruta
+  completa. El programa mira los mensajes del subsistema de Universal Control del
+  arranque actual (`--last boot`), no los de antes de un reinicio:
+
+  ```bash
+  /usr/bin/log show --info --last boot --predicate 'subsystem == "com.apple.universalcontrol"'
+  ```
+
+  El último mensaje `Selected circle` de cada Mac lista a los equipos que están en
+  el mismo grupo. Si salen los dos, el cursor puede cruzar.
+- **El teclado y el mouse tienen que estar conectados solo a la Mac que manda.** Si
+  uno de los dos se queda conectado a la otra Mac, por ejemplo después de cambiarlo
+  de canal para usarla un momento, Universal Control le da el control a la Mac donde
+  está ese dispositivo. El cursor salta solo a la otra pantalla cada vez que lo
+  mueves. Regrésalo a la Mac que manda y, si usa un receptor USB, desconéctalo de la
+  otra.
+- **La cuenta de Apple se compara sin mostrarla.** El programa solo dice si es igual
+  o distinta en las dos Macs: no imprime ni guarda el correo ni el número de la
+  cuenta. Para comparar usa una huella con una sal distinta en cada revisión,
+  así no se puede deshacer.
+
+### Dónde quedan los archivos
+
+| Qué | Dónde |
+|---|---|
+| Configuración (la otra Mac) | `~/.config/claude-code-entorno/universal-control.conf` |
+| Último reporte, con fecha y hora | `~/Library/Logs/claude-code-entorno/universal-control.log` |
+| Errores de la tarea de inicio de sesión | `~/Library/Logs/claude-code-entorno/universal-control.errores.log` |
+| Tarea de inicio de sesión | `~/Library/LaunchAgents/com.claude-code-entorno.universal-control.plist` |
+
+El reporte se reemplaza en cada inicio de sesión: guarda solo el último intento.
+Estos archivos viven en tu carpeta de usuario, fuera del repo.
+
 ## Terminal y Stats
 
 ### Terminal
@@ -687,8 +867,10 @@ con `brew`, `defaults`, `osascript` y `open` de mentira (así no tocan tus
 preferencias); `terminal/terminal.sh` se carga en zsh y bash con herramientas de
 mentira (`pruebas/test_terminal.py`); `conectar.sh` y su asistente, con `ssh`,
 `ssh-keygen`, `ssh-copy-id`, `dns-sd` y `herdr` de mentira (no se conecta a
-ninguna Mac ni crea llaves reales, `pruebas/test_conectar.py`); en los `.sh` se
-revisa que ninguna variable quede pegada a «», tildes o eñes, que el bash de
+ninguna Mac ni crea llaves reales, `pruebas/test_conectar.py`); `universal-control.sh`,
+con `ssh`, `log`, `defaults`, `osascript`, `launchctl` y otros comandos de mentira (no
+toca tu configuración ni se conecta a ninguna Mac, `pruebas/test_universal_control.py`);
+en los `.sh` se revisa que ninguna variable quede pegada a «», tildes o eñes, que el bash de
 macOS lee mal en una terminal con UTF-8 (`pruebas/test_scripts_shell.py`); y de
 `instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan
 instalar nada; las de la línea de estado necesitan `bash` y `jq`, y las de
@@ -702,6 +884,7 @@ instalaría.
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
 ├── exportar.sh                    regenera el repo desde la Mac principal
 ├── conectar.sh                    asistente para controlar el herdr de otra Mac (SSH)
+├── universal-control.sh           revisa si dos Mac pueden usar Universal Control y avisa si falla
 ├── plugins.txt                    plugins a instalar
 ├── claude/
 │   ├── settings.base.json         ajustes genéricos
