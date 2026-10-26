@@ -179,7 +179,7 @@ class PasoHerdr(unittest.TestCase):
         texto = (self.home / ".config" / "ghostty" / "config").read_text(encoding="utf-8")
         self.assertIn("command = %s" % herdr, texto)
         self.assertNotIn("{{", texto)
-        self.assertIn("theme = Dark Modern", texto)
+        self.assertIn("theme = Kanagawa Wave", texto)
 
     def test_sin_opcion_ghostty_no_lo_toca(self):
         self.falso("herdr", HERDR_FALSO)
@@ -194,12 +194,60 @@ class PasoHerdr(unittest.TestCase):
         self.assertNotIn("install", self.llamadas())
         self.assertIn("[simular] haría: herdr plugin install permgps/herdr-telegram-agents --yes", salida)
 
+    def test_instala_el_tema_kanagawa_de_claude_code(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills")
+        tema = self.home / ".claude" / "themes" / "kanagawa.json"
+        self.assertEqual(tema.read_bytes(), (RAIZ / "claude" / "themes" / "kanagawa.json").read_bytes())
+        ajustes = (self.home / ".claude" / "settings.json").read_text(encoding="utf-8")
+        self.assertIn('"theme": "custom:kanagawa"', ajustes)
+
+    def test_instala_la_config_de_neovim_si_no_hay_una(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills")
+        nvim = self.home / ".config" / "nvim"
+        self.assertTrue((nvim / "init.lua").is_file())
+        self.assertIn("kanagawa", (nvim / "lua" / "plugins" / "tema.lua").read_text(encoding="utf-8"))
+
+    def test_no_pisa_una_config_de_neovim_que_ya_era_tuya(self):
+        self.falso("herdr", HERDR_FALSO)
+        propia = self.home / ".config" / "nvim" / "init.lua"
+        propia.parent.mkdir(parents=True)
+        propia.write_text("-- mi config\n", encoding="utf-8")
+        salida = self.correr("--sin-skills")
+        self.assertEqual(propia.read_text(encoding="utf-8"), "-- mi config\n")
+        self.assertFalse((propia.parent / "lua" / "plugins" / "tema.lua").exists())
+        self.assertIn("ya tienes una config de Neovim", salida)
+
+    def test_sin_nvim_no_toca_neovim(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills", "--sin-nvim")
+        self.assertFalse((self.home / ".config" / "nvim").exists())
+
+    def test_neovim_simulado_no_copia_nada(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills", "--simular")
+        self.assertFalse((self.home / ".config" / "nvim").exists())
+
 
 class ArchivosDelRepo(unittest.TestCase):
     def test_config_herdr_sin_datos_personales(self):
         texto = CONFIG_HERDR.read_text(encoding="utf-8")
         self.assertNotIn("/Users/", texto)
         self.assertNotIn("bot_token", texto)
+
+    def test_config_herdr_usa_kanagawa_y_abre_neovim_en_ventana_flotante(self):
+        texto = CONFIG_HERDR.read_text(encoding="utf-8")
+        self.assertIn("Kanagawa", texto)
+        self.assertIn('command = "nvim ."', texto)
+
+    def test_config_de_neovim_sin_datos_personales(self):
+        archivos = [f for f in (RAIZ / "nvim").rglob("*") if f.is_file()]
+        self.assertTrue(archivos)
+        for f in archivos:
+            texto = f.read_text(encoding="utf-8")
+            self.assertNotIn("/Users/", texto, f)
+            self.assertNotIn(Path.home().name, texto, f)
 
     def test_plantilla_ghostty_usa_el_marcador(self):
         texto = PLANTILLA_GHOSTTY.read_text(encoding="utf-8")

@@ -65,9 +65,11 @@ dices que sí.
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
-| herdr | `herdr/config.toml` | Organizador de terminales para agentes, con tema tipo VS Code, atajos `ctrl+alt`, lazygit y btop en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
+| herdr | `herdr/config.toml` | Organizador de terminales para agentes, con la paleta Kanagawa, atajos `ctrl+alt`, lazygit, btop y Neovim en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
-| Ghostty | `ghostty/config` | Terminal con el tema Dark Modern de VS Code y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
+| Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
@@ -226,6 +228,7 @@ cd claude-code-entorno
   | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
   | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
   | `--sin-terminal` | No instala eza, bat, zoxide, fzf ni atuin, ni su archivo para la terminal. |
+  | `--sin-nvim` | No instala Neovim ni su config (`nvim/`). |
   | `--sin-stats` | Solo macOS: no instala Stats, el monitor de la barra de menú. |
   | `--servidor` | Solo macOS: la Mac nunca duerme, se enciende sola tras un corte de luz y abre Ghostty al iniciar sesión (ver [Modo servidor](#modo-servidor)). Apagado si no lo pones. |
 
@@ -266,10 +269,12 @@ cd claude-code-entorno
    (`herdr plugin install … --yes`), y recarga la config si herdr está abierto.
 9. **Ghostty** (solo Mac, si está o se acaba de instalar): copia `ghostty/config`
    con la ruta de herdr de esa computadora.
-10. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
+10. **Neovim** (Mac y Linux): copia `nvim/` a `~/.config/nvim`, salvo que ya tengas
+    ahí una config tuya (entonces avisa y no la toca).
+11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-11. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+12. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
 herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
@@ -278,7 +283,7 @@ Con `--servidor`, `instalar.sh` además ajusta la energía y los ítems de inici
 antes del paso 5 (ver [Modo servidor](#modo-servidor)).
 
 **Se puede correr cuantas veces haga falta**: lo que ya está se salta. Los pasos 5
-a 11 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
+a 12 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
 En Windows, `instalar.ps1` no instala herdr: si no lo tienes, el paso 8 se salta
 con un aviso.
 
@@ -421,7 +426,7 @@ conversación.
 
 ### Lo que deja `herdr/config.toml`
 
-- **Aspecto:** colores de VS Code (Dark Modern), estados con símbolos, rama de git
+- **Aspecto:** paleta Kanagawa (Wave, igual que Ghostty, Claude Code y Neovim), estados con símbolos, rama de git
   y hora con iconos en la barra de pestañas, nombre del agente en el borde de cada
   panel dividido.
 - **Atajos directos** (sin `ctrl+b`): `ctrl+alt+h/j/k/l` mueve entre paneles,
@@ -482,6 +487,26 @@ Mientras la Mac duerme, todo se congela: herdr, los agentes y el bot. Con FileVa
 activado, tras un reinicio la Mac espera tu contraseña; todo arranca cuando inicias
 sesión. Para deshacerlo: `sudo pmset -a sleep 1 autorestart 0` y quita Ghostty en
 Ajustes del Sistema → General → Ítems de inicio.
+
+## Neovim
+
+`instalar.sh` instala Neovim y `tree-sitter-cli` con Homebrew y copia `nvim/` a
+`~/.config/nvim`: [LazyVim](https://www.lazyvim.org) con el tema Kanagawa, el mismo
+de Ghostty, herdr y Claude Code. Si ya tienes una config en `~/.config/nvim`, no la
+toca.
+
+- **Primera vez:** abre `nvim`; descarga solo los plugins y los parsers de sintaxis
+  (tarda un minuto).
+- **En herdr:** `nvim` en cualquier panel, o `ctrl+b` y luego `alt+e` para abrirlo en
+  una ventana flotante en la carpeta del panel (como lazygit con `alt+g`).
+- **Atajos de LazyVim:** `Espacio` abre el menú; `Espacio e` explorador, `Espacio
+  Espacio` buscar archivo, `Espacio /` buscar texto.
+- **macOS 27:** el SDK 27 trae un archivo que el enlazador actual no entiende y
+  rompe la compilación de los parsers. `nvim/lua/config/options.lua` usa el SDK
+  26.5 solo dentro de Neovim, si está instalado.
+- **Windows:** todavía no se instala (Neovim lee otra carpeta allí).
+
+---
 
 ## Conectar dos Macs
 
@@ -890,12 +915,14 @@ instalaría.
 │   ├── settings.base.json         ajustes genéricos
 │   ├── statusline.sh              línea de estado
 │   ├── hooks/guard-kill.py        hook contra kills masivos
+│   ├── themes/kanagawa.json       tema de Claude Code
 │   └── rules/                     reglas globales
 ├── skills/lista.json              skills y su origen
 ├── mcp/                           plantillas de servidores MCP
 ├── git/gitignore_global           gitignore global
 ├── herdr/                         config de herdr y plugins de herdr (Telegram)
 ├── ghostty/config                 config de Ghostty (con {{RUTA_HERDR}})
+├── nvim/                          config de Neovim (LazyVim con el tema Kanagawa)
 ├── terminal/terminal.sh           eza, bat, zoxide, fzf y atuin para zsh y bash
 ├── herramientas/                  scripts de apoyo (fusión, exportación, privacidad)
 └── pruebas/                       pruebas automáticas

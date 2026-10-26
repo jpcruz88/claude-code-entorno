@@ -3,27 +3,28 @@ onboarding = false
 [theme]
 name = "one-dark"
 
-# Paleta de VS Code (Dark Modern)
+# Paleta Kanagawa (Wave), a juego con Ghostty y con el tema de Claude Code
 [theme.custom]
-panel_bg = "#1f1f1f"
-sidebar_bg = "#181818"
-active_row_bg = "#37373d"
-selection_bg = "#04395e"
-surface0 = "#2b2b2b"
-surface1 = "#3c3c3c"
-surface_dim = "#181818"
-overlay0 = "#6e7681"
-overlay1 = "#858585"
-text = "#cccccc"
-subtext0 = "#9d9d9d"
-accent = "#0078d4"
-blue = "#569cd6"
-teal = "#4ec9b0"
-green = "#89d185"
-yellow = "#dcdcaa"
-peach = "#ce9178"
-red = "#f14c4c"
-mauve = "#c586c0"
+panel_bg = "#1f1f28"     # igual que el fondo de Ghostty
+sidebar_bg = "#16161d"
+active_row_bg = "#363646"
+selection_bg = "#2d4f67"
+surface0 = "#2a2a37"
+surface1 = "#363646"
+surface_dim = "#16161d"
+overlay0 = "#727169"
+overlay1 = "#938aa9"
+text = "#dcd7ba"
+subtext0 = "#c8c093"
+accent = "#7e9cd8"
+blue = "#7e9cd8"
+# Colores de estado de los agentes
+teal = "#7fb4ca"    # done: terminó y no lo has visto
+green = "#98bb6c"   # idle: ya lo viste, en espera
+yellow = "#e6c384"  # working: trabajando
+peach = "#ffa066"
+red = "#ff5d62"     # blocked: espera tu respuesta
+mauve = "#957fb8"
 
 [ui]
 status_indicators = "symbols"
@@ -49,14 +50,15 @@ tab_bar_right_separator = "   "
 # Barra lateral estilo explorador de VS Code
 [ui.sidebar.spaces]
 rows = [
-  ["state_icon", { token = "workspace", fg = "#e7e7e7", bold = true }],
-  [{ token = "branch", fg = "#4ec9b0" }, { token = "git_status", fg = "#e2c08d" }],
+  ["state_icon", { token = "workspace", fg = "#dcd7ba", bold = true }],
+  [{ token = "branch", fg = "#7aa89f" }, { token = "git_status", fg = "#e6c384" }],
 ]
 
 [ui.sidebar.agents]
+# El nombre de la pestaña va junto al icono de estado, para saber de un vistazo cuál te necesita
 rows = [
-  ["state_icon", { token = "agent", fg = "#569cd6", bold = true }, { token = "workspace", fg = "#9d9d9d" }],
-  [{ token = "terminal_title_stripped", fg = "#858585" }],
+  ["state_icon", { token = "tab", fg = "#dcd7ba", bold = true }, { token = "workspace", fg = "#727169" }],
+  [{ token = "agent", fg = "#7e9cd8" }, { token = "terminal_title_stripped", fg = "#727169" }],
 ]
 
 # Avisos cuando un agente termina o necesita respuesta en otro espacio
@@ -93,6 +95,13 @@ height = "90%"
 key = "prefix+alt+t"
 type = "popup"
 command = "btop"
+width = "90%"
+height = "90%"
+
+[[keys.command]]
+key = "prefix+alt+e"
+type = "popup"
+command = "nvim ."
 width = "90%"
 height = "90%"
 

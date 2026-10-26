@@ -18,6 +18,7 @@
 #   --sin-plugins-herdr      no instala los plugins de herdr (el de Telegram)
 #   --sin-terminal           no instala eza, bat, zoxide, fzf ni atuin, ni su archivo
 #                            para la terminal
+#   --sin-nvim               no instala Neovim (LazyVim con el tema Kanagawa) ni su config
 #   --sin-stats              (macOS) no instala Stats, el monitor de CPU, GPU, RAM y
 #                            disco en la barra de menú
 #   --servidor               (macOS) la Mac nunca duerme, se enciende sola tras un
@@ -44,6 +45,7 @@ SIN_GHOSTTY=0
 SIN_PLUGINS_HERDR=0
 SIN_STATS=0
 SIN_TERMINAL=0
+SIN_NVIM=0
 SERVIDOR=0
 NO_INTERACTIVO=0
 MOTIVO_NO_INTERACTIVO="opción --no-interactivo"
@@ -63,6 +65,7 @@ for arg in "$@"; do
     --sin-plugins-herdr) SIN_PLUGINS_HERDR=1 ;;
     --sin-stats) SIN_STATS=1 ;;
     --sin-terminal) SIN_TERMINAL=1 ;;
+    --sin-nvim) SIN_NVIM=1 ;;
     --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
     *) echo "Opción desconocida: $arg"; uso; exit 2 ;;
@@ -257,6 +260,25 @@ else
     tiene "$p" || aviso "Falta $p (lo usan las ventanas flotantes de herdr): instálalo con tu gestor de paquetes."
   done
   [ "$SIN_GHOSTTY" = 0 ] && tiene ghostty && CON_GHOSTTY=1
+fi
+
+# ---------------------------------------------------------------------------
+paso "Neovim (LazyVim con el tema Kanagawa)"
+if [ "$SIN_NVIM" = 1 ]; then
+  info "Se omite (--sin-nvim)."
+elif [ "$SO" = Darwin ]; then
+  formulas=()
+  tiene nvim || formulas+=(neovim)
+  tiene tree-sitter || formulas+=(tree-sitter-cli)  # compila los parsers de sintaxis
+  if [ ${#formulas[@]} = 0 ]; then
+    info "Ya están todos."
+  elif ! tiene brew; then
+    aviso "Faltan: ${formulas[*]} y no está Homebrew; se omiten."
+  else
+    hacer brew install "${formulas[@]}" || aviso "brew install falló"
+  fi
+else
+  tiene nvim || aviso "Falta nvim (0.11 o más nuevo) y tree-sitter-cli: instálalos con tu gestor de paquetes."
 fi
 
 # ---------------------------------------------------------------------------
@@ -473,4 +495,5 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SIN_PLUGINS_HERDR" = 1 ] && args+=(--sin-plugins-herdr)
 [ "$CON_GHOSTTY" = 1 ] && args+=(--ghostty)
 [ "$SIN_TERMINAL" = 1 ] && args+=(--sin-terminal)
+[ "$SIN_NVIM" = 1 ] && args+=(--sin-nvim)
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"

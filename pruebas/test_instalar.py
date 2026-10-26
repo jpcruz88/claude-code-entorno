@@ -195,7 +195,7 @@ class InstalarShNoInteractivo(BaseInstalarSh):
     def test_ayuda_lista_las_opciones_nuevas(self):
         salida = self.correr(["--ayuda"], stdin=subprocess.DEVNULL)
         for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor",
-                       "--sin-stats", "--sin-terminal"):
+                       "--sin-stats", "--sin-terminal", "--sin-nvim"):
             self.assertIn(opcion, salida)
 
     @unittest.skipUnless(sys.platform == "darwin", "el modo servidor solo existe en macOS")

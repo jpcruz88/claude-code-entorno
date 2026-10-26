@@ -74,6 +74,7 @@ class Instalador:
         self.sin_plugins_herdr = a.sin_plugins_herdr
         self.con_ghostty = a.ghostty
         self.sin_terminal = a.sin_terminal
+        self.sin_nvim = a.sin_nvim
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
         self.fallos = []
@@ -157,9 +158,9 @@ class Instalador:
 
     # ------------------------------------------------------------ 1. archivos
     def archivos(self):
-        self.paso("Reglas, hooks y statusline en %s" % self.claude_dir)
+        self.paso("Reglas, hooks, temas y statusline en %s" % self.claude_dir)
         pares = []
-        for sub in ("rules", "hooks"):
+        for sub in ("rules", "hooks", "themes"):
             for f in sorted((REPO / "claude" / sub).iterdir()):
                 if f.is_file() and not f.name.startswith("."):
                     pares.append((f, self.claude_dir / sub / f.name))
@@ -464,7 +465,7 @@ class Instalador:
     def ghostty(self):
         if not self.con_ghostty:
             return
-        self.paso("Ghostty (aspecto tipo VS Code y herdr al abrir)")
+        self.paso("Ghostty (paleta Kanagawa y herdr al abrir)")
         if self.sin_herdr:
             self.info("Se omite (--sin-herdr): su config abre herdr.")
             return
@@ -478,7 +479,29 @@ class Instalador:
                               self.home / ".config" / "ghostty" / "config",
                               plantilla.relative_to(REPO))
 
-    # ------------------------------------------------------------ 8. terminal
+    # ------------------------------------------------------------ 8. Neovim
+    def nvim(self):
+        """Copia nvim/ (LazyVim con el tema Kanagawa) a ~/.config/nvim, sin pisar una config ajena."""
+        if self.plataforma != "unix":
+            return  # en Windows Neovim lee %LOCALAPPDATA%/nvim; no se instala ahí todavía
+        self.paso("Neovim (LazyVim con el tema Kanagawa)")
+        if self.sin_nvim:
+            self.info("Se omite (--sin-nvim).")
+            return
+        destino = self.home / ".config" / "nvim"
+        marca = destino / "lua" / "plugins" / "tema.lua"
+        if destino.exists() and any(destino.iterdir()) and not marca.exists():
+            self.aviso("ya tienes una config de Neovim en %s; no la toco. "
+                       "Para usar la de este repo, muévela y vuelve a correr el instalador." % destino)
+            return
+        origen = REPO / "nvim"
+        for f in sorted(origen.rglob("*")):
+            if f.is_file() and f.name != ".DS_Store":
+                self.instalar_archivo(f.read_bytes().replace(b"\r\n", b"\n"),
+                                      destino / f.relative_to(origen), f.relative_to(REPO))
+        self.pendientes.append("Abre `nvim` una vez: descarga solo los plugins y parsers (tarda un minuto).")
+
+    # ------------------------------------------------------------ 9. terminal
     def terminal(self):
         """Copia terminal/terminal.sh (eza, bat, zoxide, fzf, atuin) y lo carga desde el rc."""
         if self.plataforma != "unix":
@@ -592,6 +615,8 @@ def main(argv=None):
                    help="instala la config de Ghostty (la pide instalar.sh si hay Ghostty)")
     p.add_argument("--sin-terminal", action="store_true",
                    help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
+    p.add_argument("--sin-nvim", action="store_true",
+                   help="no instala la config de Neovim (nvim/)")
     p.add_argument("--git-bash", default=None,
                    help="ruta a bash.exe si no está en el lugar de siempre (Windows)")
     a = p.parse_args(argv)
@@ -599,7 +624,7 @@ def main(argv=None):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
     for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
-                 inst.herdr, inst.ghostty, inst.terminal, inst.git):
+                 inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.git):
         try:
             paso()
         except Exception as e:  # un paso roto no impide los demás

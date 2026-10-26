@@ -1,0 +1,26 @@
+{
+  "name": "Kanagawa",
+  "base": "dark",
+  "overrides": {
+    "text": "#dcd7ba",
+    "claude": "#d27e99",
+    "claudeShimmer": "#e6a5bb",
+    "permission": "#7fb4ca",
+    "permissionShimmer": "#a3d4d5",
+    "suggestion": "#7e9cd8",
+    "inactive": "#727169",
+    "inactiveShimmer": "#938aa9",
+    "subtle": "#54546d",
+    "remember": "#e6c384",
+    "success": "#98bb6c",
+    "warning": "#e6c384",
+    "warningShimmer": "#f0d9a8",
+    "error": "#ff5d62",
+    "planMode": "#7e9cd8",
+    "promptBorder": "#957fb8",
+    "promptBorderShimmer": "#b8a6d9",
+    "userMessageBackground": "#2a2a37",
+    "diffAdded": "#2b3328",
+    "diffRemoved": "#43242b"
+  }
+}
