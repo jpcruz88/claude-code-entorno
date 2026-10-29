@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+GO_MODELS_URL = "https://opencode.ai/inference/go/v1/models"
+MODELS_DEV_URL = "https://models.dev/api.json"
+USAGE_NOTE = "Las cuotas de tu plan se consultan en https://opencode.ai/console; el catálogo no las expone."
+
+
+def get_token(environ):
+    token = environ.get("OPENCODE_API_KEY") or environ.get("ANTHROPIC_AUTH_TOKEN")
+    if not token:
+        raise RuntimeError("No hay credencial. Ejecuta este comando desde cl-go o define OPENCODE_API_KEY.")
+    return token
+
+
+def fetch_json(url, token=None):
+    headers = {"Accept": "application/json", "User-Agent": "opencode-go-modelos/1.0"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.load(response)
+
+
+def build_model(model_id, metadata_by_id):
+    metadata = metadata_by_id.get(model_id)
+    if metadata is None:
+        return {
+            "id": model_id,
+            "name": model_id,
+            "metadata_missing": True,
+            "attachment": None,
+            "reasoning": None,
+            "tool_call": None,
+            "modalities": {},
+            "limit": {},
+            "cost": {},
+        }
+    modalities = metadata.get("modalities", {})
+    limit = metadata.get("limit", {})
+    cost = metadata.get("cost", {})
+    for field, container in (("modalities", modalities), ("limit", limit), ("cost", cost)):
+        if not isinstance(container, dict):
+            raise RuntimeError(
+                f"Metadatos inválidos para el modelo '{model_id}': '{field}' debe ser un objeto."
+            )
+    for field in ("input", "output"):
+        if field in modalities:
+            values = modalities[field]
+            if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                raise RuntimeError(
+                    f"Metadatos inválidos para el modelo '{model_id}': "
+                    f"'modalities.{field}' debe ser una lista de cadenas."
+                )
+    for container_name, container, fields in (
+        ("limit", limit, ("context", "output")),
+        ("cost", cost, ("input", "output", "cache_read", "cache_write")),
+    ):
+        for field in fields:
+            value = container.get(field)
+            if field in container and value is not None and (
+                isinstance(value, bool) or not isinstance(value, (int, float))
+            ):
+                raise RuntimeError(
+                    f"Metadatos inválidos para el modelo '{model_id}': "
+                    f"'{container_name}.{field}' debe ser numérico o null."
+                )
+    return {
+        "id": model_id,
+        "name": metadata.get("name", model_id),
+        "metadata_missing": False,
+        "attachment": metadata.get("attachment"),
+        "reasoning": metadata.get("reasoning"),
+        "tool_call": metadata.get("tool_call"),
+        "modalities": modalities,
+        "limit": limit,
+        "cost": cost,
+    }
+
+
+def collect_models(token):
+    live = fetch_json(GO_MODELS_URL, token)
+    if isinstance(live, dict):
+        entries = live.get("data")
+    elif isinstance(live, list):
+        entries = live
+    else:
+        raise RuntimeError(
+            "Respuesta inválida del catálogo de OpenCode Go: se esperaba una lista o un objeto con 'data'."
+        )
+    if not isinstance(entries, list):
+        raise RuntimeError("Respuesta inválida del catálogo de OpenCode Go: 'data' debe ser una lista.")
+    if any(not isinstance(entry, dict) or not isinstance(entry.get("id"), str) for entry in entries):
+        raise RuntimeError(
+            "Respuesta inválida del catálogo de OpenCode Go: cada entrada debe tener un 'id' de texto."
+        )
+    ids = sorted(entry["id"] for entry in entries)
+    public = fetch_json(MODELS_DEV_URL)
+    if not isinstance(public, dict):
+        raise RuntimeError("Respuesta inválida de models.dev: se esperaba un objeto.")
+    provider = public.get("opencode-go", {})
+    if not isinstance(provider, dict):
+        raise RuntimeError("Respuesta inválida de models.dev: 'opencode-go' debe ser un objeto.")
+    metadata = provider.get("models", {})
+    if not isinstance(metadata, dict):
+        raise RuntimeError("Respuesta inválida de models.dev: 'opencode-go.models' debe ser un objeto.")
+    for model_metadata in metadata.values():
+        if not isinstance(model_metadata, dict):
+            raise RuntimeError("Respuesta inválida de models.dev: cada modelo debe tener metadatos de objeto.")
+        for field in ("modalities", "limit", "cost"):
+            if not isinstance(model_metadata.get(field, {}), dict):
+                raise RuntimeError(f"Respuesta inválida de models.dev: '{field}' debe ser un objeto.")
+    return [build_model(model_id, metadata) for model_id in ids]
+
+
+def human_tokens(value):
+    if value is None:
+        return "sin datos"
+    return f"{value:,}".replace(",", ".")
+
+
+def money(value):
+    if value is None:
+        return "sin datos"
+    if value == 0:
+        return "gratis"
+    return f"${value:.6g}"
+
+
+def yes_no(value):
+    if value is None:
+        return "sin datos"
+    return "sí" if value else "no"
+
+
+def list_text(values):
+    return ", ".join(values) if values else "sin datos"
+
+
+def render_text(models):
+    count = len(models)
+    heading = "1 modelo disponible" if count == 1 else f"{count} modelos disponibles"
+    lines = [f"OpenCode Go: {heading}", USAGE_NOTE]
+    for model in models:
+        lines.extend(["", f"{model['name']} ({model['id']})"])
+        if model["metadata_missing"]:
+            lines.append("  Metadatos técnicos: sin datos")
+        lines.append(f"  Seleccionar: /model {model['id']}")
+        limit = model["limit"]
+        lines.append(
+            f"  Contexto: {human_tokens(limit.get('context'))} tokens | "
+            f"Salida: {human_tokens(limit.get('output'))} tokens"
+        )
+        modalities = model["modalities"]
+        lines.append(
+            f"  Entrada: {list_text(modalities.get('input'))} | "
+            f"Salida: {list_text(modalities.get('output'))}"
+        )
+        lines.append(
+            f"  Razonamiento: {yes_no(model['reasoning'])} | "
+            f"Herramientas: {yes_no(model['tool_call'])} | "
+            f"Adjuntos: {yes_no(model['attachment'])}"
+        )
+        cost = model["cost"]
+        lines.append(
+            f"  Costo por 1M tokens — entrada: {money(cost.get('input'))} | "
+            f"salida: {money(cost.get('output'))} | "
+            f"caché lectura: {money(cost.get('cache_read'))} | "
+            f"caché escritura: {money(cost.get('cache_write'))}"
+        )
+        if cost.get("tiers"):
+            lines.append("  Tiene precios adicionales según el tamaño del contexto.")
+    return "\n".join(lines)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Modelos disponibles en OpenCode Go")
+    parser.add_argument("--json", action="store_true", help="Imprime JSON estructurado")
+    args = parser.parse_args()
+    try:
+        models = collect_models(get_token(os.environ))
+        if args.json:
+            json.dump({"count": len(models), "models": models, "usage_limits": USAGE_NOTE}, sys.stdout, ensure_ascii=False, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print(render_text(models))
+    except (RuntimeError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, TypeError, ValueError) as error:
+        raise SystemExit(f"Error: {error}")
+
+
+if __name__ == "__main__":
+    main()
