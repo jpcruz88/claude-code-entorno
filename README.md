@@ -71,15 +71,20 @@ dices que sí.
 | Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
+| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan. Mac y Linux. Opcional: `--sin-opencode`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 | Conectar dos Macs | `conectar.sh` | Asistente para usar desde esta Mac el herdr (y los agentes) de otra, por SSH: eliges la Mac de una lista de las de tu red. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
+| Panel de servicios locales | `local-services-panel/` | Página en `http://localhost:8790` con todo lo que corre en la máquina: contenedores de Docker y procesos locales, con estado en vivo y enlaces para entrar a cada servicio. Está en el repo pero el instalador **no** lo arranca: se enciende a mano. Ver [Panel de servicios locales](#panel-de-servicios-locales). |
 
 ## Qué NO incluye
 
 - Proyectos, memorias de proyecto, historial ni conversaciones.
-- Claves, tokens o contraseñas. La clave de Context7 se guarda **en cada
-  computadora** como variable de entorno (`CONTEXT7_API_KEY`), nunca en el repo.
+- Claves, tokens o contraseñas. Las claves externas —la de Context7
+  (`CONTEXT7_API_KEY`), la de OpenCode (`OPENCODE_API_KEY`) y la de OpenRouter
+  (`OPENROUTER_API_KEY`)— se guardan **en cada computadora** como variables de
+  entorno, nunca en el repo. El verificador de privacidad las rechaza si alguna
+  vez se cuela.
 - Hooks y skills de trabajos privados o personales, plugins que solo uso en la
   Mac principal, permisos de herramientas concretas.
 - Skills que ya llegan solas: las de `superpowers` (vienen con el plugin), las de
@@ -252,7 +257,8 @@ cd claude-code-entorno
    versión fija (`v0.12.0`, no la rama en desarrollo).
 4. Pide la clave de Context7, si falta (en modo no interactivo no la pide: avisa
    y explica cómo ponerla después).
-5. Copia reglas, hook y línea de estado a la carpeta `.claude` de tu usuario. Si ya
+5. Copia reglas, hook, línea de estado y comandos (`claude/commands/`) a la carpeta
+   `.claude` de tu usuario. Si ya
    había un archivo distinto, antes guarda una copia `.bak-<fecha>`.
 6. **Fusiona** `settings.base.json` con tu `settings.json`
    (`herramientas/fusionar_settings.py`): guarda antes una copia
@@ -274,7 +280,12 @@ cd claude-code-entorno
 11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-12. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+12. **OpenCode** (Mac y Linux): copia `opencode/opencode.sh` a
+    `~/.config/claude-code-entorno/` y `opencode/opencode-go-modelos` a
+    `~/.local/bin/`, y agrega al rc la línea que carga el primero. Solo define las
+    aliases `cl-go` y `cl-or` si su variable de entorno existe; no pide ni escribe
+    claves. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+13. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
 herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
@@ -777,6 +788,75 @@ tenía: si después cambias algo, no lo pisa. Lo agrega a los ítems de inicio y
 abre. Haz clic en un número para ver el detalle; en el engrane cambias el estilo o
 activas más módulos (temperatura, red). El `SSD` es el espacio ocupado del disco.
 
+## OpenCode como respaldo
+
+Sucede: se acaban los tokens de Claude, o la cuenta queda temporalmente bloqueada,
+o Anthropic tiene un mal día. Este paso deja Claude Code listo para seguir
+trabajando contra otro proveedor sin cambiar de herramienta ni perder el contexto
+de lo que estabas haciendo.
+
+`opencode/opencode.sh` se carga en cada terminal nueva y define dos aliases:
+
+| Escribe | Qué hace |
+|---|---|
+| `cl-go` | Claude Code contra [OpenCode Go](https://opencode.ai/console), con tus modelos incluidos. |
+| `cl-or` | Claude Code contra OpenRouter, con su catálogo completo. |
+
+`cl-go` necesita `OPENCODE_API_KEY` y `cl-or` necesita `OPENROUTER_API_KEY`. **Las
+claves no están en el repo**: cada alias se define solo si su variable existe en
+esa computadora, así que sin clave no hay alias y nada se rompe. Las pones tú, en
+cada máquina:
+
+```bash
+export OPENCODE_API_KEY="…"    # de https://opencode.ai/console
+export OPENROUTER_API_KEY="…"  # de https://openrouter.ai/keys
+```
+
+Ponlas en un archivo que no esté en el repo (`~/.config/secrets.env`, por ejemplo)
+y cárgalas desde tu `.zshrc`; nunca dentro de este repo.
+
+Dentro de Claude Code, `/go-modelos` enumera los modelos que trae tu plan de Go
+con sus capacidades y costos, para elegir con `/model <modelo>`.
+
+Dos detalles que conviene saber:
+
+- Los alias arrancan Claude con `--dangerously-skip-permissions`. Si prefieres que
+  te pregunte antes de cada acción, quítalo de `opencode/opencode.sh`.
+- El modelo de cada alias lo fija `opencode/opencode.sh` con tres variables
+  `ANTHROPIC_DEFAULT_*_MODEL`; sin ellas, `/model` pide modelos que el endpoint no
+  sirve. Puedes cambiarlas a gusto.
+
+Para no instalarlo: `--sin-opencode`.
+
+## Panel de servicios locales
+
+`local-services-panel/` es una página que muestra todo lo que corre en la máquina
+y te deja entrar a cada servicio: los contenedores de Docker y los procesos
+locales, con estado en vivo cada 10 segundos.
+
+Nace de un problema concreto: con Supabase, contenedores y varios scripts en
+marcha, no había un solo lugar para ver qué está levantado, en qué puerto y si
+responde. Lo descubre solo — no hay lista de servicios, puertos ni URLs escrita en
+el código: si levantas un contenedor nuevo aparece solo, y si lo paras desaparece.
+
+```bash
+node local-services-panel/server.js
+# → Panel de servicios locales → http://localhost:8790
+```
+
+No hace falta `npm install`: usa solo módulos nativos de Node 18 o más reciente.
+Renombrar, fijar y ocultar servicios se guardan en un `state.json` (ignorado por
+git) junto al servidor.
+
+**El instalador no lo arranca ni lo pone al iniciar sesión**: está aquí porque es
+otra herramienta del entorno, y se enciende a mano cuando la necesitas.
+
+Si lo abres desde otro equipo de tu red, ten en cuenta que el servidor escucha en
+`0.0.0.0`: cualquiera que alcance el puerto ve la lista de tus servicios y sus
+puertos. Para usarlo solo en esta máquina, edita `HOST` en
+`local-services-panel/server.js`. Detalles en
+`local-services-panel/README.md`.
+
 ## Mantenerlo al día
 
 En la **Mac principal**, cuando cambie algo de la configuración:
@@ -916,7 +996,8 @@ instalaría.
 │   ├── statusline.sh              línea de estado
 │   ├── hooks/guard-kill.py        hook contra kills masivos
 │   ├── themes/kanagawa.json       tema de Claude Code
-│   └── rules/                     reglas globales
+│   ├── rules/                     reglas globales
+│   └── commands/                  comandos propios (por ejemplo /go-modelos)
 ├── skills/lista.json              skills y su origen
 ├── mcp/                           plantillas de servidores MCP
 ├── git/gitignore_global           gitignore global
@@ -924,6 +1005,8 @@ instalaría.
 ├── ghostty/config                 config de Ghostty (con {{RUTA_HERDR}})
 ├── nvim/                          config de Neovim (LazyVim con el tema Kanagawa)
 ├── terminal/terminal.sh           eza, bat, zoxide, fzf y atuin para zsh y bash
+├── opencode/                      OpenCode como respaldo: aliases cl-go/cl-or y su script
+├── local-services-panel/          página que muestra todo lo que corre en la máquina
 ├── herramientas/                  scripts de apoyo (fusión, exportación, privacidad)
 └── pruebas/                       pruebas automáticas
 ```

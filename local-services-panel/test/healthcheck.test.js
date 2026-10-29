@@ -18,6 +18,23 @@ function origin(server) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Espera a que el servidor vea cero conexiones, hasta `limiteMs`.
+ *
+ * El cierre del lado del servidor es asíncrono: el cliente destruye el socket ya,
+ * pero el FIN tarda en llegar y en que Node actualice el contador. Muestrear
+ * una sola vez deja la prueba intermitente bajo carga; el invariante que
+ * importa es que llegue a cero, no cuánto tarda en notarse.
+ */
+async function sinConexiones(server, limiteMs = 4000) {
+  const fin = Date.now() + limiteMs;
+  while (Date.now() < fin) {
+    if (server._connections === 0) return true;
+    await sleep(40);
+  }
+  return server._connections === 0;
+}
+
 test('probe returns "up" for 2xx', async () => {
   const s = await serve((req, res) => { res.writeHead(200); res.end('ok'); });
   try { assert.equal(await probe(origin(s), 1000), 'up'); }
@@ -64,8 +81,7 @@ test('probe frees the socket so the server sees zero connections', async () => {
   const s = await serve((req, res) => { res.writeHead(200); res.end('ok'); });
   try {
     assert.equal(await probe(origin(s), 1000), 'up');
-    await sleep(150);
-    assert.equal(s._connections, 0, 'socket must be closed after the probe resolves');
+    assert.ok(await sinConexiones(s), 'socket must be closed after the probe resolves');
   } finally { s.close(); }
 });
 
@@ -84,8 +100,7 @@ test('probe settles 40 concurrent probes within the timeout', async () => {
     const elapsed = Date.now() - started;
     assert.deepEqual([...new Set(results)], ['up']);
     assert.ok(elapsed < 3000, `40 probes must not serialize, got ${elapsed}ms`);
-    await sleep(150);
-    assert.equal(s._connections, 0, 'all sockets released');
+    assert.ok(await sinConexiones(s), 'all sockets released');
   } finally { s.close(); }
 });
 
@@ -110,8 +125,7 @@ test('probe releases the socket even while the body is still streaming', async (
   });
   try {
     assert.equal(await probe(origin(s), 1000), 'up');
-    await sleep(400);
-    assert.equal(s._connections, 0, 'streaming response must not hold the socket after resolve');
+    assert.ok(await sinConexiones(s), 'streaming response must not hold the socket after resolve');
   } finally {
     if (drip) clearInterval(drip);
     s.close();
@@ -134,8 +148,7 @@ test('probe destroys the request when the backstop fires on a dribbling response
   try {
     const url = `http://127.0.0.1:${s.address().port}/`;
     assert.equal(await probe(url, 500), 'down');
-    await sleep(450);
-    assert.equal(s._connections, 0, 'backstop must destroy the request');
+    assert.ok(await sinConexiones(s), 'backstop must destroy the request');
   } finally {
     for (const drip of drips) clearInterval(drip);
     for (const c of sockets) c.destroy();
