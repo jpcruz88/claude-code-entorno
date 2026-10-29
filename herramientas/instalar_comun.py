@@ -74,6 +74,7 @@ class Instalador:
         self.sin_plugins_herdr = a.sin_plugins_herdr
         self.con_ghostty = a.ghostty
         self.sin_terminal = a.sin_terminal
+        self.sin_opencode = a.sin_opencode
         self.sin_nvim = a.sin_nvim
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
@@ -158,9 +159,9 @@ class Instalador:
 
     # ------------------------------------------------------------ 1. archivos
     def archivos(self):
-        self.paso("Reglas, hooks, temas y statusline en %s" % self.claude_dir)
+        self.paso("Reglas, hooks, temas, comandos y statusline en %s" % self.claude_dir)
         pares = []
-        for sub in ("rules", "hooks", "themes"):
+        for sub in ("rules", "hooks", "themes", "commands"):
             for f in sorted((REPO / "claude" / sub).iterdir()):
                 if f.is_file() and not f.name.startswith("."):
                     pares.append((f, self.claude_dir / sub / f.name))
@@ -536,7 +537,52 @@ class Instalador:
             self.aviso("Faltan %s: la terminal se salta lo que no esté instalado."
                        % ", ".join(faltan))
 
-    # ------------------------------------------------------------ 9. git
+    # --------------------------------------------------- 10. OpenCode de respaldo
+    def opencode(self):
+        """OpenCode como respaldo: su init de shell y el script de modelos.
+
+        Existe por si se acaban los tokens de Claude: con otra cuenta y otro
+        saldo, los mismos modelos quedan al alcance desde Claude Code. Solo
+        define las aliases si su variable de entorno está, así que no instalar
+        una clave no rompe nada.
+        """
+        if self.plataforma != "unix":
+            return
+        self.paso("OpenCode como respaldo (opencode/, en tu .zshrc o .bashrc)")
+        if self.sin_opencode:
+            self.info("Se omite (--sin-opencode).")
+            return
+        origen = REPO / "opencode" / "opencode.sh"
+        destino = self.home / ".config" / "claude-code-entorno" / "opencode.sh"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), destino,
+                              origen.relative_to(REPO))
+        script = REPO / "opencode" / "opencode-go-modelos"
+        destino_script = self.home / ".local" / "bin" / "opencode-go-modelos"
+        self.instalar_archivo(script.read_bytes().replace(b"\r\n", b"\n"), destino_script,
+                              script.relative_to(REPO), ejecutable=True)
+        shell = Path(os.environ.get("SHELL") or "bash").name
+        rc = self.home / (".zshrc" if shell == "zsh" else ".bashrc")
+        linea = ('[ -f "$HOME/.config/claude-code-entorno/opencode.sh" ] && '
+                 '. "$HOME/.config/claude-code-entorno/opencode.sh"')
+        texto = rc.read_text(encoding="utf-8") if rc.exists() else ""
+        if linea in texto:
+            self.info("al día: %s ya lo carga" % rc)
+        elif self.simular:
+            self.info("[simular] agregaría a %s: %s" % (rc, linea))
+        else:
+            separador = "\n" if texto and not texto.endswith("\n") else ""
+            with rc.open("a", encoding="utf-8") as f:
+                f.write("%s\n# OpenCode como respaldo de Claude Code (ver README)\n%s\n"
+                        % (separador, linea))
+            self.info("agregado a %s" % rc)
+            self.pendientes.append("Abre una terminal nueva para usar cl-go y cl-or.")
+        self.pendientes.append(
+            "cl-go necesita OPENCODE_API_KEY (clave de https://opencode.ai/console) y "
+            "cl-or necesita OPENROUTER_API_KEY; las defines tú en esta computadora, "
+            "nunca en el repo. Sin ellas las aliases no se crean. La clave también la "
+            "usa /go-modelos dentro de Claude Code.")
+
+    # ------------------------------------------------------------ 11. git
     def git(self):
         self.paso("Gitignore global")
         origen = REPO / "git" / "gitignore_global"
@@ -615,6 +661,8 @@ def main(argv=None):
                    help="instala la config de Ghostty (la pide instalar.sh si hay Ghostty)")
     p.add_argument("--sin-terminal", action="store_true",
                    help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
+    p.add_argument("--sin-opencode", action="store_true",
+                   help="no instala opencode/ (las aliases cl-go y cl-or de respaldo)")
     p.add_argument("--sin-nvim", action="store_true",
                    help="no instala la config de Neovim (nvim/)")
     p.add_argument("--git-bash", default=None,
@@ -624,7 +672,8 @@ def main(argv=None):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
     for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
-                 inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.git):
+                 inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.opencode,
+                 inst.git):
         try:
             paso()
         except Exception as e:  # un paso roto no impide los demás

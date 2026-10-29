@@ -23,8 +23,9 @@ INSTALAR_PS1 = RAIZ / "instalar.ps1"
 # Sin herdr: su paso llamaría a brew y a herdr de verdad (se prueba en test_herdr.py).
 # Sin Stats: tocaría tus preferencias reales de macOS (se prueba en InstalarStats).
 # Sin herramientas de terminal: agregarían una línea al .bashrc (se prueba en test_terminal.py).
+# Sin OpenCode: su init de shell también agrega una línea al rc (se prueba en test_opencode.py).
 OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats",
-            "--sin-terminal"]
+            "--sin-terminal", "--sin-opencode"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh
