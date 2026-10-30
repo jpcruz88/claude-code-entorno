@@ -72,6 +72,7 @@ dices que sí.
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
 | OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan. Mac y Linux. Opcional: `--sin-opencode`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
+| Config de OpenCode | *fuera de este repo* | Trae de [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config) la config global de OpenCode en `~/.config/opencode`: el router que elige modelo por complejidad y el script `gomodel`. Va en un repo aparte **a propósito**: si se copiara aquí, esa config tendría dos fuentes de verdad. Mac y Linux. Opcional: `--sin-opencode-config`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 | Conectar dos Macs | `conectar.sh` | Asistente para usar desde esta Mac el herdr (y los agentes) de otra, por SSH: eliges la Mac de una lista de las de tu red. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
@@ -285,7 +286,12 @@ cd claude-code-entorno
     `~/.local/bin/`, y agrega al rc la línea que carga el primero. Solo define las
     aliases `cl-go` y `cl-or` si su variable de entorno existe; no pide ni escribe
     claves. Ver [OpenCode como respaldo](#opencode-como-respaldo).
-13. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+13. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
+    a `~/.config/opencode` — clon, `git pull` si ya estaba, o conversión de una
+    carpeta que ya existiera (sin tocar sus archivos sin seguimiento, como
+    `service.json`) — y enlaza `gomodel` en `~/.local/bin/`. Solo lee y sincroniza:
+    no edita ese repo. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+14. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
 herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
@@ -826,7 +832,46 @@ Dos detalles que conviene saber:
   `ANTHROPIC_DEFAULT_*_MODEL`; sin ellas, `/model` pide modelos que el endpoint no
   sirve. Puedes cambiarlas a gusto.
 
-Para no instalarlo: `--sin-opencode`.
+### La config de OpenCode vive en su propio repo
+
+`~/.config/opencode` recibe su contenido de
+[`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config), que
+trae **el router de modelos por complejidad** (clasifica cada mensaje y cambia el
+modelo antes de arrancar el turno) y el script **`gomodel`**.
+
+Está en un repo aparte a propósito: si se copiara dentro de este repo, esa config
+tendría **dos fuentes de verdad** y habría que actualizarla en los dos sitios. El
+paso del instalador solo clona o hace `git pull`; nunca edita ese repo.
+
+Funciona en los tres casos que se pueden encontrar en una máquina:
+
+| Situación | Qué hace |
+|---|---|
+| No hay `~/.config/opencode` | `git clone` |
+| Ya es un clon | `git pull --ff-only` |
+| Hay archivos pero no es un clon (p. ej. solo `service.json`) | lo convierte en clon con `git init` + `fetch` + `reset --hard` |
+
+En el tercer caso **no toca los archivos sin seguimiento**: git no los modifica, así
+que `service.json` (la contraseña local) y `auth.json` quedan igual, y encima su
+`.gitignore` los excluye del repo. También fija el upstream para que la próxima
+corrida pueda hacer `pull`.
+
+Si ya existe un `opencode.json` sin extensión que no venga de ese repo, **no lo
+borra**: avisa, porque puede mandar sobre el `opencode.jsonc` que sí está gestionado.
+
+### Qué manda cada herramienta
+
+`opencode-config` y este repo se reparten los temas sin pisarse:
+
+| Herramienta | Vive en | Sirve para |
+|---|---|---|
+| `gomodel` | `opencode-config` | ver tu **cuota** (5 h / semana / mes), los **topes** por modelo y **lanzar** OpenCode con un modelo concreto. Desde la terminal. |
+| `/go-modelos` | este repo | ver **qué puede hacer** cada modelo: contexto, modalidades, razonamiento, herramientas y costos. Desde dentro de Claude Code. |
+| Router `auto-model` | `opencode-config` | elegir modelo por complejidad antes de cada turno. |
+| `cl-go` / `cl-or` | este repo | abrir **Claude Code** contra OpenCode Go u OpenRouter. |
+
+Para no instalar ninguna de las dos: `--sin-opencode` (las aliases y `/go-modelos`)
+y `--sin-opencode-config` (el router y `gomodel`).
 
 ## Panel de servicios locales
 

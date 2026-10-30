@@ -60,6 +60,14 @@ def sello():
     return datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
+# Config global de OpenCode (router de modelos y gomodel). Repositorio aparte a
+# propósito: copiarlo aquí crearía dos fuentes de verdad para la misma config.
+# El remoto se puede cambiar por variable de entorno para probar sin red, del mismo
+# modo que ENTORNO_TERMINOS_PRIVADOS cambia el archivo de términos en revisar_privacidad.
+REPO_OPENCODE_CONFIG = os.environ.get(
+    "ENTORNO_OPENCODE_CONFIG_REPO", "https://github.com/jpcruz88/opencode-config.git")
+
+
 class Instalador:
     def __init__(self, a):
         self.plataforma = a.plataforma
@@ -75,6 +83,7 @@ class Instalador:
         self.con_ghostty = a.ghostty
         self.sin_terminal = a.sin_terminal
         self.sin_opencode = a.sin_opencode
+        self.sin_opencode_config = a.sin_opencode_config
         self.sin_nvim = a.sin_nvim
         self.home = Path.home()
         self.claude_dir = self.home / ".claude"
@@ -582,7 +591,100 @@ class Instalador:
             "nunca en el repo. Sin ellas las aliases no se crean. La clave también la "
             "usa /go-modelos dentro de Claude Code.")
 
-    # ------------------------------------------------------------ 11. git
+    # ---------------------------------------- 11. config global de OpenCode
+    def opencode_config(self):
+        """Trae opencode-config a ~/.config/opencode: el router de modelos y gomodel.
+
+        Vive en un repo aparte a propósito: si se copiara dentro de este repo, la
+        config de OpenCode tendría dos fuentes de verdad y habría que mantenerla en
+        los dos sitios. Aquí solo se clona o se hace pull, nunca se edita.
+
+        Su .gitignore cubre service.json (la contraseña local) y los tokens, así que
+        un `git reset --hard` sobre una carpeta ya existente no los toca: git nunca
+        toca archivos sin seguimiento.
+        """
+        self.paso("Config global de OpenCode (opencode-config en ~/.config/opencode)")
+        if self.sin_opencode_config:
+            self.info("Se omite (--sin-opencode-config).")
+            return
+        git = self.buscar("git")
+        if not git:
+            self.aviso("Falta git: no se trae opencode-config (ver README, «Instalación»).")
+            return
+        destino = self.home / ".config" / "opencode"
+        gestionado = (destino / ".git").is_dir()
+        otros = [f.name for f in destino.iterdir()] if destino.is_dir() else []
+
+        # Un opencode.json sin extensión que no venga del repo convive con el
+        # opencode.jsonc y puede mandar sobre él. Se avisa; no se borra nada.
+        if (destino / "opencode.json").exists():
+            self.aviso("Hay ~/.config/opencode/opencode.json, que opencode-config no "
+                       "gestiona: puede mandar sobre opencode.jsonc. No lo toco.")
+
+        if gestionado:
+            if self.simular:
+                self.info("[simular] git pull --ff-only en %s" % destino)
+            else:
+                codigo, salida = self.correr([git, "-C", str(destino), "pull", "--ff-only"])
+                if codigo != 0:
+                    self.fallo("opencode-config: no pude hacer pull: %s" % salida.strip()[:200])
+                    return
+                self.info("al día: %s" % destino)
+        elif otros:
+            if self.simular:
+                self.info("[simular] convertiría %s en clon de opencode-config (sus archivos "
+                          "sin seguimiento, como service.json, quedan)" % destino)
+            else:
+                destino.mkdir(parents=True, exist_ok=True)
+                pasos = [
+                    [git, "-C", str(destino), "init", "-q", "-b", "main"],
+                    [git, "-C", str(destino), "remote", "add", "origin", REPO_OPENCODE_CONFIG],
+                    [git, "-C", str(destino), "fetch", "-q", "origin", "main"],
+                    [git, "-C", str(destino), "reset", "-q", "--hard", "FETCH_HEAD"],
+                    # Sin upstream, el `pull --ff-only` de la próxima corrida fallaría.
+                    [git, "-C", str(destino), "branch", "-q",
+                     "--set-upstream-to=origin/main", "main"],
+                ]
+                for paso in pasos:
+                    codigo, salida = self.correr(paso)
+                    if codigo != 0:
+                        self.fallo("opencode-config: %s → %s"
+                                   % (paso[-1], salida.strip()[:200]))
+                        return
+                self.info("convertido en clon: %s" % destino)
+        else:
+            if self.simular:
+                self.info("[simular] clonaría %s en %s" % (REPO_OPENCODE_CONFIG, destino))
+            else:
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                codigo, salida = self.correr([git, "clone", REPO_OPENCODE_CONFIG, str(destino)])
+                if codigo != 0:
+                    self.fallo("opencode-config: no pude clonar: %s" % salida.strip()[:200])
+                    return
+                self.info("clonado: %s" % destino)
+
+        # gomodel en el PATH, venga de donde venga la carpeta.
+        origen_gomodel = destino / "bin" / "gomodel"
+        enlace = self.home / ".local" / "bin" / "gomodel"
+        if self.simular:
+            self.info("[simular] enlazaría gomodel -> %s" % origen_gomodel)
+        elif not origen_gomodel.is_file():
+            self.aviso("Falta %s: no hay gomodel en el PATH." % origen_gomodel)
+        else:
+            enlace.parent.mkdir(parents=True, exist_ok=True)
+            if enlace.is_symlink() or enlace.exists():
+                enlace.unlink()
+            enlace.symlink_to(origen_gomodel)
+            self.info("enlazado: gomodel -> %s" % origen_gomodel)
+
+        if not self.simular and not (destino / "opencode.jsonc").exists():
+            self.fallo("opencode-config: quedó sin opencode.jsonc en %s; revísalo." % destino)
+        self.pendientes.append(
+            "opencode-config trae el router de modelos y `gomodel` en la terminal; abre "
+            "una terminal nueva o reinicia OpenCode para que carguen. Para actualizar: "
+            "`cd ~/.config/opencode && git pull`.")
+
+    # ------------------------------------------------------------ 12. git
     def git(self):
         self.paso("Gitignore global")
         origen = REPO / "git" / "gitignore_global"
@@ -663,6 +765,8 @@ def main(argv=None):
                    help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
     p.add_argument("--sin-opencode", action="store_true",
                    help="no instala opencode/ (las aliases cl-go y cl-or de respaldo)")
+    p.add_argument("--sin-opencode-config", action="store_true",
+                   help="no trae opencode-config a ~/.config/opencode (router de modelos y gomodel)")
     p.add_argument("--sin-nvim", action="store_true",
                    help="no instala la config de Neovim (nvim/)")
     p.add_argument("--git-bash", default=None,
@@ -673,7 +777,7 @@ def main(argv=None):
     inst = Instalador(a)
     for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
                  inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.opencode,
-                 inst.git):
+                 inst.opencode_config, inst.git):
         try:
             paso()
         except Exception as e:  # un paso roto no impide los demás

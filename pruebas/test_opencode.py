@@ -53,9 +53,11 @@ class PasoOpenCode(unittest.TestCase):
     def correr(self, *opciones):
         # --sin-terminal aísla este paso: terminal/terminal.sh también agrega una
         # línea al rc (se prueba en test_terminal.py).
+        # --sin-opencode-config evita un git clone real (se prueba en
+        # test_opencode_config.py). --sin-opencode NO va aquí: es el paso que se prueba.
         args = [sys.executable, str(INSTALAR_COMUN), "--plataforma", "unix",
                 "--sin-codebase-memory", "--sin-skills", "--sin-herdr",
-                "--sin-terminal"] + list(opciones)
+                "--sin-terminal", "--sin-opencode-config"] + list(opciones)
         r = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, env=self.env, timeout=120)
         salida = r.stdout.decode("utf-8", "replace")

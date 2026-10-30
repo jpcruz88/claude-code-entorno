@@ -24,8 +24,9 @@ INSTALAR_PS1 = RAIZ / "instalar.ps1"
 # Sin Stats: tocaría tus preferencias reales de macOS (se prueba en InstalarStats).
 # Sin herramientas de terminal: agregarían una línea al .bashrc (se prueba en test_terminal.py).
 # Sin OpenCode: su init de shell también agrega una línea al rc (se prueba en test_opencode.py).
+# Sin config de OpenCode: evita un git clone real (se prueba en test_opencode_config.py).
 OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats",
-            "--sin-terminal", "--sin-opencode"]
+            "--sin-terminal", "--sin-opencode", "--sin-opencode-config"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh

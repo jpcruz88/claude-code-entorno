@@ -20,6 +20,8 @@
 #                            para la terminal
 #   --sin-opencode           no instala OpenCode como respaldo: ni las aliases cl-go y
 #                            cl-or ni el script que usa /go-modelos
+#   --sin-opencode-config    no trae opencode-config a ~/.config/opencode (el router de
+#                            modelos por complejidad y el script gomodel)
 #   --sin-nvim               no instala Neovim (LazyVim con el tema Kanagawa) ni su config
 #   --sin-stats              (macOS) no instala Stats, el monitor de CPU, GPU, RAM y
 #                            disco en la barra de menú
@@ -48,6 +50,7 @@ SIN_PLUGINS_HERDR=0
 SIN_STATS=0
 SIN_TERMINAL=0
 SIN_OPENCODE=0
+SIN_OPENCODE_CONFIG=0
 SIN_NVIM=0
 SERVIDOR=0
 NO_INTERACTIVO=0
@@ -69,6 +72,7 @@ for arg in "$@"; do
     --sin-stats) SIN_STATS=1 ;;
     --sin-terminal) SIN_TERMINAL=1 ;;
     --sin-opencode) SIN_OPENCODE=1 ;;
+    --sin-opencode-config) SIN_OPENCODE_CONFIG=1 ;;
     --sin-nvim) SIN_NVIM=1 ;;
     --servidor) SERVIDOR=1 ;;
     -h|--ayuda|--help) uso; exit 0 ;;
@@ -500,5 +504,6 @@ args=(--plataforma unix --python-hooks python3)
 [ "$CON_GHOSTTY" = 1 ] && args+=(--ghostty)
 [ "$SIN_TERMINAL" = 1 ] && args+=(--sin-terminal)
 [ "$SIN_OPENCODE" = 1 ] && args+=(--sin-opencode)
+[ "$SIN_OPENCODE_CONFIG" = 1 ] && args+=(--sin-opencode-config)
 [ "$SIN_NVIM" = 1 ] && args+=(--sin-nvim)
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"

@@ -39,6 +39,11 @@ ahora.
    - ¿Instalo OpenCode como respaldo (`cl-go` y `cl-or`, por si se acaban los tokens
      de Claude)? No cambia nada si no lo usa: las aliases solo se crean si define su
      variable de entorno. Si no: `--sin-opencode`.
+   - ¿Traigo la config de OpenCode de `jpcruz88/opencode-config` a
+     `~/.config/opencode` (router de modelos por complejidad y `gomodel`)? Solo
+     clona o hace `git pull` en un repo aparte de este, sin editar nada y sin
+     credenciales; si la carpeta ya existiera, conserva sus archivos sin
+     seguimiento como `service.json`. Si no: `--sin-opencode-config`.
    - Solo en Mac: ¿pongo Stats (CPU, GPU, RAM y disco en la barra de menú)? Si no:
      `--sin-stats`.
    - Solo en Mac: ¿esta Mac se queda siempre encendida (una Mac mini, no un
