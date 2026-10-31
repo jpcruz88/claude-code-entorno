@@ -970,10 +970,14 @@ En la **Mac principal**, cuando cambie algo de la configuración:
 
 ```bash
 cd claude-code-entorno
-./exportar.sh          # regenera el repo y revisa privacidad
-git diff               # revisar qué cambió
+./exportar.sh            # muestra qué cambiaría; no escribe nada en el repo
+./exportar.sh --aplicar  # escribe los cambios y corre pruebas, privacidad y gitleaks
+git diff                 # revisar qué cambió
 git add -A && git commit -m "Actualiza la configuración" && git push
 ```
+
+Sin `--aplicar`, la exportación corre en una copia temporal y solo te enseña las
+diferencias. Así no se pisa un cambio hecho a mano sin revisarlo.
 
 En las **otras computadoras**:
 
@@ -987,6 +991,9 @@ powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # Windows
 AGENTS.md de ~/claude-code-entorno»).
 
 ### Qué hace `exportar.sh`
+
+Sin `--aplicar` hace solo los pasos 1 y 2 en una copia y muestra las diferencias.
+Con `--aplicar` hace todo lo siguiente sobre el repo real.
 
 1. Lee (sin modificar nada) `~/.claude/settings.json`, las reglas, la lista de
    skills usadas (solo la clave `skillUsage` de `~/.claude.json`) y
@@ -1062,12 +1069,32 @@ proyecto. Para cuidarlo:
   (contenido, nombres de archivo, historial, mensajes, autor y committer).
 - Las claves van como variables de entorno en cada computadora
   (`${CONTEXT7_API_KEY}` en la plantilla).
+- La revisión de autor y committer acepta el correo acordado aunque el nombre de
+  usuario de git sea otro (commits viejos hechos desde otra computadora).
+- Los hooks de `.githooks/` revisan privacidad y gitleaks antes de cada commit y
+  push. Actívalos una vez por clon:
 
-## Pruebas
+  ```bash
+  git config core.hooksPath .githooks
+  ```
+
+- Ver también `SECURITY.md` (cómo reportar una vulnerabilidad).
+
+## Pruebas y CI
 
 ```bash
 python3 -m unittest discover -s pruebas -v
 ```
+
+En cada push a `main` y en cada pull request, GitHub Actions (`.github/workflows/ci.yml`) corre:
+
+- **Linux:** las pruebas, la revisión de datos privados, gitleaks sobre el historial
+  y el árbol de trabajo, y `claude plugin validate` del marketplace y de cada mod.
+- **Windows:** PSScriptAnalyzer sobre `instalar.ps1` y las pruebas que aplican a
+  Windows.
+
+Guía de uso del día a día: [`docs/GUIA-DE-USO.md`](docs/GUIA-DE-USO.md). Cómo
+contribuir: [`CONTRIBUTING.md`](CONTRIBUTING.md). Cambios: [`CHANGELOG.md`](CHANGELOG.md).
 
 Prueban el hook (casos permitidos y bloqueados en Bash y PowerShell), la línea de
 estado (con un JSON como el que manda Claude Code), la fusión de settings, la
@@ -1094,7 +1121,12 @@ instalaría.
 ```
 ├── AGENTS.md / CLAUDE.md          instrucciones para el agente que instala
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
-├── exportar.sh                    regenera el repo desde la Mac principal
+├── exportar.sh                    muestra o aplica la exportación desde la Mac principal (--aplicar)
+├── .githooks/                     hooks de git: privacidad y gitleaks antes de commit y push
+├── .github/workflows/ci.yml       CI: pruebas, privacidad, gitleaks y PSScriptAnalyzer
+├── docs/GUIA-DE-USO.md            cómo usar el entorno día a día
+├── SECURITY.md / CONTRIBUTING.md  seguridad y cómo contribuir
+├── CHANGELOG.md                   cambios del repo
 ├── conectar.sh                    asistente para controlar el herdr de otra Mac (SSH)
 ├── universal-control.sh           revisa si dos Mac pueden usar Universal Control y avisa si falla
 ├── plugins.txt                    plugins a instalar

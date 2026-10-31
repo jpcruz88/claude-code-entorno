@@ -3,17 +3,45 @@
 # nada privado. Solo LEE la configuración real (~/.claude, la clave skillUsage de
 # ~/.claude.json y ~/.agents/.skill-lock.json); escribe solo dentro del repo.
 #
-#   ./exportar.sh
+#   ./exportar.sh            muestra qué cambiaría en el repo (no escribe nada)
+#   ./exportar.sh --aplicar  escribe los cambios en el repo y corre las revisiones
 #
-# Al final corre gitleaks y una búsqueda propia de datos privados. Si alguna
-# encuentra algo, termina con error: revisa, corrige y vuelve a correrlo antes de
-# hacer commit. Después: git add -A && git commit && git push.
+# Por defecto trabaja en una copia del repo y te enseña las diferencias. Con
+# --aplicar escribe en el repo, corre las pruebas de cada mod, la revisión de
+# datos privados y gitleaks. Si algo falla, termina con error: corrige y vuelve a
+# correrlo antes de hacer commit. Después: git add -A && git commit && git push.
 set -uo pipefail
+# Sin __pycache__: las pruebas no deben dejar archivos que gitleaks revise después.
+export PYTHONDONTWRITEBYTECODE=1
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO" || exit 1
 
 paso() { printf '\n==> %s\n' "$*"; }
+
+APLICAR=0
+if [ "${1:-}" = "--aplicar" ]; then
+  APLICAR=1
+elif [ -n "${1:-}" ]; then
+  echo "Uso: ./exportar.sh [--aplicar]"; exit 2
+fi
+
+if [ "$APLICAR" = 0 ]; then
+  # Modo seguro: la exportación corre en una copia y solo se muestran las diferencias.
+  COPIA="$(mktemp -d)"
+  trap 'rm -rf "$COPIA"' EXIT
+  # Con .git: la copia necesita la identidad y el historial para las revisiones.
+  rsync -a --exclude='._*' --exclude='__pycache__' "$REPO/" "$COPIA/"
+  if ! bash "$COPIA/exportar.sh" --aplicar >"$COPIA/.salida" 2>&1; then
+    # Revisiones fallidas en la copia: se muestran igual para corregirlas.
+    tail -n 40 "$COPIA/.salida"
+  fi
+  paso "Diferencias que dejaría la exportación (no se escribió nada en el repo)"
+  diff -rq --exclude=.git --exclude=.salida --exclude='._*' --exclude='__pycache__' "$REPO" "$COPIA" || true
+  echo
+  echo "Para aplicarlo: ./exportar.sh --aplicar"
+  exit 0
+fi
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "AVISO: exportar.sh está pensado para la Mac donde vive la configuración original."

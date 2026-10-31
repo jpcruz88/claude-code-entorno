@@ -129,5 +129,30 @@ class Historial(unittest.TestCase):
             self.assertIn("nombre de archivo: término privado", tipos_)
 
 
+    def test_mismo_correo_con_otro_nombre_se_acepta(self):
+        # Commits viejos del mismo correo acordado con otro nombre de usuario de git.
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            self.git(repo, "init", "-q", "-b", "main")
+            acordado = "acordada" + "@ejemplo.invalid"
+            self.git(repo, "config", "user.name", "Persona Acordada")
+            self.git(repo, "config", "user.email", acordado)
+            (repo / "a.txt").write_text("hola\n")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-q", "-m", "uno", GIT_AUTHOR_NAME="usuario",
+                     GIT_AUTHOR_EMAIL=acordado, GIT_COMMITTER_NAME="usuario",
+                     GIT_COMMITTER_EMAIL=acordado)
+            self.assertEqual(rp.revisar(repo, [], historial=True), [])
+            # Otro correo sí sigue siendo hallazgo.
+            (repo / "b.txt").write_text("x\n")
+            self.git(repo, "add", "b.txt")
+            ajeno = "otra" + "@ejemplo.invalid"
+            self.git(repo, "commit", "-q", "-m", "dos", GIT_AUTHOR_NAME="Otra",
+                     GIT_AUTHOR_EMAIL=ajeno, GIT_COMMITTER_NAME="Otra",
+                     GIT_COMMITTER_EMAIL=ajeno)
+            tipos_ = {h[2] for h in rp.revisar(repo, [], historial=True)}
+            self.assertIn("autor distinto del acordado", tipos_)
+
+
 if __name__ == "__main__":
     unittest.main()

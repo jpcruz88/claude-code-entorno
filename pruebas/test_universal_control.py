@@ -1151,6 +1151,7 @@ class UniversalControlSh(unittest.TestCase):
         self.assertEqual(codigo, 0, salida)
         self.assertEqual(self.cargado()["Label"], ETIQUETA)
 
+    @unittest.skipUnless(shutil.which("plutil"), "plutil es de macOS")
     def test_instalar_con_simbolos_xml_en_la_ruta(self):
         self.conf()
         carpeta = self.tmp / "a&b<c>d\"e'f"

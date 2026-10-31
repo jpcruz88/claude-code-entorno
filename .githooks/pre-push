@@ -1,0 +1,19 @@
+#!/bin/sh
+# Antes de cada push: revisa también el historial de commits que se va a publicar.
+# Activar una vez por clon: git config core.hooksPath .githooks
+set -u
+REPO="$(git rev-parse --show-toplevel)" || exit 1
+
+python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" --historial || {
+  echo "pre-push: la revisión de privacidad del historial encontró algo. No se publica."
+  exit 1
+}
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: falta gitleaks (brew install gitleaks). No se publica sin revisarlo."
+  exit 1
+fi
+gitleaks detect --source "$REPO" --log-opts="--all" --no-banner || {
+  echo "pre-push: gitleaks encontró un secreto en el historial. No se publica."
+  exit 1
+}
