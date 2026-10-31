@@ -377,8 +377,9 @@ Tu memoria se guarda en un repo **privado** de tu cuenta de GitHub
 - **Para crearla a mano:** `python3 ~/.claude/hooks/memoria-maestra.py configurar`
   (muestra el plan) y, si te gusta, con `--aplicar`. Pide `gh auth login` la primera vez.
 
-La carpeta de memoria del proyecto queda como un enlace a `~/memoria-maestra/memoria`,
-un clon del repo privado. Si ya tenías memoria en la computadora, se respalda en una
+La memoria de **cada proyecto** queda como un enlace a `~/memoria-maestra/memoria/<proyecto>`,
+un clon del repo privado. El nombre del proyecto es la última carpeta de su ruta, en minúsculas
+(`Mi Proyecto` → `mi-proyecto`). Al abrir un proyecto por primera vez, el hook lo enlaza solo. Si ya tenías memoria en la computadora, se respalda en una
 carpeta `memory.bak-<fecha>` antes de enlazar, y lo que no esté en el repo se copia.
 
 Nunca pongas en el repo público el contenido de la memoria: solo el hook y la regla.

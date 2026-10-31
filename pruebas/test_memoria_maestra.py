@@ -46,14 +46,14 @@ class Configurar(ConFondo):
     def test_crea_clon_mueve_la_memoria_y_la_enlaza(self):
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
         self.assertTrue(self.memoria.is_symlink())
-        self.assertEqual(self.memoria.resolve(), (self.clon / "memoria").resolve())
-        self.assertEqual((self.clon / "memoria" / "x.md").read_text(encoding="utf-8").splitlines()[-1], "Dato")
+        self.assertEqual(self.memoria.resolve(), (self.clon / "memoria" / "principal").resolve())
+        self.assertEqual((self.clon / "memoria" / "principal" / "x.md").read_text(encoding="utf-8").splitlines()[-1], "Dato")
 
     def test_sube_al_remoto_privado(self):
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
         ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
                             capture_output=True, text=True).stdout
-        self.assertIn("memoria/MEMORY.md", ls)
+        self.assertIn("memoria/principal/MEMORY.md", ls)
 
     def test_guarda_la_configuracion(self):
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
@@ -64,7 +64,7 @@ class Configurar(ConFondo):
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
         self.assertTrue(self.memoria.is_symlink())
-        self.assertTrue((self.clon / "memoria" / "MEMORY.md").is_file())
+        self.assertTrue((self.clon / "memoria" / "principal" / "MEMORY.md").is_file())
 
     def test_otra_maquina_mezcla_sin_pisar_lo_del_remoto(self):
         # Primera máquina sube su memoria.
@@ -77,8 +77,8 @@ class Configurar(ConFondo):
         clon2 = self.tmp / "clon2"
         cfg2 = self.tmp / "config2.json"
         mm.configurar(otra, clon2, str(self.remoto), cfg2)
-        self.assertEqual((clon2 / "memoria" / "x.md").read_text(encoding="utf-8").splitlines()[-1], "Dato")
-        self.assertTrue((clon2 / "memoria" / "nuevo.md").is_file())
+        self.assertEqual((clon2 / "memoria" / "principal" / "x.md").read_text(encoding="utf-8").splitlines()[-1], "Dato")
+        self.assertTrue((clon2 / "memoria" / "principal" / "nuevo.md").is_file())
 
 
 class Sincronizar(ConFondo):
@@ -95,7 +95,7 @@ class Sincronizar(ConFondo):
         self.assertEqual(git(self.clon, "status", "--porcelain").stdout.strip(), "")
         ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
                             capture_output=True, text=True).stdout
-        self.assertIn("memoria/nuevo.md", ls)
+        self.assertIn("memoria/principal/nuevo.md", ls)
 
 
 class Hooks(ConFondo):
@@ -126,11 +126,54 @@ class Hooks(ConFondo):
         self.assertEqual(git(self.clon, "status", "--porcelain").stdout.strip(), "")
 
 
+class OtrosProyectos(ConFondo):
+    def setUp(self):
+        super().setUp()
+        self.claude = self.tmp / "claude-config"
+        self.env_extra = {"CLAUDE_CONFIG_DIR": str(self.claude)}
+
+    def correr_inicio(self, cwd):
+        entorno = dict(os.environ, MEMORIA_MAESTRA_CONFIG=str(self.config), **self.env_extra)
+        r = subprocess.run([sys.executable, str(HOOK), "inicio"],
+                           input=json.dumps({"cwd": str(cwd)}).encode(), capture_output=True,
+                           timeout=60, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_slug_legible_del_proyecto(self):
+        self.assertEqual(mm.slug_proyecto("/tmp/Mi Proyecto Nuevo"), "mi-proyecto-nuevo")
+
+    def test_abrir_otro_proyecto_enlaza_y_sube_su_memoria(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        otro = self.tmp / "Proyecto Ajeno"
+        otro.mkdir()
+        carpeta = mm.carpeta_memoria(str(otro), self.claude)
+        carpeta.mkdir(parents=True)
+        (carpeta / "dato.md").write_text("de otro proyecto\n", encoding="utf-8")
+        self.correr_inicio(otro)
+        mm.sincronizar(self.clon)  # lo que hace el hook al terminar la sesión
+        slug = mm.slug_proyecto(str(otro))
+        self.assertTrue(carpeta.is_symlink())
+        self.assertEqual((self.clon / "memoria" / slug / "dato.md").read_text(encoding="utf-8"),
+                         "de otro proyecto\n")
+        ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
+                            capture_output=True, text=True).stdout
+        self.assertIn("memoria/" + slug + "/dato.md", ls)
+
+    def test_abrir_proyecto_sin_memoria_crea_su_carpeta(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        nuevo = self.tmp / "Nuevo"
+        nuevo.mkdir()
+        self.correr_inicio(nuevo)
+        carpeta = mm.carpeta_memoria(str(nuevo), self.claude)
+        self.assertTrue(carpeta.is_symlink())
+        self.assertTrue((self.clon / "memoria" / mm.slug_proyecto(str(nuevo))).is_dir())
+
+
 class Carpeta(unittest.TestCase):
     def test_carpeta_de_memoria_del_proyecto(self):
         # Partido: la prueba no debe llevar la ruta real del disco.
         disco = "KING" + "STON"
-        ruta = mm.carpeta_memoria("/Volumes/" + disco + "/Proyectos")
+        ruta = mm.carpeta_memoria("/Volumes/" + disco + "/Proyectos", Path("/tmp/cfg"))
         self.assertEqual(ruta.name, "memory")
         self.assertEqual(ruta.parent.name, "-Volumes-" + disco + "-Proyectos")
 
