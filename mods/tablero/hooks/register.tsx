@@ -74,11 +74,10 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { bandaElemento } from './banda'
-import { bandaFilas, footerTexto } from './banda-modelo'
-import { filasMascota } from './mascota'
+import { PASO_MS, filasMascota } from './mascota'
+import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
-import { lineasDeEdicion, resumenLineas } from './resumen-modelo'
+import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
 
 const PANE = 'tablero'
@@ -186,21 +185,9 @@ async function say($: EngineInterface, who: string, text: string, kind: LogLine[
   await update($, log, list => [...normalizeLog(list), line].slice(-60))
 }
 
-async function refreshStatus($: EngineInterface, cfg: Config) {
-  if (!cfg.statusLine) return $.ui.status(undefined)
-  const [u, g, cards, ahora] = await Promise.all([getUsage($), getGate($), getCards($), $.clock.now()])
-  // Solo los campos con algo que decir; sin ninguno, sin entrada en el footer.
-  $.ui.status(
-    footerTexto({
-      costoUsd: u.costUsd,
-      contextoPct: contextFill(u).pct,
-      agentesActivos: cards.filter(c => c.status === 'running').length,
-      agentesTotal: cards.length,
-      permisosPendientes: g.recent.filter(c => c.verdict === 'ask').length,
-      limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct, resetsAt: l.resetsAt ?? null })),
-      ahora,
-    }),
-  )
+// El footer nativo ya no lleva nada del mod: sus datos viven en el panel SESIÓN, a la derecha.
+async function refreshStatus($: EngineInterface) {
+  $.ui.status(undefined)
 }
 
 async function whoIs($: EngineInterface, agentId: string | undefined) {
@@ -216,7 +203,7 @@ async function consultStarted($: EngineInterface, cfg: Config, id: string, via: 
   await update($, architect, a => startConsult(normalize(DEFAULT_ARCHITECT, a), { id, at, moment, via }))
   if (moment === 'before done') await update($, turn, x => ({ ...normalize(DEFAULT_TURN, x), isReviewing: true }))
   await say($, cfg.architectLabel.toLowerCase(), cfg.moments ? `${momentLabel(moment)} · ${via}` : `consultado · ${via}`, 'consult')
-  await refreshStatus($, cfg)
+  await refreshStatus($)
 }
 
 async function consultEnded($: EngineInterface, cfg: Config, advice: string | null, id?: string) {
@@ -226,7 +213,7 @@ async function consultEnded($: EngineInterface, cfg: Config, advice: string | nu
   await update($, architect, a => endConsult(normalize(DEFAULT_ARCHITECT, a), at, text, id))
   await update($, turn, t => ({ ...normalize(DEFAULT_TURN, t), isReviewing: false }))
   await say($, cfg.architectLabel.toLowerCase(), text ? `consejo: ${shorten(text, 60)}` : 'consejo recibido', 'consult')
-  await refreshStatus($, cfg)
+  await refreshStatus($)
 }
 
 async function noteAdvice($: EngineInterface, cfg: Config, advice: string) {
@@ -332,7 +319,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.agentesActivos, e.permisosPendientes, e.costoUsd])
+  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.contextoPct === null ? 0 : Math.floor(e.ahora / PASO_MS), e.agentesActivos, e.permisosPendientes, e.costoUsd])
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
@@ -387,11 +374,11 @@ export const register: Register = (on, options) => {
     await refrescarRama($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
     if (cfg.banda) iniciarReloj($, cfg)
-    await refreshStatus($, cfg)
+    await refreshStatus($)
     const done = await next(e)
     if (resumedWindow > 0) {
       await readCompactWindow($, resumedWindow)
-      await refreshStatus($, cfg)
+      await refreshStatus($)
     }
     return done
   })
@@ -400,7 +387,7 @@ export const register: Register = (on, options) => {
     detenerReloj()
     if (e.reason === 'clear') {
       await resetAll($)
-      await refreshStatus($, cfg)
+      await refreshStatus($)
     }
     return next(e)
   })
@@ -413,7 +400,7 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'reset' || verb === 'reiniciar') {
       await resetAll($)
-      await refreshStatus($, cfg)
+      await refreshStatus($)
       return { text: 'Tablero reiniciado.' }
     }
     if (verb === 'layout') {
@@ -523,7 +510,7 @@ export const register: Register = (on, options) => {
       )
       if (isResumed) {
         await say($, await whoIs($, id), 'reanudado', 'info', id)
-        await refreshStatus($, cfg)
+        await refreshStatus($)
       }
     }
     const result = yield* next(e)
@@ -555,11 +542,11 @@ export const register: Register = (on, options) => {
         limits: e.rateLimits.map(limitOf),
       }
     })
-    if (e.changed.includes('context')) await refreshStatus($, cfg)
+    if (e.changed.includes('context')) await refreshStatus($)
     const done = await next(e)
     if (isStale) {
       await readCompactWindow($, e.context.window)
-      await refreshStatus($, cfg)
+      await refreshStatus($)
     }
     return done
   })
@@ -593,7 +580,7 @@ export const register: Register = (on, options) => {
       // The status line updates when the call settles; only a refusal ends here.
       if (verdict.decision === 'deny') {
         await say($, 'gate', `denegado por regla · ${check.detail}`, 'error')
-        await refreshStatus($, cfg)
+        await refreshStatus($)
       }
     }
     return verdict
@@ -619,7 +606,7 @@ export const register: Register = (on, options) => {
     }
     if (didRun) await cambiarSesion($, s => notarLlamada(s, e.tool, e, ran.isError === true))
     if (e.tool === 'Agent') {
-      if (isSettled) await refreshStatus($, cfg)
+      if (isSettled) await refreshStatus($)
       return ran
     }
     const hasFailed = didRun && ran.isError === true
@@ -650,7 +637,7 @@ export const register: Register = (on, options) => {
     if (ran.deny !== undefined) await say($, await whoIs($, e.agentId), `${text}  denegado`, 'error', e.agentId ?? null)
     else if (hasFailed) await say($, await whoIs($, e.agentId), `${text}  ✗`, 'error', e.agentId ?? null)
     else if (isEdit) await say($, await whoIs($, e.agentId), text, 'info', e.agentId ?? null)
-    if (isSettled || !didRun) await refreshStatus($, cfg)
+    if (isSettled || !didRun) await refreshStatus($)
     return ran
   })
 
@@ -714,7 +701,7 @@ export const register: Register = (on, options) => {
     })
     await update($, loops, l => listOf<Loop>(l).filter(x => x.id !== id))
     if (isNew || isResumed) await say($, shorten(cardTitle(card), 12), isNew ? `iniciado · ${card.type}` : 'reanudado', 'info', id)
-    await refreshStatus($, cfg)
+    await refreshStatus($)
     return started
   })
 
@@ -732,7 +719,7 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
-      await refreshStatus($, cfg)
+      await refreshStatus($)
       return done
     }
     if ((await getArchitect($)).ids.includes(id)) {
@@ -753,15 +740,8 @@ export const register: Register = (on, options) => {
     } else {
       await update($, loops, l => listOf<Loop>(l).map(x => (x.id === id ? { ...x, isDone: true, lastAt: now } : x)))
     }
-    await refreshStatus($, cfg)
+    await refreshStatus($)
     return done
-  })
-
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (!cfg.banda || e.props.hasSurvey) return next(e)
-    const entrada = suavizar(cfg, await entradaDe($, e.props.bodyColumns))
-    const mascota = filasMascota({ contextoPct: entrada.contextoPct, ahora: entrada.ahora, columnas: entrada.columnas })
-    return bandaElemento([...bandaFilas(entrada), ...mascota], C, $.ui.resolve(e))
   })
 
   // ---------------------------------------------------------------- drawing
@@ -813,6 +793,8 @@ export const register: Register = (on, options) => {
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
+    // La mascota vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
+    const mascotaVisible = contextFill(u).pct !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
       architect: !showArchitect,
@@ -820,7 +802,7 @@ export const register: Register = (on, options) => {
       agents: cards.length === 0,
       loops: lp.length === 0,
       receipt: !m.isRunning && !r,
-      sesion: sesionRows.length === 0,
+      sesion: sesionRows.length === 0 && !mascotaVisible,
       log: false,
     }
     const panels = cfg.panels.filter(p => !isEmpty[p])
@@ -1307,6 +1289,28 @@ export const register: Register = (on, options) => {
 
     // ---- sesión: lo que la sesión ha hecho (herramientas, archivos, tareas, MCP, skills, hooks)
     // Un panel ancho pone la etiqueta en su columna; uno angosto la deja en la misma línea, que se parte.
+    // La mascota: sus dos filas dentro del panel, con la vida que le queda de contexto.
+    // Una fila por línea, con cada trozo en su Text y los espacios de los bordes en cajas: el gap va en la Box.
+    const mascotaSesion = (w: number) => {
+      const filas = filasMascota({ contextoPct: ctxFill.pct, ahora: now, columnas: w - 4 })
+      return filas.map((fila, i) => (
+        <Box key={`m${i}`} flexDirection="row">
+          {fila.tramos.flatMap((tr, j) => {
+            const core = tr.texto.trim()
+            if (core === '') return [<Box key={`s${j}`} width={tr.texto.length} flexShrink={0} />]
+            const lead = tr.texto.length - tr.texto.trimStart().length
+            const trail = tr.texto.length - tr.texto.trimEnd().length
+            return [
+              lead > 0 ? <Box key={`l${j}`} width={lead} flexShrink={0} /> : null,
+              <Text key={`t${j}`} color={C[COLOR_DE[tr.tono]]} bold={tr.tono === 'peligro'}>
+                {core}
+              </Text>,
+              trail > 0 ? <Box key={`r${j}`} width={trail} flexShrink={0} /> : null,
+            ]
+          })}
+        </Box>
+      ))
+    }
     const sesionPanel = (w: number) => (
       <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} width={w}>
         <Text dimColor wrap="truncate">
@@ -1328,12 +1332,13 @@ export const register: Register = (on, options) => {
             <Text wrap="wrap">{`${f.etiqueta}: ${f.valor}`}</Text>
           ),
         )}
+        {mascotaSesion(w)}
       </Box>
     )
 
     // ---- log: whatever rows the other panels leave, 4 to 8
     // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + (sesionRows.length > 0 ? sesionRows.length + 2 : 0)
+    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || mascotaVisible) ? sesionRows.length + 2 + (mascotaVisible ? 2 : 0) : 0)
     const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
     const nLog = logRows(bodyRows, used)
     const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)
@@ -1522,36 +1527,6 @@ export const register: Register = (on, options) => {
       column(panels, W)
     )
 
-    // La franja al pie repite lo que muestra el footer: sin ningún dato, no ocupa filas.
-    const franjaFilas = resumenLineas({
-      modelo: m.model ? modelName : '',
-      carpeta: carpetaDe(cwd, 24),
-      esfuerzo: m.effort,
-      contextoPct: ctxFill.pct,
-      costoUsd: u.costUsd,
-      lineas: { agregadas: u.linesAdded ?? 0, quitadas: u.linesRemoved ?? 0 },
-      inicioSesion: u.startedAt ?? null,
-      ahora: now,
-      limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct, resetsAt: l.resetsAt ?? null })),
-      modo: m.mode,
-      agentesActivos: running.length,
-      agentesTotal: cards.length,
-      permisosPendientes: g.recent.filter(c => c.verdict === 'ask').length,
-      rama: se.branch,
-      costoUltimoTurno: r?.costDelta ?? null,
-      turnoMs: m.isRunning && t.startedAt > 0 ? Math.max(0, now - t.startedAt) : null,
-    }, Math.max(10, W - 4))
-    const franja =
-      franjaFilas.length > 0 ? (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} width={W}>
-          {franjaFilas.map(f => (
-            <Text dimColor wrap="truncate">
-              {f}
-            </Text>
-          ))}
-        </Box>
-      ) : null
-
     return (
       <Box flexDirection="column" width={W}>
         {/* Below 40 columns the frame's own title names the pane, so the header starts at the model. */}
@@ -1584,7 +1559,6 @@ export const register: Register = (on, options) => {
           ))}
         </Box>
         {body}
-        {franja}
         {svgLanes}
       </Box>
     )

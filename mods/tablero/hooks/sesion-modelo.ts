@@ -84,6 +84,7 @@ export type FilaSesion = { etiqueta: string; valor: string }
 export const sesionFilas = (s: Sesion): FilaSesion[] => {
   const filas: FilaSesion[] = []
   if (s.todos.total > 0) filas.push({ etiqueta: 'tareas', valor: `${s.todos.done}/${s.todos.total} listas${s.todos.current ? ` · ahora: ${s.todos.current}` : ''}` })
+  if (s.branch) filas.push({ etiqueta: 'rama', valor: `⎇ ${s.branch}` })
   const tools = ordenados(s.tools).slice(0, 5)
   if (tools.length > 0) filas.push({ etiqueta: 'herramientas', valor: tools.map(([n, c]) => `${n} ${c}`).join(' · ') })
   if (s.files.length > 0) filas.push({ etiqueta: 'archivos', valor: [...s.files].reverse().join(', ') })

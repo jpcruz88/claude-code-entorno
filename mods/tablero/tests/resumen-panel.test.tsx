@@ -31,61 +31,21 @@ const medir = ($: { session: { measure: (x: never) => Promise<unknown> } }) =>
     changed: ['context', 'rateLimits'],
   } as never)
 
-test('la franja al pie del panel muestra carpeta, contexto, costo y uso como el footer', async ($, on) => {
+test('el pie del panel ya no muestra franja con carpeta ni costo', async ($, on) => {
   motor(on)
   await medir($)
   const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /^tablero: \$1\.20 · ctx 50% · uso 19% \(3 h 10 min\)$/ })).toBeDefined()
-  expect(await ui.find({ text: /📁 mi-carpeta · ctx 50% · \$1\.20 · sesión 19% ↻ 3h10m/ })).toBeDefined()
+  expect(await ui.find({ text: /📁 mi-carpeta/ })).toBeUndefined()
+  expect(await ui.find({ text: /^tablero: / })).toBeUndefined()
   await ui.unmount()
 })
 
-test('la franja muestra el modo de permisos que registró el mod', async ($, on) => {
+test('la mascota vive en el panel SESIÓN, con su vida según el contexto', async ($, on) => {
   motor(on)
-  on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'p1' }))
-  await $.agent.spawn({
-    prompt: 'x',
-    description: 'tarea',
-    subagentType: 'general-purpose',
-    tool_use_id: 'tu1',
-    provider: { plugin: 'engine', tier: 'core' as const },
-    parentModel: 'claude-opus-5-5',
-    background: true,
-    fork: false,
-    permissionMode: 'bypassPermissions',
-  } as never)
+  await medir($)
   const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /⏵⏵ bypass permissions on/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('las ediciones de la sesión suman las líneas +/− de la franja', async ($, on) => {
-  motor(on)
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
-  await $.tool.call({ tool: 'Edit', file_path: '/x.ts', old_string: 'a', new_string: 'b\nc' } as never)
-  await $.tool.call({ tool: 'Write', file_path: '/y.ts', content: 'uno\ndos\n' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /\+4 −1/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('una llamada que no edita no suma líneas', async ($, on) => {
-  motor(on)
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
-  await $.tool.call({ tool: 'Read', file_path: '/x.ts' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /\+\d+ −\d+/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('/clear reinicia las líneas +/−', async ($, on) => {
-  motor(on)
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
-  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  await $.tool.call({ tool: 'Edit', file_path: '/x.ts', old_string: 'a', new_string: 'b\nc' } as never)
-  await $.session.end({ reason: 'clear', sessionId: 's' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /\+\d+ −\d+/ })).toBeUndefined()
+  expect(await ui.find({ text: /^sesión$/ })).toBeDefined()
+  expect(await ui.find({ text: /vida 50%/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -161,15 +121,5 @@ test('/clear reinicia el panel SESIÓN', async ($, on) => {
   await $.session.end({ reason: 'clear', sessionId: 's' } as never)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /^sesión$/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('con el panel angosto las líneas de la franja se parten en vez de cortarse', async ($, on) => {
-  motor(on)
-  await medir($)
-  const ui = await $.ui.mount(pane(40))
-  expect(await ui.find({ text: /^tablero: / })).toBeDefined()
-  expect(await ui.find({ text: /3 h 10 min\)/ })).toBeDefined()
-  expect(await ui.find({ text: /…/ })).toBeUndefined()
   await ui.unmount()
 })

@@ -39,27 +39,29 @@ const medir = ($: { session: { measure: (e: never) => Promise<unknown> } }) =>
     changed: ['context'],
   } as never)
 
-test('la banda sale sobre el prompt con los datos en español', { options: { banda: true } }, async ($, on) => {
-  motor(on)
-  await medir($)
-  const ui = await $.ui.mount(BANDA())
-  expect(await ui.find({ text: /Carpeta/ })).toBeDefined()
-  expect(await ui.find({ text: /mods/ })).toBeDefined()
-  expect(await ui.find({ text: /Costo/ })).toBeDefined()
-  expect(await ui.find({ text: /Contexto/ })).toBeDefined()
-  expect(await ui.find({ text: /Subagentes/ })).toBeDefined()
-  expect(await ui.find({ text: /Permisos/ })).toBeDefined()
-  expect(await ui.find({ text: /Uso/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('por defecto la banda y la mascota se dibujan', async ($, on) => {
+test('nada sale sobre el prompt: la banda de abajo ya no existe', { options: { banda: true } }, async ($, on) => {
   motor(on)
   motorDibuja(on)
   await medir($)
   const ui = await $.ui.mount(BANDA())
-  expect(await ui.find({ text: /Carpeta/ })).toBeDefined()
+  expect(await ui.find({ text: /Carpeta/ })).toBeUndefined()
+  expect(await ui.find({ text: /vida \d+%/ })).toBeUndefined()
+  expect(await ui.find({ text: /motor/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('el footer nativo no muestra datos aunque la opción statusLine esté encendida', { options: { statusLine: true } }, async ($, on) => {
+  mock.clock(on)
+  const estados: string[] = []
+  on('ui.status', (_$, e) => {
+    estados.push(JSON.stringify(e))
+    return { value: undefined }
+  })
+  on('session.cwd', () => ({ value: 'C:\\Proyectos\\mods' }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  await medir($)
+  expect(estados.some(s => /ctx|\$1\.20/.test(s))).toBe(false)
 })
 
 test('con la opción banda apagada no dibuja nada', { options: { banda: false } }, async ($, on) => {
@@ -96,7 +98,7 @@ test('con animación apagada no pide redibujar cada segundo', { options: { banda
   expect(invalidaciones).toBe(0)
 })
 
-test('con animación redibuja cuando el valor cambia y se detiene cuando se estabiliza', { options: { banda: true } }, async ($, on) => {
+test('con la mascota viva redibuja a su paso, no a cada cuadro', { options: { banda: true } }, async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -118,5 +120,7 @@ test('con animación redibuja cuando el valor cambia y se detiene cuando se esta
   expect(invalidaciones).toBeGreaterThan(quieto)
   const tras = invalidaciones
   await reloj.advance(5_000)
-  expect(invalidaciones - tras).toBeLessThanOrEqual(1)
+  // La mascota camina con contexto medido: un redibujo por paso de 800 ms, no uno por cuadro de 120 ms.
+  expect(invalidaciones - tras).toBeGreaterThan(0)
+  expect(invalidaciones - tras).toBeLessThanOrEqual(10)
 })
