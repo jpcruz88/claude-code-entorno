@@ -1,0 +1,127 @@
+{
+  "name": "tablero",
+  "version": "0.1.0",
+  "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
+  "author": {
+    "name": "Stephen Casella",
+    "url": "https://github.com/scasella"
+  },
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "claude-code-mod",
+    "claude-code-plugin",
+    "dashboard",
+    "subagents",
+    "agents",
+    "observability",
+    "tui"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "architectPattern": {
+      "title": "Patrón del arquitecto",
+      "description": "Expresión regular (sin distinguir mayúsculas) de los tipos de agente y herramientas de servidor que cuentan como arquitecto de guardia, por ejemplo advisor|architect",
+      "type": "string",
+      "default": "advisor|architect"
+    },
+    "architectLabel": {
+      "title": "Etiqueta del arquitecto",
+      "description": "Nombre que se muestra para el rol de arquitecto",
+      "type": "string",
+      "default": "ARQUITECTO"
+    },
+    "gateLabel": {
+      "title": "Etiqueta de permisos",
+      "description": "Nombre que se muestra en el panel de permisos",
+      "type": "string",
+      "default": "PERMISOS"
+    },
+    "panels": {
+      "title": "Paneles",
+      "description": "Paneles separados por comas en orden de aparición: main, architect, gate, agents, loops, receipt, sesion, log. Omite uno para ocultarlo.",
+      "type": "string",
+      "default": "main,architect,gate,agents,loops,receipt,sesion,log"
+    },
+    "motion": {
+      "title": "Movimiento",
+      "description": "Anima los conectores mientras hay trabajo en curso, o los deja quietos",
+      "type": "string",
+      "options": [
+        "while-active",
+        "off"
+      ],
+      "default": "while-active"
+    },
+    "moments": {
+      "title": "Momentos del arquitecto",
+      "description": "Muestra el momento inferido de cada consulta (antes de un plan, errores repetidos, antes de terminar)",
+      "type": "boolean",
+      "default": true
+    },
+    "matchDescriptions": {
+      "title": "Buscar en descripciones",
+      "description": "También cuenta un tipo de agente como arquitecto cuando su descripción (no solo su nombre) coincide con el patrón",
+      "type": "boolean",
+      "default": false
+    },
+    "maxCards": {
+      "title": "Tarjetas antes de carriles",
+      "description": "Tarjetas de agente dibujadas lado a lado; con más agentes que esto se pasa a carriles (1-6)",
+      "type": "number",
+      "default": 3
+    },
+    "paneColumns": {
+      "title": "Ancho del panel",
+      "description": "Columnas que pide el panel al acoplarse junto a una transcripción a pantalla completa, 40 o más. Claude Code lo limita al 45 % de la terminal.",
+      "type": "number",
+      "default": 66
+    },
+    "layout": {
+      "title": "Distribución",
+      "description": "auto: resumen de máximo 8 filas con el panel en línea sobre el prompt, dos columnas desde 110 columnas acoplado, una columna en otro caso",
+      "type": "string",
+      "options": [
+        "auto",
+        "compact",
+        "wide",
+        "mini"
+      ],
+      "default": "auto"
+    },
+    "palette": {
+      "title": "Paleta",
+      "description": "theme sigue el tema de Claude Code (claro, oscuro, daltónico); pastel son colores fijos pensados para terminales oscuras",
+      "type": "string",
+      "options": [
+        "theme",
+        "pastel"
+      ],
+      "default": "theme"
+    },
+    "openOnStart": {
+      "title": "Abrir al iniciar",
+      "description": "Abre el panel completo de Tablero al iniciar la sesión. Si lo apagas, se abre con /tablero; la banda sobre el prompt queda de respaldo",
+      "type": "boolean",
+      "default": true
+    },
+    "banda": {
+      "title": "Banda",
+      "description": "Muestra la banda de Tablero sobre el prompt: carpeta, modelo, costo, contexto, subagentes, permisos y uso",
+      "type": "boolean",
+      "default": false
+    },
+    "animacion": {
+      "title": "Animación",
+      "description": "Anima la banda: barras que se llenan, indicador que pulsa y cuenta regresiva. Apagarla evita redibujar cada segundo",
+      "type": "boolean",
+      "default": true
+    },
+    "statusLine": {
+      "title": "Línea de estado",
+      "description": "Muestra contexto, agentes, permisos y uso en el footer",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "name": "guard-kill-visible",
+  "version": "0.1.0",
+  "description": "Avisa cuando un comando mata procesos por nombre (solo avisa, no bloquea)"
+}

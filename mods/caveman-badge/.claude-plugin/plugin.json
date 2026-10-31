@@ -1,0 +1,5 @@
+{
+  "name": "caveman-badge",
+  "version": "0.1.0",
+  "description": "Muestra en la línea de estado el modo caveman (aproximado)"
+}

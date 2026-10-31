@@ -1,0 +1,5 @@
+{
+  "name": "sound-notify",
+  "version": "0.1.0",
+  "description": "Avisa al terminar un turno largo y cuando Claude espera un permiso"
+}

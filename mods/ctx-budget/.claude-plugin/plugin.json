@@ -1,0 +1,5 @@
+{
+  "name": "ctx-budget",
+  "version": "0.1.0",
+  "description": "Avisa cuando el contexto cruza el 70 % y el 85 %"
+}
