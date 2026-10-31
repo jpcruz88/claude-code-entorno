@@ -19,7 +19,10 @@
         "matcher": "Bash|PowerShell"
       },
       "cbm-code-discovery-gate": {},
-      "cbm-session-reminder": {}
+      "cbm-session-reminder": {},
+      "guard-subagentes.py": {
+        "matcher": "Agent|Task|Workflow"
+      }
     },
     "_plugins": "enabledPlugins se recorta a los que estén en plugins.txt."
   },
