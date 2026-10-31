@@ -32,6 +32,15 @@ class Privacidad(unittest.TestCase):
             "teléfono": "33 " + "1234 " + "5678",
             "CONTEXT7_API_KEY con valor": "CONTEXT7_API_KEY" + "=" + "ctx7" + "abc123",
             "AWS_PROFILE con valor": "export AWS_" + "PROFILE=" + "produccion",
+            # Clave de OpenCode Go / Console: no empieza por «sk-», por eso su
+            # propio patrón. Se arma por partes para que este archivo no lleve
+            # ningún patrón de más.
+            "clave tipo oc_sk-": "oc" + "_sk_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4",
+            "OPENCODE_API_KEY con valor": "export OPENCODE_API_KEY=" + "'"
+            + "oc" + "_sk_" + "a1b2c3d4e5f6g7h8i9j0k1l2m3n4" + "'",
+            "ANTHROPIC_AUTH_TOKEN con valor": "ANTHROPIC_AUTH" + "_TOKEN=\"oc"
+            + "_sk_a1b2c3d4e5f6g7h8i9j0k1l2m3n4\"",
+            "OPENAI_API_KEY con valor": "export OPENAI_API_" + "KEY=" + "sk-proj-abc123",
         }
         for tipo, texto in casos.items():
             with self.subTest(tipo):
@@ -53,6 +62,12 @@ class Privacidad(unittest.TestCase):
             ".env.local",
             '[ -n "${AWS_PROFILE:-}" ]',
             "resets_at 1738425600",
+            # Variables de OpenCode/Anthropic con marcador: no son valores reales
+            'export OPENCODE_API_KEY="${OPENCODE_API_KEY}"',
+            "export OPENCODE_API_KEY='<tu-clave>'",
+            "$env:ANTHROPIC_AUTH_TOKEN = $clave",
+            "ANTHROPIC_AUTH" + "_TOKEN=\"${ANTHROPIC_AUTH_TOKEN}\"",
+            "OPENCODE_API_" + "KEY=$OPENCODE_API_KEY",
         ]:
             with self.subTest(texto):
                 self.assertEqual(tipos(texto), set())

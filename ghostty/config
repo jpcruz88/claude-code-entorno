@@ -1,5 +1,5 @@
-# Aspecto tipo VS Code (Dark Modern)
-theme = Dark Modern
+# Paleta Kanagawa (Wave), a juego con herdr y con el tema de Claude Code
+theme = Kanagawa Wave
 font-family = JetBrainsMono Nerd Font
 font-size = 14
 font-thicken = true
@@ -10,8 +10,8 @@ window-padding-x = 10
 window-padding-y = 6
 window-padding-color = extend
 cursor-style = bar
-cursor-color = #0078d4
-selection-background = #264f78
+cursor-color = #c8c093
+selection-background = #2d4f67
 
 # Abrir herdr automáticamente en cada ventana
 command = {{RUTA_HERDR}}

@@ -66,19 +66,27 @@ dices que sí.
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
-| herdr | `herdr/config.toml` | Organizador de terminales para agentes, con tema tipo VS Code, atajos `ctrl+alt`, lazygit y btop en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
+| herdr | `herdr/config.toml` | Organizador de terminales para agentes, con la paleta Kanagawa, atajos `ctrl+alt`, lazygit, btop y Neovim en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
-| Ghostty | `ghostty/config` | Terminal con el tema Dark Modern de VS Code y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
+| Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
+| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan. Mac y Linux. Opcional: `--sin-opencode`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
+| Config de OpenCode | *fuera de este repo* | Trae de [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config) la config global de OpenCode en `~/.config/opencode`: el router que elige modelo por complejidad y el script `gomodel`. Va en un repo aparte **a propósito**: si se copiara aquí, esa config tendría dos fuentes de verdad. Mac y Linux. Opcional: `--sin-opencode-config`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
 | Conectar dos Macs | `conectar.sh` | Asistente para usar desde esta Mac el herdr (y los agentes) de otra, por SSH: eliges la Mac de una lista de las de tu red. Lo corres tú cuando lo necesites. Ver [Conectar dos Macs](#conectar-dos-macs). |
+| Panel de servicios locales | `local-services-panel/` | Página en `http://localhost:8790` con todo lo que corre en la máquina: contenedores de Docker y procesos locales, con estado en vivo y enlaces para entrar a cada servicio. Está en el repo pero el instalador **no** lo arranca: se enciende a mano. Ver [Panel de servicios locales](#panel-de-servicios-locales). |
 
 ## Qué NO incluye
 
 - Proyectos, memorias de proyecto, historial ni conversaciones.
-- Claves, tokens o contraseñas. La clave de Context7 se guarda **en cada
-  computadora** como variable de entorno (`CONTEXT7_API_KEY`), nunca en el repo.
+- Claves, tokens o contraseñas. Las claves externas —la de Context7
+  (`CONTEXT7_API_KEY`), la de OpenCode (`OPENCODE_API_KEY`) y la de OpenRouter
+  (`OPENROUTER_API_KEY`)— se guardan **en cada computadora** como variables de
+  entorno, nunca en el repo. El verificador de privacidad las rechaza si alguna
+  vez se cuela.
 - Hooks y skills de trabajos privados o personales, plugins que solo uso en la
   Mac principal, permisos de herramientas concretas.
 - Skills que ya llegan solas: las de `superpowers` (vienen con el plugin), las de
@@ -229,6 +237,7 @@ cd claude-code-entorno
   | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
   | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
   | `--sin-terminal` | No instala eza, bat, zoxide, fzf ni atuin, ni su archivo para la terminal. |
+  | `--sin-nvim` | No instala Neovim ni su config (`nvim/`). |
   | `--sin-stats` | Solo macOS: no instala Stats, el monitor de la barra de menú. |
   | `--servidor` | Solo macOS: la Mac nunca duerme, se enciende sola tras un corte de luz y abre Ghostty al iniciar sesión (ver [Modo servidor](#modo-servidor)). Apagado si no lo pones. |
 
@@ -252,7 +261,8 @@ cd claude-code-entorno
    versión fija (`v0.12.0`, no la rama en desarrollo).
 4. Pide la clave de Context7, si falta (en modo no interactivo no la pide: avisa
    y explica cómo ponerla después).
-5. Copia reglas, hook y línea de estado a la carpeta `.claude` de tu usuario. Si ya
+5. Copia reglas, hook, línea de estado y comandos (`claude/commands/`) a la carpeta
+   `.claude` de tu usuario. Si ya
    había un archivo distinto, antes guarda una copia `.bak-<fecha>`.
 6. **Fusiona** `settings.base.json` con tu `settings.json`
    (`herramientas/fusionar_settings.py`): guarda antes una copia
@@ -269,10 +279,22 @@ cd claude-code-entorno
    (`herdr plugin install … --yes`), y recarga la config si herdr está abierto.
 9. **Ghostty** (solo Mac, si está o se acaba de instalar): copia `ghostty/config`
    con la ruta de herdr de esa computadora.
-10. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
+10. **Neovim** (Mac y Linux): copia `nvim/` a `~/.config/nvim`, salvo que ya tengas
+    ahí una config tuya (entonces avisa y no la toca).
+11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-11. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+12. **OpenCode** (Mac y Linux): copia `opencode/opencode.sh` a
+    `~/.config/claude-code-entorno/` y `opencode/opencode-go-modelos` a
+    `~/.local/bin/`, y agrega al rc la línea que carga el primero. Solo define las
+    aliases `cl-go` y `cl-or` si su variable de entorno existe; no pide ni escribe
+    claves. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+13. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
+    a `~/.config/opencode` — clon, `git pull` si ya estaba, o conversión de una
+    carpeta que ya existiera (sin tocar sus archivos sin seguimiento, como
+    `service.json`) — y enlaza `gomodel` en `~/.local/bin/`. Solo lee y sincroniza:
+    no edita ese repo. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+14. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
 herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
@@ -281,7 +303,7 @@ Con `--servidor`, `instalar.sh` además ajusta la energía y los ítems de inici
 antes del paso 5 (ver [Modo servidor](#modo-servidor)).
 
 **Se puede correr cuantas veces haga falta**: lo que ya está se salta. Los pasos 5
-a 11 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
+a 12 los hace `herramientas/instalar_comun.py`, el mismo en Windows, Mac y Linux.
 En Windows, `instalar.ps1` no instala herdr: si no lo tienes, el paso 8 se salta
 con un aviso.
 
@@ -424,7 +446,7 @@ conversación.
 
 ### Lo que deja `herdr/config.toml`
 
-- **Aspecto:** colores de VS Code (Dark Modern), estados con símbolos, rama de git
+- **Aspecto:** paleta Kanagawa (Wave, igual que Ghostty, Claude Code y Neovim), estados con símbolos, rama de git
   y hora con iconos en la barra de pestañas, nombre del agente en el borde de cada
   panel dividido.
 - **Atajos directos** (sin `ctrl+b`): `ctrl+alt+h/j/k/l` mueve entre paneles,
@@ -486,6 +508,26 @@ activado, tras un reinicio la Mac espera tu contraseña; todo arranca cuando ini
 sesión. Para deshacerlo: `sudo pmset -a sleep 1 autorestart 0` y quita Ghostty en
 Ajustes del Sistema → General → Ítems de inicio.
 
+## Neovim
+
+`instalar.sh` instala Neovim y `tree-sitter-cli` con Homebrew y copia `nvim/` a
+`~/.config/nvim`: [LazyVim](https://www.lazyvim.org) con el tema Kanagawa, el mismo
+de Ghostty, herdr y Claude Code. Si ya tienes una config en `~/.config/nvim`, no la
+toca.
+
+- **Primera vez:** abre `nvim`; descarga solo los plugins y los parsers de sintaxis
+  (tarda un minuto).
+- **En herdr:** `nvim` en cualquier panel, o `ctrl+b` y luego `alt+e` para abrirlo en
+  una ventana flotante en la carpeta del panel (como lazygit con `alt+g`).
+- **Atajos de LazyVim:** `Espacio` abre el menú; `Espacio e` explorador, `Espacio
+  Espacio` buscar archivo, `Espacio /` buscar texto.
+- **macOS 27:** el SDK 27 trae un archivo que el enlazador actual no entiende y
+  rompe la compilación de los parsers. `nvim/lua/config/options.lua` usa el SDK
+  26.5 solo dentro de Neovim, si está instalado.
+- **Windows:** todavía no se instala (Neovim lee otra carpeta allí).
+
+---
+
 ## Conectar dos Macs
 
 Con herdr puedes trabajar en otra Mac desde esta: sus espacios y agentes aparecen
@@ -546,6 +588,186 @@ Tailscale. No abras el puerto 22 de tu router a internet.
   quieres quitar.
 - herdr no guarda contraseñas ni llaves: usa las de SSH.
 
+## Universal Control
+
+Universal Control es la función de macOS que deja mover el cursor y el teclado de
+una Mac a otra, cada una con su monitor. Cuando falla, nada en los Ajustes del
+Sistema dice por qué: la causa está en los registros del sistema. `universal-control.sh`
+automatiza esa revisión. Cada vez que inicias sesión en la Mac que tiene el teclado
+y el mouse, revisa las dos Macs y **solo avisa si algo impide que funcione**,
+diciendo qué hacer. Si todo está bien, no dice nada.
+
+Solo mira: nunca cambia ajustes, nunca reinicia nada y nunca detiene procesos.
+Aquí la **Mac que manda** es la que tiene el teclado y el mouse (se instala en
+ella) y la **Mac que recibe** es la otra, a la que entra por SSH.
+
+### Requisitos
+
+En las dos Macs:
+
+1. La misma cuenta de Apple.
+2. La misma versión de macOS, incluso en el último número.
+3. Wi-Fi y Bluetooth encendidos. Wi-Fi tiene que estar encendido aunque la Mac use
+   cable.
+4. Handoff encendido.
+5. Las opciones de Universal Control encendidas (Ajustes del Sistema → Pantallas →
+   Avanzado).
+6. Compartir Internet **apagado**.
+7. Un monitor conectado en cada una.
+
+Y además:
+
+8. La Mac que recibe acepta conexiones por SSH (Ajustes del Sistema → General →
+   Compartir → Sesión remota; en versiones anteriores de macOS se llama «Inicio de
+   sesión remoto»), tu llave ya está copiada allá y el usuario
+   con el que entras es **administrador**. Sin eso el programa no puede leer los
+   registros de esa Mac.
+
+### Paso a paso
+
+Todo se hace en la Mac que manda, en la carpeta del repo.
+
+1. **Activa Universal Control** en las dos Macs, como en los requisitos 3 a 6.
+2. **Deja la llave SSH.** Si aún no entras a la otra Mac sin contraseña, corre
+   `./conectar.sh` (ver «Conectar dos Macs») o haz un `ssh-copy-id` a mano.
+3. **Dile cuál es la otra Mac:**
+
+   ```bash
+   ./universal-control.sh --configurar <usuario>@<mac>.local
+   ```
+
+   Antes de guardar entra a esa Mac por SSH, sin contraseña y sin preguntar nada,
+   para leer su nombre. Si no puede entrar, no guarda nada y te explica qué
+   revisar y cómo dejar la llave. Se usa el nombre `.local` y no la IP porque la IP
+   cambia al reiniciar.
+4. **Instala el aviso al iniciar sesión:**
+
+   ```bash
+   ./universal-control.sh --instalar
+   ```
+
+   Crea una tarea de inicio de sesión de macOS (launchd) que corre el programa cada
+   vez que entras. Repetir el comando da el mismo resultado.
+5. **Para quitarlo:**
+
+   ```bash
+   ./universal-control.sh --quitar
+   ```
+
+   Descarga la tarea y borra su archivo. Sale bien aunque no hubiera nada instalado.
+6. **Para correrlo a mano** y ver el reporte completo en la terminal:
+
+   ```bash
+   ./universal-control.sh
+   ```
+
+   Escribe una línea por revisión y por Mac, y al final «Universal Control listo.»
+   o «No quedó: …» con la causa. Sale con 0 si está listo, 1 si no, y 2 si falta
+   configurar o usaste mal el comando.
+
+| Para | Comando |
+|---|---|
+| Revisar a mano | `./universal-control.sh` |
+| Ver el estado solo de esta Mac | `./universal-control.sh --estado` |
+| Guardar la otra Mac | `./universal-control.sh --configurar <usuario>@<mac>.local` |
+| Instalar el aviso al iniciar sesión | `./universal-control.sh --instalar` |
+| Quitar el aviso al iniciar sesión | `./universal-control.sh --quitar` |
+| Ver la ayuda completa | `./universal-control.sh --ayuda` |
+
+### Qué hace al iniciar sesión
+
+La tarea corre `./universal-control.sh --al-iniciar`, que no abre nada, no pregunta
+nada y no se queda esperando una entrada. Las dos Macs tienen que estar prendidas,
+con la sesión iniciada. Como cada una puede tardar en arrancar, repite la revisión
+cada 15 segundos durante hasta 5 minutos, hasta que las dos se hayan unido:
+
+- **Si todo está bien**, no muestra nada. Solo escribe el reporte en un archivo.
+- **Si algo falla al terminar la espera**, manda **una** notificación de macOS con
+  la causa más importante y qué hacer.
+- **Si la otra Mac no responde** (apagada, sin red o esperando su contraseña de
+  inicio), también avisa.
+- **Si no has configurado la otra Mac**, avisa «Falta configurar Universal Control»
+  y no espera.
+
+Los registros de Universal Control son los que deciden si hay aviso. Si dicen que
+las dos Macs ya formaron un grupo, no avisa, aunque algún ajuste se vea mal o no se
+haya podido leer; eso queda solo en el reporte. Los ajustes sirven para explicar la
+causa cuando el grupo no se formó. Si quieres otros tiempos, puedes cambiarlos con
+las variables `UC_ESPERA` (segundos de espera, 300 por omisión) y `UC_INTERVALO`
+(segundos entre revisiones, 15 por omisión). Solo cambian los tiempos cuando corres
+`--al-iniciar` a mano; la tarea instalada siempre usa 300 s y 15 s.
+
+La tarea guarda la ruta del programa. Si mueves la carpeta del repo, vuelve a correr
+`./universal-control.sh --instalar`.
+
+### Qué hacer con cada aviso
+
+Si hay varias fallas, el programa reporta solo la primera de esta lista, porque las
+de abajo suelen ser consecuencia de las de arriba:
+
+| Aviso | Qué pasa y qué hacer |
+|---|---|
+| «… no responde: ¿está prendida y con sesión iniciada?» | No hay conexión por SSH con la otra Mac. Prende la Mac, inicia sesión (con FileVault no responde hasta que pones la contraseña) y revisa que tenga Sesión remota (Inicio de sesión remoto en versiones anteriores de macOS) y que la llave siga copiada. |
+| «… no aceptó la llave SSH: corre ./conectar.sh …» | La otra Mac sí respondió, pero rechazó tu llave («Permission denied») o su huella ya no coincide («Host key verification failed»). El reporte trae la línea de error de SSH. Corre `./conectar.sh <usuario>@<mac>.local` para dejar la llave de nuevo. |
+| «No puedo leer los registros de …: el usuario … tiene que ser administrador» | El usuario con el que entras por SSH no es administrador y no puede leer los registros. Usa otro usuario con `--configurar` o hazlo administrador. |
+| «… no tiene sesión iniciada en una cuenta de Apple» | Entra con tu cuenta de Apple en esa Mac. |
+| «Las dos Mac tienen cuentas de Apple distintas» | Entra con la misma cuenta en las dos. |
+| «Versiones distintas: <versión> en <esta Mac>, <versión> en <la otra>. Actualiza la que va atrás» | Una Mac tiene otra versión de macOS. Actualiza la que va atrás. |
+| «Apaga Compartir Internet en …» | Ajustes del Sistema → General → Compartir → Compartir Internet. |
+| «Enciende … en …» | Wi-Fi, Bluetooth, Handoff o Universal Control están apagados. Enciéndelo. |
+| «… no tiene monitor» | Conecta un monitor a esa Mac. |
+| «Inicia sesión en …» | La sesión de la otra Mac está bloqueada o cerrada. Desbloquéala. |
+| «… no ve a … por Bluetooth: reinicia …» | Una Mac no detecta a la otra como disponible. Reinicia la Mac que nombra el aviso. |
+| «Las Mac no se unieron: reinicia las dos» | Todo lo demás está bien, pero no se formó el grupo. Reinicia las dos. |
+
+### Lo que aprendimos
+
+Configurarlo costó una tarde, con estos hallazgos:
+
+- **Compartir Internet con el interruptor encendido cuenta como encendido, aunque
+  no tenga ningún puerto marcado.** En ese caso el sistema sigue con el proceso
+  `InternetSharing` corriendo y Universal Control no funciona. Apaga el interruptor
+  principal.
+- **Con versiones distintas de macOS, la Mac vieja nunca detectó a la nueva.** Antes
+  de buscar otras causas, deja las dos en la misma versión.
+- **Cuando una Mac no ve a la otra por Bluetooth, reiniciar la que no se ve lo
+  arregla.** Una Mac con casi 5 días sin reiniciarse tras su actualización no
+  avisaba por Bluetooth: la otra la veía solo por Wi-Fi, y eso no basta para saber
+  si está activa. Al reiniciarla, las dos formaron un grupo. Apagar y prender
+  Handoff no cambió nada.
+- **En zsh, `log` es un comando interno.** Si lees los registros a mano, usa la ruta
+  completa. El programa mira los mensajes del subsistema de Universal Control del
+  arranque actual (`--last boot`), no los de antes de un reinicio:
+
+  ```bash
+  /usr/bin/log show --info --last boot --predicate 'subsystem == "com.apple.universalcontrol"'
+  ```
+
+  El último mensaje `Selected circle` de cada Mac lista a los equipos que están en
+  el mismo grupo. Si salen los dos, el cursor puede cruzar.
+- **El teclado y el mouse tienen que estar conectados solo a la Mac que manda.** Si
+  uno de los dos se queda conectado a la otra Mac, por ejemplo después de cambiarlo
+  de canal para usarla un momento, Universal Control le da el control a la Mac donde
+  está ese dispositivo. El cursor salta solo a la otra pantalla cada vez que lo
+  mueves. Regrésalo a la Mac que manda y, si usa un receptor USB, desconéctalo de la
+  otra.
+- **La cuenta de Apple se compara sin mostrarla.** El programa solo dice si es igual
+  o distinta en las dos Macs: no imprime ni guarda el correo ni el número de la
+  cuenta. Para comparar usa una huella con una sal distinta en cada revisión,
+  así no se puede deshacer.
+
+### Dónde quedan los archivos
+
+| Qué | Dónde |
+|---|---|
+| Configuración (la otra Mac) | `~/.config/claude-code-entorno/universal-control.conf` |
+| Último reporte, con fecha y hora | `~/Library/Logs/claude-code-entorno/universal-control.log` |
+| Errores de la tarea de inicio de sesión | `~/Library/Logs/claude-code-entorno/universal-control.errores.log` |
+| Tarea de inicio de sesión | `~/Library/LaunchAgents/com.claude-code-entorno.universal-control.plist` |
+
+El reporte se reemplaza en cada inicio de sesión: guarda solo el último intento.
+Estos archivos viven en tu carpeta de usuario, fuera del repo.
+
 ## Terminal y Stats
 
 ### Terminal
@@ -574,6 +796,114 @@ y le apaga la red (`defaults write eu.exelban.Stats …`), solo si todavía no l
 tenía: si después cambias algo, no lo pisa. Lo agrega a los ítems de inicio y lo
 abre. Haz clic en un número para ver el detalle; en el engrane cambias el estilo o
 activas más módulos (temperatura, red). El `SSD` es el espacio ocupado del disco.
+
+## OpenCode como respaldo
+
+Sucede: se acaban los tokens de Claude, o la cuenta queda temporalmente bloqueada,
+o Anthropic tiene un mal día. Este paso deja Claude Code listo para seguir
+trabajando contra otro proveedor sin cambiar de herramienta ni perder el contexto
+de lo que estabas haciendo.
+
+`opencode/opencode.sh` se carga en cada terminal nueva y define dos aliases:
+
+| Escribe | Qué hace |
+|---|---|
+| `cl-go` | Claude Code contra [OpenCode Go](https://opencode.ai/console), con tus modelos incluidos. |
+| `cl-or` | Claude Code contra OpenRouter, con su catálogo completo. |
+
+`cl-go` necesita `OPENCODE_API_KEY` y `cl-or` necesita `OPENROUTER_API_KEY`. **Las
+claves no están en el repo**: cada alias se define solo si su variable existe en
+esa computadora, así que sin clave no hay alias y nada se rompe. Las pones tú, en
+cada máquina:
+
+```bash
+export OPENCODE_API_KEY="…"    # de https://opencode.ai/console
+export OPENROUTER_API_KEY="…"  # de https://openrouter.ai/keys
+```
+
+Ponlas en un archivo que no esté en el repo (`~/.config/secrets.env`, por ejemplo)
+y cárgalas desde tu `.zshrc`; nunca dentro de este repo.
+
+Dentro de Claude Code, `/go-modelos` enumera los modelos que trae tu plan de Go
+con sus capacidades y costos, para elegir con `/model <modelo>`.
+
+Dos detalles que conviene saber:
+
+- Los alias arrancan Claude con `--dangerously-skip-permissions`. Si prefieres que
+  te pregunte antes de cada acción, quítalo de `opencode/opencode.sh`.
+- El modelo de cada alias lo fija `opencode/opencode.sh` con tres variables
+  `ANTHROPIC_DEFAULT_*_MODEL`; sin ellas, `/model` pide modelos que el endpoint no
+  sirve. Puedes cambiarlas a gusto.
+
+### La config de OpenCode vive en su propio repo
+
+`~/.config/opencode` recibe su contenido de
+[`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config), que
+trae **el router de modelos por complejidad** (clasifica cada mensaje y cambia el
+modelo antes de arrancar el turno) y el script **`gomodel`**.
+
+Está en un repo aparte a propósito: si se copiara dentro de este repo, esa config
+tendría **dos fuentes de verdad** y habría que actualizarla en los dos sitios. El
+paso del instalador solo clona o hace `git pull`; nunca edita ese repo.
+
+Funciona en los tres casos que se pueden encontrar en una máquina:
+
+| Situación | Qué hace |
+|---|---|
+| No hay `~/.config/opencode` | `git clone` |
+| Ya es un clon | `git pull --ff-only` |
+| Hay archivos pero no es un clon (p. ej. solo `service.json`) | lo convierte en clon con `git init` + `fetch` + `reset --hard` |
+
+En el tercer caso **no toca los archivos sin seguimiento**: git no los modifica, así
+que `service.json` (la contraseña local) y `auth.json` quedan igual, y encima su
+`.gitignore` los excluye del repo. También fija el upstream para que la próxima
+corrida pueda hacer `pull`.
+
+Si ya existe un `opencode.json` sin extensión que no venga de ese repo, **no lo
+borra**: avisa, porque puede mandar sobre el `opencode.jsonc` que sí está gestionado.
+
+### Qué manda cada herramienta
+
+`opencode-config` y este repo se reparten los temas sin pisarse:
+
+| Herramienta | Vive en | Sirve para |
+|---|---|---|
+| `gomodel` | `opencode-config` | ver tu **cuota** (5 h / semana / mes), los **topes** por modelo y **lanzar** OpenCode con un modelo concreto. Desde la terminal. |
+| `/go-modelos` | este repo | ver **qué puede hacer** cada modelo: contexto, modalidades, razonamiento, herramientas y costos. Desde dentro de Claude Code. |
+| Router `auto-model` | `opencode-config` | elegir modelo por complejidad antes de cada turno. |
+| `cl-go` / `cl-or` | este repo | abrir **Claude Code** contra OpenCode Go u OpenRouter. |
+
+Para no instalar ninguna de las dos: `--sin-opencode` (las aliases y `/go-modelos`)
+y `--sin-opencode-config` (el router y `gomodel`).
+
+## Panel de servicios locales
+
+`local-services-panel/` es una página que muestra todo lo que corre en la máquina
+y te deja entrar a cada servicio: los contenedores de Docker y los procesos
+locales, con estado en vivo cada 10 segundos.
+
+Nace de un problema concreto: con Supabase, contenedores y varios scripts en
+marcha, no había un solo lugar para ver qué está levantado, en qué puerto y si
+responde. Lo descubre solo — no hay lista de servicios, puertos ni URLs escrita en
+el código: si levantas un contenedor nuevo aparece solo, y si lo paras desaparece.
+
+```bash
+node local-services-panel/server.js
+# → Panel de servicios locales → http://localhost:8790
+```
+
+No hace falta `npm install`: usa solo módulos nativos de Node 18 o más reciente.
+Renombrar, fijar y ocultar servicios se guardan en un `state.json` (ignorado por
+git) junto al servidor.
+
+**El instalador no lo arranca ni lo pone al iniciar sesión**: está aquí porque es
+otra herramienta del entorno, y se enciende a mano cuando la necesitas.
+
+Si lo abres desde otro equipo de tu red, ten en cuenta que el servidor escucha en
+`0.0.0.0`: cualquiera que alcance el puerto ve la lista de tus servicios y sus
+puertos. Para usarlo solo en esta máquina, edita `HOST` en
+`local-services-panel/server.js`. Detalles en
+`local-services-panel/README.md`.
 
 ## Mantenerlo al día
 
@@ -690,8 +1020,10 @@ con `brew`, `defaults`, `osascript` y `open` de mentira (así no tocan tus
 preferencias); `terminal/terminal.sh` se carga en zsh y bash con herramientas de
 mentira (`pruebas/test_terminal.py`); `conectar.sh` y su asistente, con `ssh`,
 `ssh-keygen`, `ssh-copy-id`, `dns-sd` y `herdr` de mentira (no se conecta a
-ninguna Mac ni crea llaves reales, `pruebas/test_conectar.py`); en los `.sh` se
-revisa que ninguna variable quede pegada a «», tildes o eñes, que el bash de
+ninguna Mac ni crea llaves reales, `pruebas/test_conectar.py`); `universal-control.sh`,
+con `ssh`, `log`, `defaults`, `osascript`, `launchctl` y otros comandos de mentira (no
+toca tu configuración ni se conecta a ninguna Mac, `pruebas/test_universal_control.py`);
+en los `.sh` se revisa que ninguna variable quede pegada a «», tildes o eñes, que el bash de
 macOS lee mal en una terminal con UTF-8 (`pruebas/test_scripts_shell.py`); y de
 `instalar.ps1` se revisa que conserve el BOM y los finales CRLF. No necesitan
 instalar nada; las de la línea de estado necesitan `bash` y `jq`, y las de
@@ -705,6 +1037,7 @@ instalaría.
 ├── instalar.sh / instalar.ps1     instaladores (Mac-Linux / Windows)
 ├── exportar.sh                    regenera el repo desde la Mac principal
 ├── conectar.sh                    asistente para controlar el herdr de otra Mac (SSH)
+├── universal-control.sh           revisa si dos Mac pueden usar Universal Control y avisa si falla
 ├── plugins.txt                    plugins a instalar
 ├── mods/                          mods de Claude Code (plugins propios, con pruebas)
 ├── .claude-plugin/marketplace.json marketplace de este repo (lista los mods)
@@ -712,13 +1045,18 @@ instalaría.
 │   ├── settings.base.json         ajustes genéricos
 │   ├── statusline.sh              línea de estado
 │   ├── hooks/guard-kill.py        hook contra kills masivos
-│   └── rules/                     reglas globales
+│   ├── themes/kanagawa.json       tema de Claude Code
+│   ├── rules/                     reglas globales
+│   └── commands/                  comandos propios (por ejemplo /go-modelos)
 ├── skills/lista.json              skills y su origen
 ├── mcp/                           plantillas de servidores MCP
 ├── git/gitignore_global           gitignore global
 ├── herdr/                         config de herdr y plugins de herdr (Telegram)
 ├── ghostty/config                 config de Ghostty (con {{RUTA_HERDR}})
+├── nvim/                          config de Neovim (LazyVim con el tema Kanagawa)
 ├── terminal/terminal.sh           eza, bat, zoxide, fzf y atuin para zsh y bash
+├── opencode/                      OpenCode como respaldo: aliases cl-go/cl-or y su script
+├── local-services-panel/          página que muestra todo lo que corre en la máquina
 ├── herramientas/                  scripts de apoyo (fusión, exportación, privacidad)
 └── pruebas/                       pruebas automáticas
 ```

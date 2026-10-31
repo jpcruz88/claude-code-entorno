@@ -75,7 +75,7 @@
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   },
-  "theme": "dark",
+  "theme": "custom:kanagawa",
   "tui": "fullscreen",
   "cleanupPeriodDays": 3650,
   "agentPushNotifEnabled": true

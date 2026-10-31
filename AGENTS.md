@@ -39,19 +39,31 @@ ahora.
      Telegram de herdr (código de la comunidad)? Si no: `--sin-plugins-herdr`.
    - ¿Instalo las herramientas de terminal (eza, bat, zoxide, fzf y atuin) y las
      cargo desde su `.zshrc`? Si no: `--sin-terminal`.
+   - ¿Instalo OpenCode como respaldo (`cl-go` y `cl-or`, por si se acaban los tokens
+     de Claude)? No cambia nada si no lo usa: las aliases solo se crean si define su
+     variable de entorno. Si no: `--sin-opencode`.
+   - ¿Traigo la config de OpenCode de `jpcruz88/opencode-config` a
+     `~/.config/opencode` (router de modelos por complejidad y `gomodel`)? Solo
+     clona o hace `git pull` en un repo aparte de este, sin editar nada y sin
+     credenciales; si la carpeta ya existiera, conserva sus archivos sin
+     seguimiento como `service.json`. Si no: `--sin-opencode-config`.
    - Solo en Mac: ¿pongo Stats (CPU, GPU, RAM y disco en la barra de menú)? Si no:
      `--sin-stats`.
    - Solo en Mac: ¿esta Mac se queda siempre encendida (una Mac mini, no un
      portátil)? Solo si dice que sí: `--servidor` (no duerme, se enciende tras un
      corte de luz y abre Ghostty al iniciar sesión).
-3. **La clave de Context7 y el token del bot de Telegram nunca pasan por ti.** No
-   los pidas en el chat, no los escribas en archivos ni en comandos y no los
-   muestres. La clave la pone el usuario él mismo con el comando del paso «Cierre»
-   (ahora o más tarde). Si aun así la pega
-   en el chat, no la uses y recomiéndale cambiarla en <https://context7.com/dashboard>.
-   El token del bot lo pega el usuario en la ventana de configuración del plugin
-   (README, «herdr y Telegram»); si lo pega en el chat, no lo uses y recomiéndale
-   revocarlo en @BotFather (`/revoke`).
+3. **Las claves externas y el token del bot de Telegram nunca pasan por ti.** Tres
+   claves van en variables de entorno de cada computadora, **nunca en el repo ni en
+   el chat**: `CONTEXT7_API_KEY`, `OPENCODE_API_KEY` (para la alias `cl-go`) y
+   `OPENROUTER_API_KEY` (para `cl-or`). Sin ellas el instalador no falla: `context7`
+   marca error en `/mcp` y las aliases simplemente no se crean. No pidas ninguna
+   clave, no la escribas en archivos ni en comandos y no la enseñes. Si el usuario
+   pega una igual, no la uses y recomiéndale revocarla: la de Context7 en
+   <https://context7.com/dashboard>, la de OpenCode en <https://opencode.ai/console>,
+   la de OpenRouter en <https://openrouter.ai/keys>. El token del bot de Telegram
+   lo pega el usuario en la ventana de configuración del plugin (README, «herdr y
+   Telegram»); si lo pega en el chat, no lo uses y recomiéndale revocarlo en
+   @BotFather (`/revoke`).
 4. **Instala siempre en modo no interactivo** (`-NoInteractivo` /
    `--no-interactivo`): el instalador no pregunta nada y, si falta la clave de
    Context7, la omite con un aviso.

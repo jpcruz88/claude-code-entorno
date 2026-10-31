@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servicios locales</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2230; --border:#2d333b;
+    --text:#e6edf3; --muted:#8b949e; --accent:#2f81f7; --accent2:#1f6feb;
+    --green:#3fb950; --red:#f85149; --amber:#d29922;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column;height:100vh}
+
+  header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header h1 .sub{color:var(--muted);font-weight:400;font-size:12px}
+  .count{font-size:12px;color:var(--muted)}
+  .count b{color:var(--green);font-weight:600}
+  .count i{color:var(--red);font-style:normal;font-weight:600}
+  .spacer{flex:1}
+  input[type=search]{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12.5px;width:190px}
+  input[type=search]:focus{outline:none;border-color:var(--accent)}
+  button{cursor:pointer;border:1px solid var(--border);background:var(--panel2);color:var(--text);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;transition:.15s}
+  button:hover{border-color:var(--accent)}
+
+  .banner{display:none;padding:7px 16px;background:#3d2f05;border-bottom:1px solid #6e5409;color:#e3b341;font-size:12.5px}
+  .banner.show{display:block}
+
+  main{display:flex;flex:1;min-height:0}
+  aside{width:220px;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;padding:12px}
+  .grp{margin-bottom:16px}
+  .grp h3{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 7px}
+  .grp button{display:flex;width:100%;justify-content:space-between;align-items:center;margin-bottom:5px;text-align:left}
+  .grp button.on{background:var(--panel2);border-color:var(--accent)}
+  .grp .n{color:var(--muted);font-family:var(--mono);font-size:11px}
+
+  .content{flex:1;overflow-y:auto}
+  table{width:100%;border-collapse:collapse}
+  thead th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--border);font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);text-align:left;padding:9px 14px;font-weight:600}
+  tbody tr{border-bottom:1px solid #21262d;transition:background .12s}
+  tbody tr:hover{background:var(--panel)}
+  tbody tr.hidden-row{opacity:.42}
+  td{padding:9px 14px;vertical-align:middle}
+  .svc{display:flex;align-items:center;gap:10px}
+  .svc .ic{font-size:15px;width:20px;text-align:center}
+  .svc .nm{font-weight:600}
+  .svc .nm[contenteditable]{outline:1px solid var(--accent);border-radius:3px;padding:0 4px;background:var(--panel2)}
+  .btnrow{display:flex;gap:6px;justify-content:flex-end}
+  .icon{background:none;border:none;color:var(--muted);padding:2px 4px;font-size:13px;border-radius:4px;text-decoration:none;cursor:pointer}
+  .icon:hover{color:var(--text);background:var(--panel2)}
+  .icon.on{color:var(--amber);text-shadow:0 0 6px rgba(210,153,34,.55)}
+  .tag{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--border);font-weight:500}
+  .badge.activo{background:rgba(63,185,80,.15);color:var(--green);border-color:rgba(63,185,80,.4)}
+  .badge.caido{background:rgba(248,81,73,.15);color:var(--red);border-color:rgba(248,81,73,.4)}
+  .badge.sin-web{background:rgba(210,153,34,.15);color:var(--amber);border-color:rgba(210,153,34,.4)}
+  .badge.unknown{background:var(--panel2);color:var(--muted);border-color:var(--border)}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  .chips{display:none;gap:7px;padding:9px 14px;border-bottom:1px solid var(--border);overflow-x:auto}
+  .chips button{white-space:nowrap}
+
+  @media (max-width:900px){
+    aside{display:none}
+    .chips{display:flex}
+    .col-origin,.col-url{display:none}
+    td{padding:7px 10px}
+    .svc{flex-wrap:wrap;row-gap:2px}
+    .svc .extra{flex:0 0 100%;display:block;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+  }
+  @media (min-width:901px){ .svc .extra{display:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Servicios locales <span class="sub">descubrimiento automático</span></h1>
+  <span class="count" id="count">conectando…</span>
+  <span class="spacer"></span>
+  <input type="search" id="q" aria-label="Buscar servicio" placeholder="Buscar servicio, puerto o proceso…">
+  <button id="refresh">Refrescar</button>
+</header>
+
+<div class="banner" id="banner" role="status"></div>
+
+<div class="chips" id="chips"></div>
+
+<main>
+  <aside id="sidebar"></aside>
+  <div class="content">
+    <table>
+      <thead>
+        <tr>
+          <th>Servicio</th>
+          <th class="col-origin">Origen</th>
+          <th class="col-url">URL</th>
+          <th>Estado</th>
+          <th style="text-align:right">Acción</th>
+        </tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="5" class="empty">Esperando datos…</td></tr></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+const ORIGIN_ICON = { docker: '🐳', local: '💻' };
+const STATUS_NAME = { activo: 'activo', caido: 'caído', 'sin-web': 'sin web' };
+const KNOWN_STATUS = new Set(Object.keys(STATUS_NAME));
+const DEFAULT_ICON = '⚙️';
+
+let data = { rows: [], sources: { docker: true, sockets: true }, updated: null };
+let filter = 'todos';
+let query = '';
+// Mientras el usuario renombra en línea, un snapshot entrante no debe
+// reconstruir #rows y destruir el editor (perdería lo escrito).
+let editing = false;
+
+const $ = (id) => document.getElementById(id);
+
+const originIcon = (origin) => ORIGIN_ICON[origin] || DEFAULT_ICON;
+// Mapper total: un estado desconocido se muestra como texto, nunca `undefined`.
+const statusLabel = (status) => STATUS_NAME[status] || String(status || 'desconocido');
+// Clase CSS equivalente: lo desconocido cae en un badge neutro, visible.
+const statusClass = (status) => KNOWN_STATUS.has(String(status)) ? String(status) : 'unknown';
+
+function post(payload) {
+  return fetch('/state', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Panel-Client': '1' },
+    body: JSON.stringify(payload),
+  }).then(r => r.ok).catch(() => false);
+}
+
+/** Aplicación local optimista — el próximo snapshot SSE es la fuente de verdad. */
+function applyLocal(action, key, value) {
+  const row = data.rows.find(r => r.key === key);
+  if (!row) return false;
+  if (action === 'rename') { if (typeof value === 'string' && value.trim()) row.displayName = value.trim(); }
+  else if (action === 'favorite') row.favorite = value === true;
+  else if (action === 'hide') row.hidden = value === true;
+  else return false;
+  return true;
+}
+
+function send(action, key, value) {
+  if (!applyLocal(action, key, value)) return;
+  render();
+  // El servidor resincroniza con el próximo snapshot si rechaza el cambio.
+  post({ action, key, value }).then((ok) => {
+    if (!ok) console.warn('No se pudo guardar el cambio; se corregirá con la próxima instantánea.', { action, key });
+  });
+}
+
+function matches(row) {
+  if (!query) return true;
+  const hay = `${row.displayName} ${row.key} ${row.host}:${row.port} ${row.process || ''} ${row.container || ''}`.toLowerCase();
+  return hay.includes(query);
+}
+
+function counts(rows) {
+  const c = { todos: rows.length, favoritos: 0, ocultos: 0 };
+  for (const r of rows) {
+    c[r.origin] = (c[r.origin] || 0) + 1;
+    if (r.favorite) c.favoritos++;
+    if (r.hidden) c.ocultos++;
+  }
+  return c;
+}
+
+function passesFilter(row) {
+  if (filter === 'todos') return !row.hidden;
+  if (filter === 'favoritos') return row.favorite && !row.hidden;
+  if (filter === 'ocultos') return row.hidden;
+  return row.origin === filter && !row.hidden;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function render() {
+  const rows = data.rows;
+  const sources = data.sources || {};
+  const c = counts(rows);
+  const live = rows.filter(r => r.status === 'activo').length;
+  const down = rows.filter(r => r.status === 'caido').length;
+
+  $('count').innerHTML = `<b>${live} activos</b> · <i>${down} caídos</i> · ${rows.length} descubiertos`;
+
+  const missing = [];
+  if (!sources.docker) missing.push('Docker no disponible');
+  if (!sources.sockets) missing.push('lsof no disponible');
+  $('banner').classList.toggle('show', missing.length > 0);
+  $('banner').textContent = missing.length ? `⚠ ${missing.join(' · ')} — la lista puede estar incompleta` : '';
+
+  // Grupos derivados de lo que el descubrimiento encontró — nunca hardcodeados.
+  const origins = [...new Set(rows.map(r => r.origin))].sort();
+  const groups = [
+    ['todos', 'Todos', c.todos],
+    ...origins.map(origin => [origin, `${originIcon(origin)} ${escapeHtml(String(origin))}`, c[origin] || 0]),
+    ['favoritos', '⭐ Favoritos', c.favoritos],
+    ['ocultos', '👁 Ocultos', c.ocultos],
+  ];
+
+  $('sidebar').innerHTML = '<div class="grp"><h3>Filtrar</h3>' + groups
+    .map(([id, label, n]) => `<button class="${filter === id ? 'on' : ''}" data-f="${escapeHtml(id)}">${label}<span class="n">${n}</span></button>`)
+    .join('') + '</div>';
+  // El sidebar colapsa a chips con todos los grupos, para no perder Ninguno en móvil.
+  $('chips').innerHTML = groups
+    .map(([id, label, n]) => `<button class="${filter === id ? 'on' : ''}" data-f="${escapeHtml(id)}">${label} <span class="n">${n}</span></button>`)
+    .join('');
+
+  const visible = rows.filter(passesFilter).filter(matches);
+  $('rows').innerHTML = visible.length ? visible.map(row => `
+    <tr data-key="${escapeHtml(row.key)}" class="${row.hidden ? 'hidden-row' : ''}">
+      <td>
+        <div class="svc">
+          <span class="ic">${originIcon(row.origin)}</span>
+          <span class="nm" data-edit="${escapeHtml(row.key)}" title="${escapeHtml(row.name ?? row.displayName)} — doble clic para renombrar">${escapeHtml(row.displayName)}</span>
+          <span class="extra">${escapeHtml(row.host)}:${escapeHtml(String(row.port))}</span>
+        </div>
+      </td>
+      <td class="col-origin"><span class="tag">${escapeHtml(String(row.origin))}</span></td>
+      <td class="col-url"><span class="tag">${escapeHtml(row.host)}:${escapeHtml(String(row.port))}</span></td>
+      <td><span class="badge ${statusClass(row.status)}">${escapeHtml(statusLabel(row.status))}</span></td>
+      <td>
+        <div class="btnrow">
+          <button class="icon" data-act="edit" title="Renombrar" aria-label="Renombrar ${escapeHtml(row.displayName)}">✎</button>
+          <button class="icon ${row.favorite ? 'on' : ''}" data-act="favorite"
+                  title="${row.favorite ? 'Quitar de favoritos' : 'Fijar'}"
+                  aria-pressed="${row.favorite}"
+                  aria-label="${row.favorite ? 'Quitar de favoritos' : 'Fijar'} ${escapeHtml(row.displayName)}">${row.favorite ? '★' : '☆'}</button>
+          <button class="icon" data-act="hide" title="${row.hidden ? 'Mostrar' : 'Ocultar'}"
+                  aria-pressed="${row.hidden}"
+                  aria-label="${row.hidden ? 'Mostrar' : 'Ocultar'} ${escapeHtml(row.displayName)}">${row.hidden ? '🙈' : '👁'}</button>
+          ${row.web
+            ? `<a class="icon" href="${escapeHtml(row.httpUrl)}" target="_blank" rel="noopener" title="Abrir" aria-label="Abrir ${escapeHtml(row.displayName)}">↗</a>`
+            : `<span class="tag" title="Sin interfaz web">TCP</span>`}
+        </div>
+      </td>
+    </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Nada coincide con el filtro actual.</td></tr>';
+}
+
+document.addEventListener('click', (e) => {
+  const grp = e.target.closest('[data-f]');
+  if (grp) { filter = grp.dataset.f; render(); return; }
+  const btn = e.target.closest('[data-act]');
+  if (btn) {
+    if (btn.dataset.act === 'edit') {
+      const span = btn.closest('tr').querySelector('[data-edit]');
+      if (span && !span.isContentEditable) beginRename(span);
+      return;
+    }
+    const key = btn.closest('tr').dataset.key;
+    const row = data.rows.find(r => r.key === key);
+    if (!row) return;
+    if (btn.dataset.act === 'favorite') send('favorite', key, !row.favorite);
+    if (btn.dataset.act === 'hide') send('hide', key, !row.hidden);
+  }
+});
+
+function beginRename(el) {
+  const key = el.dataset.edit;
+  const original = el.textContent;
+  editing = true;
+  el.contentEditable = 'true';
+  el.focus();
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  getSelection().removeAllRanges();
+  getSelection().addRange(range);
+
+  const finish = (save) => {
+    editing = false;
+    el.contentEditable = 'false';
+    const value = el.textContent.trim();
+    if (save && value && value !== original) send('rename', key, value);
+    else render();
+  };
+  el.addEventListener('blur', () => finish(true), { once: true });
+  el.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+    if (ev.key === 'Escape') { ev.preventDefault(); el.textContent = original; el.blur(); }
+  });
+}
+
+document.addEventListener('dblclick', (e) => {
+  const el = e.target.closest('[data-edit]');
+  if (!el || el.isContentEditable) return;
+  beginRename(el);
+});
+
+$('q').addEventListener('input', (e) => { query = e.target.value.trim().toLowerCase(); render(); });
+$('refresh').addEventListener('click', () => location.reload());
+
+function connect() {
+  const es = new EventSource('/events');
+  es.addEventListener('snapshot', (ev) => {
+    let parsed;
+    try { parsed = JSON.parse(ev.data); } catch { return; }
+    if (!parsed || !Array.isArray(parsed.rows)) return;
+    data = parsed;
+    // Un rename en curso no debe ser destruido por innerHTML; finish() re-renderiza.
+    if (!editing) render();
+  });
+  es.onerror = () => { es.close(); setTimeout(connect, 2000); };
+}
+connect();
+</script>
+</body>
+</html>

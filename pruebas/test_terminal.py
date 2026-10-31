@@ -47,8 +47,12 @@ class PasoTerminal(unittest.TestCase):
         shutil.rmtree(str(self.tmp), ignore_errors=True)
 
     def correr(self, *opciones):
+        # --sin-opencode aísla este paso: opencode/opencode.sh también agrega una
+        # línea al rc (se prueba en test_opencode.py). --sin-opencode-config evita
+        # un git clone real (el de ese paso se prueba en test_opencode_config.py).
         args = [sys.executable, str(INSTALAR_COMUN), "--plataforma", "unix",
-                "--sin-codebase-memory", "--sin-skills", "--sin-herdr"] + list(opciones)
+                "--sin-codebase-memory", "--sin-skills", "--sin-herdr",
+                "--sin-opencode", "--sin-opencode-config"] + list(opciones)
         r = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT, env=self.env, timeout=120)
         salida = r.stdout.decode("utf-8", "replace")

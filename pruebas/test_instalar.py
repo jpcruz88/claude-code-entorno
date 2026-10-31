@@ -23,8 +23,10 @@ INSTALAR_PS1 = RAIZ / "instalar.ps1"
 # Sin herdr: su paso llamaría a brew y a herdr de verdad (se prueba en test_herdr.py).
 # Sin Stats: tocaría tus preferencias reales de macOS (se prueba en InstalarStats).
 # Sin herramientas de terminal: agregarían una línea al .bashrc (se prueba en test_terminal.py).
+# Sin OpenCode: su init de shell también agrega una línea al rc (se prueba en test_opencode.py).
+# Sin config de OpenCode: evita un git clone real (se prueba en test_opencode_config.py).
 OPCIONES = ["--sin-skills", "--sin-codebase-memory", "--sin-herdr", "--sin-stats",
-            "--sin-terminal"]
+            "--sin-terminal", "--sin-opencode", "--sin-opencode-config"]
 
 # claude de mentira: anota cada llamada y contesta lo mínimo.
 CLAUDE_FALSO = """#!/bin/sh
@@ -195,7 +197,7 @@ class InstalarShNoInteractivo(BaseInstalarSh):
     def test_ayuda_lista_las_opciones_nuevas(self):
         salida = self.correr(["--ayuda"], stdin=subprocess.DEVNULL)
         for opcion in ("--sin-herdr", "--sin-ghostty", "--sin-plugins-herdr", "--servidor",
-                       "--sin-stats", "--sin-terminal"):
+                       "--sin-stats", "--sin-terminal", "--sin-nvim"):
             self.assertIn(opcion, salida)
 
     @unittest.skipUnless(sys.platform == "darwin", "el modo servidor solo existe en macOS")

@@ -11,9 +11,11 @@ archivo).
 Busca dos tipos de cosas:
 1. Patrones genéricos (están aquí mismo): rutas de usuario (/Users/<nombre>,
    /home/<nombre>, C:\\Users\\<nombre>), discos montados (/Volumes/<nombre>),
-   claves y tokens (sk-…, ghp_…, github_pat_…, AKIA…, llaves privadas), una
+   claves y tokens (sk-…, oc_sk_…, ghp_…, github_pat_…, AKIA…, llaves privadas), una
    CONTEXT7_API_KEY con valor, IPs, correos, nombres de equipo internos y
-   perfiles de AWS con valor.
+   perfiles de AWS con valor. Variables vigiladas con valor: CONTEXT7_API_KEY,
+   AWS_*, ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, OPENCODE_API_KEY,
+   OPENAI_API_KEY, OPENROUTER_API_KEY, GITHUB_TOKEN.
 2. Términos privados: nombres de clientes, teléfonos… Esos NO se escriben en el
    repo (sería publicarlos). Viven en un archivo aparte, fuera del repo:
      - el que diga la variable ENTORNO_TERMINOS_PRIVADOS, o
@@ -38,6 +40,7 @@ PATRONES = [
                                               re.I)),
     ("disco montado de macOS", re.compile(r"/Volumes/[A-Za-z0-9]")),
     ("clave tipo sk-", re.compile(r"\bsk-[A-Za-z0-9_-]{16,}")),
+    ("clave tipo oc_sk-", re.compile(r"\boc_sk_[A-Za-z0-9_-]{16,}")),
     ("token de GitHub", re.compile(r"\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}")),
     ("token de GitHub", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}")),
     ("clave de Context7", re.compile(r"\bctx7sk[-_][A-Za-z0-9]")),
@@ -54,7 +57,8 @@ PATRONES = [
 # Variables que nunca deben llevar un valor escrito en el repo
 # (no cuenta si es una referencia: ${VAR}, $VAR o $env:VAR)
 VARIABLES = re.compile(r"(?<![${:])\b(CONTEXT7_API_KEY|AWS_PROFILE|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY"
-                       r"|ANTHROPIC_API_KEY|GITHUB_TOKEN)['\"]?\s*[=:]\s*['\"]?([^\s'\"]*)")
+                       r"|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|OPENCODE_API_KEY"
+                       r"|OPENAI_API_KEY|OPENROUTER_API_KEY|GITHUB_TOKEN)['\"]?\s*[=:]\s*['\"]?([^\s'\"]*)")
 IPS_PERMITIDAS = {"127.0.0.1", "0.0.0.0", "255.255.255.255"}
 CORREOS_PERMITIDOS = re.compile(r"(noreply@anthropic\.com|@ejemplo\.(com|org|invalid)"
                                 r"|@example\.(com|org)|^git@github\.com$)", re.I)
