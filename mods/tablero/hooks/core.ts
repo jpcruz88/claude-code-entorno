@@ -154,7 +154,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     palette: str('palette', 'theme') === 'pastel' ? 'pastel' : 'theme',
     openOnStart: bool('openOnStart', true),
     statusLine: bool('statusLine', false),
-    banda: bool('banda', false),
+    banda: bool('banda', true),
     animacion: bool('animacion', true),
   }
 }

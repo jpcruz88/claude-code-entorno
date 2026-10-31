@@ -109,7 +109,7 @@
       "title": "Banda",
       "description": "Muestra la banda de Tablero sobre el prompt: carpeta, modelo, costo, contexto, subagentes, permisos y uso",
       "type": "boolean",
-      "default": false
+      "default": true
     },
     "animacion": {
       "title": "Animación",
