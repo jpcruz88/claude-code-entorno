@@ -1,0 +1,1 @@
+{ "name": "tdd-gate", "version": "0.1.0", "description": "Pregunta una vez por sesión si se edita código de producción sin haber tocado antes una prueba" }
