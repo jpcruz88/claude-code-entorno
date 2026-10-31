@@ -1,0 +1,75 @@
+name: CI
+
+# Corre en cada push a main y en cada pull request. Las mismas revisiones que
+# exportar.sh y los hooks de .githooks, pero en un entorno limpio.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas-linux:
+    name: Pruebas, privacidad y gitleaks (Linux)
+    runs-on: ubuntu-latest
+    env:
+      # Sin __pycache__: gitleaks revisa todos los archivos del directorio.
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Herramientas (jq, uv y Claude Code CLI)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+          pip install uv
+          # Versión fijada: la misma con la que se probaron los mods. Subirla a propósito.
+          npm install -g @anthropic-ai/claude-code@2.1.316
+
+      - name: Pruebas del repo
+        run: python3 -m unittest discover -s pruebas -v
+
+      - name: Revisión de datos privados (árbol de trabajo)
+        # El modo --historial no va aquí: exige la identidad local de git del autor,
+        # que el runner no tiene. El historial lo revisa gitleaks abajo.
+        run: python3 herramientas/revisar_privacidad.py --repo .
+
+      - name: gitleaks (historial y árbol de trabajo)
+        run: |
+          curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --source . --log-opts="--all" --no-banner
+          ./gitleaks detect --no-git --source . --no-banner
+
+  instalador-windows:
+    name: instalar.ps1 (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PSScriptAnalyzer (errores y advertencias de instalar.ps1)
+        shell: pwsh
+        run: |
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $r = Invoke-ScriptAnalyzer -Path instalar.ps1 -Severity Error,Warning
+          $r | Format-Table -AutoSize | Out-String | Write-Host
+          if ($r | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
+
+      - name: Pruebas que aplican a Windows
+        working-directory: pruebas
+        run: python -m unittest test_instalar.InstalarPs1 test_revisar_privacidad test_fusionar_settings test_memoria test_modelo test_mods -v

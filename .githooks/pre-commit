@@ -1,0 +1,20 @@
+#!/bin/sh
+# Antes de cada commit: revisión de datos privados y de secretos en lo que se va a
+# guardar. Si algo falla, el commit no se hace. Activar una vez por clon:
+#   git config core.hooksPath .githooks
+set -u
+REPO="$(git rev-parse --show-toplevel)" || exit 1
+
+python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" || {
+  echo "pre-commit: la revisión de privacidad encontró algo. Corrígelo y vuelve a intentar."
+  exit 1
+}
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: falta gitleaks (brew install gitleaks). No se puede hacer commit sin revisarlo."
+  exit 1
+fi
+gitleaks protect --staged --no-banner || {
+  echo "pre-commit: gitleaks encontró un secreto en lo que vas a guardar."
+  exit 1
+}
