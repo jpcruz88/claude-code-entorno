@@ -58,7 +58,8 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 - Sirve para lo que no se deduce del código: preferencias, decisiones y contexto
   de proyectos. No sirve para guardar código ni historial de git.
 - Si Claude guarda algo que no debe, bórralo del archivo; es texto plano.
-- El contenido nunca va al repo. Solo la regla que describe cómo usarla.
+- El contenido no va al repo público. Se guarda en tu repo privado `memoria-maestra`,
+  que el hook `memoria-maestra.py` sincroniza al iniciar y al terminar cada sesión.
 
 ## 6. Skills
 

@@ -5,6 +5,8 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- Memoria maestra privada: hook `memoria-maestra.py` (SessionStart y Stop) que pregunta si crear el repo privado, lo clona, enlaza la memoria y la sincroniza.
+- Regla `git.md` (commit y push siempre), regla y hook `nunca-fable` al repo maestro.
 - Agentes y subagentes: siempre Haiku con esfuerzo medio («llow» permitido). Hook `guard-subagentes.py` en Agent, Task y Workflow; esfuerzo de Opus `xhigh` retirado de la configuración base.
 - CI en GitHub Actions: pruebas, privacidad y gitleaks en Linux; PSScriptAnalyzer y
   pruebas en Windows.

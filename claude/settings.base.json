@@ -89,6 +89,27 @@
             "command": "~/.claude/hooks/cbm-session-reminder"
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/memoria-maestra.py inicio",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/memoria-maestra.py fin",
+            "timeout": 60
+          }
+        ]
       }
     ]
   },

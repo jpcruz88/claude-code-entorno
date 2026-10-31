@@ -362,8 +362,26 @@ con frontmatter y un tipo (`user`, `feedback`, `project` o `reference`).
 
 La regla `claude/rules/memoria.md` le indica a Claude cómo crear, leer y actualizar
 esas memorias: formato, índice, qué no guardar y cómo verificar lo que recomienda.
-Es la única parte que vive en el repo. **El contenido de la memoria no**: es de
-esta computadora y puede tener datos privados, así que nunca se exporta ni se sube.
+Es la única parte que vive en el repo. **El contenido de la memoria no**: puede tener
+datos privados, así que nunca va al repo público.
+
+### Memoria maestra privada
+
+Tu memoria se guarda en un repo **privado** de tu cuenta de GitHub
+(`memoria-maestra`), para llevarla a cualquier computadora. El hook
+`claude/hooks/memoria-maestra.py` lo maneja:
+
+- **Al iniciar sesión** (`SessionStart`): si esta computadora no tiene memoria maestra,
+  Claude te pregunta si quieres crearla. Si ya la tiene, trae los cambios del repo.
+- **Al terminar** (`Stop`): si la memoria cambió, la comitea y la sube.
+- **Para crearla a mano:** `python3 ~/.claude/hooks/memoria-maestra.py configurar`
+  (muestra el plan) y, si te gusta, con `--aplicar`. Pide `gh auth login` la primera vez.
+
+La carpeta de memoria del proyecto queda como un enlace a `~/memoria-maestra/memoria`,
+un clon del repo privado. Si ya tenías memoria en la computadora, se respalda en una
+carpeta `memory.bak-<fecha>` antes de enlazar, y lo que no esté en el repo se copia.
+
+Nunca pongas en el repo público el contenido de la memoria: solo el hook y la regla.
 
 ## Modelo por defecto: Haiku
 
