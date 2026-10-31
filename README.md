@@ -58,7 +58,7 @@ dices que sí.
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
@@ -352,6 +352,18 @@ Claude puede borrar, instalar o ejecutar cualquier cosa sin preguntarte; la
 advertencia es la última oportunidad de pensarlo. Actívalo solo si usas ese modo a
 menudo y entiendes lo que implica. Para quitarlo, borra la clave de
 `~/.claude/settings.json`.
+
+## Memoria persistente
+
+Claude Code guarda memorias entre conversaciones en la carpeta de memoria de cada
+proyecto (`~/.claude/projects/<proyecto>/memory/`). Su índice es `MEMORY.md`: una
+línea por memoria, que se lee al empezar cada sesión. Cada memoria es un archivo
+con frontmatter y un tipo (`user`, `feedback`, `project` o `reference`).
+
+La regla `claude/rules/memoria.md` le indica a Claude cómo crear, leer y actualizar
+esas memorias: formato, índice, qué no guardar y cómo verificar lo que recomienda.
+Es la única parte que vive en el repo. **El contenido de la memoria no**: es de
+esta computadora y puede tener datos privados, así que nunca se exporta ni se sube.
 
 ## Modelo por defecto: Haiku
 
