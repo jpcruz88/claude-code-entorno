@@ -76,6 +76,7 @@ import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
 import { bandaElemento } from './banda'
 import { bandaFilas, footerTexto } from './banda-modelo'
+import { filasMascota } from './mascota'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion, resumenLineas } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
@@ -759,7 +760,8 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (!cfg.banda || e.props.hasSurvey) return next(e)
     const entrada = suavizar(cfg, await entradaDe($, e.props.bodyColumns))
-    return bandaElemento(bandaFilas(entrada), C, $.ui.resolve(e))
+    const mascota = filasMascota({ contextoPct: entrada.contextoPct, ahora: entrada.ahora, columnas: entrada.columnas })
+    return bandaElemento([...bandaFilas(entrada), ...mascota], C, $.ui.resolve(e))
   })
 
   // ---------------------------------------------------------------- drawing
