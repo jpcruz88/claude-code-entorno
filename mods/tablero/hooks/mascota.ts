@@ -8,7 +8,7 @@ export type Animo = 'feliz' | 'cansada' | 'enferma' | 'muriendo' | 'muerta'
 const ANCHO_SPRITE = 5
 const ANCHO_MAX_ESCENA = 20
 // Cada cuántos milisegundos cambia el paso de la animación.
-export const PASO_MS = 800
+export const PASO_MS = 250
 
 const TONO_DE: Record<Animo, Tono> = {
   feliz: 'acento',
@@ -53,12 +53,13 @@ export const posicion = (tick: number, ancho: number, animo: Animo): number => {
   return p <= ancho ? p : periodo - p
 }
 
-const SPRITES: Record<Animo, { arriba: string; abajo: [string, string] }> = {
-  feliz: { arriba: '▄███▄', abajo: ['▀▀ ▀▀', ' ▀▀▀ '] },
-  cansada: { arriba: '▄███▄', abajo: ['▀▄▄▄▀', '▀▄▄▄▀'] },
-  enferma: { arriba: '▄▓▓▓▄', abajo: ['▀▄▄▄▀', '▀▄▄▄▀'] },
-  muriendo: { arriba: '▄▒▒▒▄', abajo: ['▀▀▀▀▀', '▀▀▀▀▀'] },
-  muerta: { arriba: ' ✝ ', abajo: ['▄▄▄▄▄', '▄▄▄▄▄'] },
+// Las patas de cada ánimo dan un ciclo de caminar de cuatro pasos: apoyadas, separadas, apoyadas, juntas.
+const SPRITES: Record<Animo, { arriba: string; abajo: string[] }> = {
+  feliz: { arriba: '▄███▄', abajo: ['▀▀ ▀▀', ' ▀▀▀ ', '▀▀ ▀▀', ' ▀ ▀ '] },
+  cansada: { arriba: '▄███▄', abajo: ['▀▄▄▄▀', '▀▄▄▄▀', '▀▄▄▄▀', '▀▄▄▄▀'] },
+  enferma: { arriba: '▄▓▓▓▄', abajo: ['▀▄▄▄▀', '▀▄▄▄▀', '▀▄▄▄▀', '▀▄▄▄▀'] },
+  muriendo: { arriba: '▄▒▒▒▄', abajo: ['▀▀▀▀▀', '▀▀▀▀▀', '▀▀▀▀▀', '▀▀▀▀▀'] },
+  muerta: { arriba: ' ✝ ', abajo: ['▄▄▄▄▄', '▄▄▄▄▄', '▄▄▄▄▄', '▄▄▄▄▄'] },
 }
 
 /** Las dos filas de la mascota (cuerpo y patas) con su etiqueta, o ninguna si no hay lectura. */
@@ -74,7 +75,7 @@ export const filasMascota = (e: { contextoPct: number | null; ahora: number; col
   const tick = Math.floor(e.ahora / PASO_MS)
   const x = posicion(tick, ancho, animo)
   const sprite = SPRITES[animo]
-  const pata = sprite.abajo[tick % 2]
+  const pata = sprite.abajo[tick % sprite.abajo.length]
   const tono = TONO_DE[animo]
   return [
     { tramos: [{ texto: ' '.repeat(x) + sprite.arriba, tono }] },
