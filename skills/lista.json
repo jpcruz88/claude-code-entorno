@@ -102,6 +102,10 @@
       "origen": "google-gemini/gemini-skills@gemini-api-dev"
     },
     {
+      "nombre": "git-workflow-and-versioning",
+      "origen": "addyosmani/agent-skills@git-workflow-and-versioning"
+    },
+    {
       "nombre": "grill-me",
       "origen": "mattpocock/skills@grill-me"
     },
