@@ -31,7 +31,8 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq
           pip install uv
-          npm install -g @anthropic-ai/claude-code
+          # Versión fijada: la misma con la que se probaron los mods. Subirla a propósito.
+          npm install -g @anthropic-ai/claude-code@2.1.316
 
       - name: Pruebas del repo
         run: python3 -m unittest discover -s pruebas -v
@@ -67,4 +68,5 @@ jobs:
           if ($r | Where-Object { $_.Severity -eq 'Error' }) { exit 1 }
 
       - name: Pruebas que aplican a Windows
-        run: python -m unittest discover -s pruebas -v
+        working-directory: pruebas
+        run: python -m unittest test_instalar.InstalarPs1 test_revisar_privacidad test_fusionar_settings test_memoria test_modelo test_mods -v
