@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- Agentes y subagentes: siempre Haiku con esfuerzo medio («llow» permitido). Hook `guard-subagentes.py` en Agent, Task y Workflow; esfuerzo de Opus `xhigh` retirado de la configuración base.
 - CI en GitHub Actions: pruebas, privacidad y gitleaks en Linux; PSScriptAnalyzer y
   pruebas en Windows.
 - Hooks de git en `.githooks/` (`pre-commit` y `pre-push`).

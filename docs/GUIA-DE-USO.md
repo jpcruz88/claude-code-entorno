@@ -38,6 +38,8 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 - Para otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o usa
   `/model`. Vale solo para esa tarea.
 - Fable no se usa por omisión; solo si lo pides de forma explícita.
+- **Agentes y subagentes:** siempre Haiku con esfuerzo medio. El hook
+  `guard-subagentes.py` bloquea cualquier otro modelo o un esfuerzo mayor.
 
 ## 4. Flujo recomendado para cambios de código
 

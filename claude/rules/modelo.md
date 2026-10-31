@@ -1,11 +1,18 @@
-## Modelo por defecto: Haiku
+## Modelo y esfuerzo
 
-Usa **Haiku** para todo, salvo que el usuario pida otro modelo de forma explícita
-en ese mensaje (por ejemplo «usa opus», «con sonnet», «/model opus»). Esa petición
-vale solo para esa tarea: en la siguiente vuelve a Haiku.
+**Agentes y subagentes (herramienta Agent, Task y Workflow):** siempre
+`claude-haiku-5-5` con esfuerzo **medio**. Sin excepciones: ningún otro modelo, y
+ningún esfuerzo más alto que medio. Pasa siempre `model: "haiku"` y
+`effort: "medium"` (en un workflow, `model: 'haiku'` y `effort: 'medium'` en cada
+`agent()`). Un agente sin esos dos parámetros explícitos, o con otros valores, se
+bloquea (`claude/hooks/guard-subagentes.py`). El esfuerzo «low» también se acepta.
 
-- Subagentes (herramienta Agent): pasa `model: "haiku"` salvo que el usuario pida
-  otro modelo.
-- Nunca uses Fable por tu cuenta, ni en subagentes ni en workflows.
-- No cambies de modelo por tu cuenta para «hacerlo mejor»: si una tarea parece
-  demasiado para Haiku, dilo y pregunta antes de cambiar.
+**Sesión principal:** arranca con **Haiku**. Solo cambia de modelo si el usuario lo
+pide de forma explícita en ese mensaje (por ejemplo «usa opus», «/model opus»). Esa
+petición vale solo para esa tarea; la siguiente vuelve a Haiku.
+
+**Siempre:**
+- Nunca uses Fable, ni en la sesión ni en subagentes ni en workflows, salvo que el
+  usuario lo pida de forma explícita y lo confirme (`claude/hooks/guard-fable.py`).
+- No cambies de modelo por tu cuenta para «hacerlo mejor». Si una tarea parece
+  demasiado para Haiku con esfuerzo medio, dilo y pregunta antes de cambiar.
