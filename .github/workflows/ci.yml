@@ -15,6 +15,9 @@ jobs:
   pruebas-linux:
     name: Pruebas, privacidad y gitleaks (Linux)
     runs-on: ubuntu-latest
+    env:
+      # Sin __pycache__: gitleaks revisa todos los archivos del directorio.
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - uses: actions/checkout@v4
 
