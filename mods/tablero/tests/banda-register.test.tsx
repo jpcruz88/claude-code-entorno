@@ -53,12 +53,12 @@ test('la banda sale sobre el prompt con los datos en español', { options: { ban
   await ui.unmount()
 })
 
-test('por defecto la banda no se dibuja', async ($, on) => {
+test('por defecto la banda y la mascota se dibujan', async ($, on) => {
   motor(on)
   motorDibuja(on)
+  await medir($)
   const ui = await $.ui.mount(BANDA())
-  expect(await ui.find({ text: /Carpeta/ })).toBeUndefined()
-  expect(await ui.find({ text: /motor/ })).toBeDefined()
+  expect(await ui.find({ text: /Carpeta/ })).toBeDefined()
   await ui.unmount()
 })
 
