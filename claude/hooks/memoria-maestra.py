@@ -43,11 +43,19 @@ def config_path():
                                str(Path.home() / ".claude" / "memoria-maestra.json")))
 
 
-def carpeta_memoria(cwd):
+def carpeta_memoria(cwd, base=None):
     """Carpeta de memoria que Claude Code usa para un proyecto (ruta codificada)."""
-    base = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+    if base is None:
+        base = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
     codificado = re.sub(r"[^A-Za-z0-9]", "-", str(cwd))
-    return base / "projects" / codificado / "memory"
+    return Path(base) / "projects" / codificado / "memory"
+
+
+def slug_proyecto(cwd):
+    """Nombre legible y estable del proyecto: la última carpeta, en minúsculas y con guiones."""
+    nombre = Path(str(cwd)).name or "proyecto"
+    limpio = re.sub(r"[^a-z0-9]+", "-", nombre.lower()).strip("-")
+    return limpio or "proyecto"
 
 
 def git(cwd, *args):
@@ -73,7 +81,26 @@ def _commit_y_subir(clon, mensaje):
     return True
 
 
-def configurar(memoria, clon, remoto, config):
+def _enlazar(memoria, destino):
+    """Enlaza la carpeta de memoria a `destino`, mezclando lo local sin pisar el remoto."""
+    memoria = Path(memoria)
+    if memoria.is_symlink() and memoria.resolve() == destino.resolve():
+        return
+    destino.mkdir(parents=True, exist_ok=True)
+    if memoria.is_symlink():
+        memoria.unlink()
+    elif memoria.exists():
+        for archivo in memoria.glob("*.md"):
+            if not (destino / archivo.name).exists():
+                shutil.copy2(str(archivo), str(destino / archivo.name))
+        respaldo = memoria.with_name(memoria.name + ".bak-" +
+                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        memoria.rename(respaldo)
+    memoria.parent.mkdir(parents=True, exist_ok=True)
+    memoria.symlink_to(destino, target_is_directory=True)
+
+
+def configurar(memoria, clon, remoto, config, proyecto="principal"):
     """Clona el repo privado, mezcla la memoria local y enlaza la carpeta de memoria.
 
     Es idempotente: una segunda corrida no repite ni rompe nada.
@@ -86,26 +113,17 @@ def configurar(memoria, clon, remoto, config):
         git(clon, "fetch", "-q", "origin")
         if git(clon, "rev-parse", "--verify", "-q", "origin/main").returncode == 0:
             git(clon, "checkout", "-q", "-B", "main", "origin/main")
-    destino = clon / "memoria"
-    destino.mkdir(exist_ok=True)
-
-    # Lo que hay en esta computadora se mezcla: lo que ya está en el remoto gana.
-    if memoria.exists() and not memoria.is_symlink():
-        for archivo in memoria.glob("*.md"):
-            if not (destino / archivo.name).exists():
-                shutil.copy2(str(archivo), str(destino / archivo.name))
-        respaldo = memoria.with_name(memoria.name + ".bak-" +
-                                     datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        memoria.rename(respaldo)
-    elif memoria.is_symlink():
-        memoria.unlink()
-    memoria.parent.mkdir(parents=True, exist_ok=True)
-    memoria.symlink_to(destino, target_is_directory=True)
-
+    _enlazar(memoria, clon / "memoria" / proyecto)
     _commit_y_subir(clon, "memoria: configura la memoria maestra")
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text(json.dumps({"remoto": remoto, "clon": str(clon),
                                   "memoria": str(memoria)}, indent=2) + "\n", encoding="utf-8")
+
+
+def enlazar_proyecto(cwd, clon, base=None):
+    """Enlaza la memoria del proyecto `cwd` con el repo privado (crea su carpeta si falta)."""
+    destino = Path(clon) / "memoria" / slug_proyecto(cwd)
+    _enlazar(carpeta_memoria(cwd, base), destino)
 
 
 def sincronizar(clon):
@@ -141,6 +159,8 @@ def modo_inicio():
                                                  "additionalContext": PREGUNTA}}))
         return
     traer(cfg.get("clon", ""))
+    cwd = datos.get("cwd") or os.getcwd()
+    enlazar_proyecto(cwd, cfg.get("clon", ""))
 
 
 def modo_fin():
