@@ -154,5 +154,25 @@ class Historial(unittest.TestCase):
             self.assertIn("autor distinto del acordado", tipos_)
 
 
+    def test_commits_de_github_no_son_hallazgo(self):
+        # Los merges que hace GitHub al integrar un PR llevan el correo genérico de GitHub.
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            self.git(repo, "init", "-q", "-b", "main")
+            acordado = "acordada" + "@ejemplo.invalid"
+            self.git(repo, "config", "user.name", "Persona Acordada")
+            self.git(repo, "config", "user.email", acordado)
+            (repo / "a.txt").write_text("hola\n")
+            self.git(repo, "add", "a.txt")
+            self.git(repo, "commit", "-q", "-m", "uno")
+            (repo / "b.txt").write_text("x\n")
+            self.git(repo, "add", "b.txt")
+            gh = "noreply" + "@github.com"  # partido: el escáner no debe ver el correo literal
+            self.git(repo, "commit", "-q", "-m", "merge de GitHub", GIT_AUTHOR_NAME="GitHub",
+                     GIT_AUTHOR_EMAIL=gh, GIT_COMMITTER_NAME="GitHub",
+                     GIT_COMMITTER_EMAIL=gh)
+            self.assertEqual(rp.revisar(repo, [], historial=True), [])
+
+
 if __name__ == "__main__":
     unittest.main()

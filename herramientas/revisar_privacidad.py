@@ -150,6 +150,9 @@ def es_binario(datos):
     return b"\0" in datos[:8192]
 
 
+CORREO_GITHUB = "noreply" + "@github.com"  # correo genérico de GitHub, no personal
+
+
 def revisar_identidades(repo):
     """Autor y committer de todos los commits deben ser la identidad local acordada."""
     nombre = git(repo, "config", "--local", "user.name")[1].decode("utf-8", "replace").strip()
@@ -169,9 +172,10 @@ def revisar_identidades(repo):
         # Se acepta el correo acordado aunque el nombre de usuario de git sea otro (p. ej.
         # commits viejos hechos con un nombre de usuario distinto): lo que no debe salir
         # es el correo, y ese se compara siempre.
-        if ae != correo:
+        # Los merges de GitHub (al integrar un PR) llevan su correo genérico: no es personal.
+        if ae not in (correo, CORREO_GITHUB):
             hallazgos.append(("commit " + h, 0, "autor distinto del acordado", enmascarar(ae)))
-        if ce != correo:
+        if ce not in (correo, CORREO_GITHUB):
             hallazgos.append(("commit " + h, 0, "committer distinto del acordado", enmascarar(ce)))
     return hallazgos
 
