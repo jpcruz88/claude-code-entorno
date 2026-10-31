@@ -58,7 +58,7 @@ dices que sí.
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
@@ -325,7 +325,7 @@ con un aviso.
 
 | Clave | Valor | Qué hace |
 |---|---|---|
-| `model` | `opus` | Modelo por omisión. |
+| `model` | `haiku` | Modelo por omisión: Haiku. Ver [Modelo por defecto](#modelo-por-defecto-haiku). |
 | `modelSettings` | `claude-opus-5-5` → `effortLevel: xhigh` | Esfuerzo de razonamiento alto para ese modelo. |
 | `statusLine` | `~/.claude/statusline.sh` | Línea de estado de abajo (en Windows: `bash ~/.claude/statusline.sh`). |
 | `hooks.PreToolUse` `Bash\|PowerShell` | `guard-kill.py` | Revisa cada comando antes de correrlo y bloquea los que matan procesos en masa. |
@@ -353,6 +353,24 @@ advertencia es la última oportunidad de pensarlo. Actívalo solo si usas ese mo
 menudo y entiendes lo que implica. Para quitarlo, borra la clave de
 `~/.claude/settings.json`.
 
+## Modelo por defecto: Haiku
+
+Cada sesión arranca con **Haiku**. Se fija en dos sitios que se complementan:
+
+| Dónde | Qué hace |
+|---|---|
+| `claude/settings.base.json` → `"model": "haiku"` | Es el modelo con el que arranca Claude Code. |
+| `claude/rules/modelo.md` | Le indica a Claude que use Haiku también en los subagentes (`model: "haiku"`) y que no cambie de modelo por su cuenta. |
+
+Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o
+usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
+Fable no se usa por omisión: solo si lo pides de forma explícita.
+
+Para cambiar el modelo por defecto en todas tus computadoras, edita
+`claude/settings.base.json`, haz commit y corre el instalador en cada una. En la
+Mac principal, `exportar.sh` regenera ese archivo desde tu config viva
+(`~/.claude/settings.json`), así que cambia primero el modelo ahí y luego exporta.
+
 ## Hook `guard-kill.py`
 
 - Corre con `python` o `python3` (3.6 o más nuevo), sin nada extra.
@@ -379,6 +397,35 @@ Funciona igual en Mac, Linux y Git Bash de Windows. Solo necesita `jq` (en
 Windows: `winget install jqlang.jq`) y `git` para la rama. Todos los cálculos los
 hace `jq`, así que no depende de `bc`, de `date -r` (que solo existe en Mac) ni
 del idioma del sistema: los días salen en español siempre.
+
+## Mods
+
+Ocho mods de Claude Code en `mods/`, cada uno con su plugin y sus pruebas. Se
+instalan por defecto en todas las computadoras (`--sin-mods` / `-SinMods` para
+omitirlos).
+
+| Mod | Qué hace |
+|---|---|
+| `secret-guard` | Bloquea escribir secretos en archivos y comandos; pregunta antes de leer archivos sensibles. |
+| `tdd-gate` | Pregunta una vez por sesión si se edita código de producción sin haber tocado antes una prueba. |
+| `spec-gate` | Pregunta una vez por sesión si se edita código de producción sin una spec reciente. |
+| `guard-kill-visible` | Avisa cuando un comando mata procesos por nombre. Solo avisa, no bloquea. |
+| `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto. |
+| `sound-notify` | Avisa al terminar un turno largo y cuando Claude espera un permiso. |
+| `caveman-badge` | Muestra en la línea de estado el modo caveman (aproximado). |
+| `tablero` | Panel en español con carpeta, modelo, costo, contexto, subagentes, permisos y uso. Derivado de Flightdeck (MIT). |
+
+El repo es su propio marketplace: `.claude-plugin/marketplace.json` lista cada mod
+con su carpeta. El instalador agrega el marketplace por la ruta de este repo y
+después instala `<mod>@claude-code-entorno`. Por eso, si mueves la carpeta del
+repo, vuelve a correr el instalador; si falla, quita primero el marketplace con
+`claude plugin marketplace remove claude-code-entorno`.
+
+Cada mod se prueba con `claude plugin test mods/<nombre>`; `exportar.sh` las corre
+todas. Licencia MIT (ver `LICENSE`); `tablero` conserva el aviso de Flightdeck.
+
+Para agregar un mod: crea `mods/<nombre>/` con `.claude-plugin/plugin.json` y sus
+hooks, agrégalo a `.claude-plugin/marketplace.json` y corre sus pruebas.
 
 ## Servidores MCP
 

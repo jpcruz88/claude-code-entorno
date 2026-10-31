@@ -46,7 +46,7 @@ class Fusion(unittest.TestCase):
         codigo, _ = self.aplicar(python_hooks="python3")
         self.assertEqual(codigo, 0)
         primero = self.leer()
-        self.assertEqual(primero["model"], "opus")
+        self.assertEqual(primero["model"], "haiku")
         self.assertIn(("Bash|PowerShell", "python3 ~/.claude/hooks/guard-kill.py"),
                       comandos(primero, "PreToolUse"))
         self.assertEqual(len(comandos(primero, "SessionStart")), 4)
