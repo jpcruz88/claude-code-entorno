@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { animoDe, filasMascota, posicion, vidaDe } from '../hooks/mascota'
+import { PASO_MS, animoDe, filasMascota, posicion, vidaDe } from '../hooks/mascota'
 
 test('la vida es lo que le queda de contexto', () => {
   expect(vidaDe(0)).toBe(100)
@@ -62,4 +62,17 @@ test('nada se sale del ancho de la banda', () => {
       expect(ancho).toBeLessThanOrEqual(30)
     }
   }
+})
+
+test('el paso de la animación dura 250 ms, para que camine sin saltos largos', () => {
+  expect(PASO_MS).toBe(250)
+})
+
+test('al caminar la mascota alterna tres poses de pata distintas, no solo dos', () => {
+  const patas = new Set<string>()
+  for (let paso = 0; paso < 4; paso++) {
+    const fila = filasMascota({ contextoPct: 10, ahora: paso * PASO_MS, columnas: 80 })[1]
+    patas.add(fila.tramos[0].texto.trim())
+  }
+  expect(patas.size).toBeGreaterThanOrEqual(3)
 })

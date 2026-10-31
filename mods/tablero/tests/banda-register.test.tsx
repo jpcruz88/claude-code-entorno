@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
+import { PASO_MS } from '../hooks/mascota'
+
 const BANDA = (overrides: Record<string, unknown> = {}) => ({
   plugin: 'tablero',
   component: 'AbovePrompt' as const,
@@ -120,7 +122,7 @@ test('con la mascota viva redibuja a su paso, no a cada cuadro', { options: { ba
   expect(invalidaciones).toBeGreaterThan(quieto)
   const tras = invalidaciones
   await reloj.advance(5_000)
-  // La mascota camina con contexto medido: un redibujo por paso de 800 ms, no uno por cuadro de 120 ms.
+  // La mascota camina con contexto medido: un redibujo por paso (PASO_MS), no uno por cuadro de 120 ms.
   expect(invalidaciones - tras).toBeGreaterThan(0)
-  expect(invalidaciones - tras).toBeLessThanOrEqual(10)
+  expect(invalidaciones - tras).toBeLessThanOrEqual(Math.ceil(5_000 / PASO_MS) + 1)
 })
