@@ -22,8 +22,8 @@ otros la reusen: los cambios se revisan para que no entre nada privado.
 3. **Revisa privacidad y secretos:** `./exportar.sh` (sin `--aplicar` no escribe
    nada). Si todo está en orden, los hooks y el CI hacen lo mismo en cada commit,
    push y pull request.
-4. **Commit:** mensaje en español, con una línea de resumen clara. Si lo escribe
-   Claude Code, lleva la línea `Co-Authored-By`.
+4. **Commit:** convenciones de `claude/rules/git.md` (Conventional Commits en español,
+   con la línea `Co-Authored-By` si lo escribe Claude Code).
 5. **Pull request:** describe qué cambia y cómo lo probaste. El CI debe quedar en
    verde (Linux y Windows).
 

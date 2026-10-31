@@ -49,8 +49,8 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 3. **Verifica con evidencia.** No aceptes «ya quedó» sin la salida de las pruebas.
 4. **Subagentes solo para tareas independientes** (búsquedas amplias, revisiones).
    Cada subagente cuesta; no los uses para cosas que caben en una respuesta.
-5. **Commit y push solo cuando lo pidas.** Está escrito en la memoria y en
-   `AGENTS.md`.
+5. **Commit y push siempre al terminar un cambio.** Las convenciones de mensaje
+   están en `claude/rules/git.md`.
 
 ## 5. Memoria persistente
 

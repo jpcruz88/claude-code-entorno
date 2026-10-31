@@ -22,6 +22,9 @@
       "cbm-session-reminder": {},
       "guard-subagentes.py": {
         "matcher": "Agent|Task|Workflow"
+      },
+      "guard-fable.py": {
+        "matcher": "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit"
       }
     },
     "_plugins": "enabledPlugins se recorta a los que estén en plugins.txt."
@@ -33,7 +36,9 @@
     "caveman.md",
     "tdd.md",
     "modelo.md",
-    "memoria.md"
+    "memoria.md",
+    "nunca-fable.md",
+    "git.md"
   ],
   "_skills_permitidas": "Únicas skills que se exportan (con su origen de .skill-lock.json, que debe ser un repositorio público de GitHub). Una skill usada que no esté aquí no se exporta; exportar.sh avisa.",
   "skills_permitidas": [
