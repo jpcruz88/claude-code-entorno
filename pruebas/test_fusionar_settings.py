@@ -12,7 +12,8 @@ sys.path.insert(0, str(RAIZ / "herramientas"))
 import fusionar_settings as fs  # noqa: E402
 
 BASE = RAIZ / "claude" / "settings.base.json"
-TODOS = {"guard-kill.py", "cbm-code-discovery-gate", "cbm-session-reminder"}
+TODOS = {"guard-kill.py", "cbm-code-discovery-gate", "cbm-session-reminder",
+         "guard-fable.py", "guard-subagentes.py", "memoria-maestra.py"}
 
 
 def comandos(settings, evento):
@@ -49,7 +50,7 @@ class Fusion(unittest.TestCase):
         self.assertEqual(primero["model"], "haiku")
         self.assertIn(("Bash|PowerShell", "python3 ~/.claude/hooks/guard-kill.py"),
                       comandos(primero, "PreToolUse"))
-        self.assertEqual(len(comandos(primero, "SessionStart")), 4)
+        self.assertEqual(len(comandos(primero, "SessionStart")), 5)  # 4 de codebase-memory y la de memoria
         self.assertEqual(self.respaldos(), [])  # no había nada que respaldar
         codigo, salida = self.aplicar(python_hooks="python3")
         self.assertIn("ya estaba al día", salida)
@@ -66,7 +67,8 @@ class Fusion(unittest.TestCase):
         self.assertEqual(r["model"], "sonnet")
         self.assertEqual(r["theme"], "light")
         self.assertEqual(r["env"], {"MI_VAR": "1"})
-        self.assertEqual(comandos(r, "Stop"), [(None, "mi-script")])
+        self.assertIn((None, "mi-script"), comandos(r, "Stop"))
+        self.assertIn((None, "python3 ~/.claude/hooks/memoria-maestra.py fin"), comandos(r, "Stop"))
         self.assertEqual(r["tui"], "fullscreen")
         self.assertIn("Se conserva tu valor de model", salida)
         self.assertEqual(len(self.respaldos()), 1)
@@ -97,8 +99,9 @@ class Fusion(unittest.TestCase):
     def test_sin_codebase_memory(self):
         self.aplicar(python_hooks="python3", sin_codebase_memory=True)
         r = self.leer()
-        self.assertNotIn("SessionStart", r["hooks"])
-        self.assertEqual([m for m, _ in comandos(r, "PreToolUse")], ["Bash|PowerShell"])
+        self.assertNotIn("cbm-session-reminder", [c for _, c in comandos(r, "SessionStart")])
+        self.assertEqual([m for m, _ in comandos(r, "PreToolUse")],
+                         ["Bash|PowerShell", "Agent|Task|Workflow", "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit"])
 
     def test_omite_hooks_sin_script(self):
         _, salida = self.aplicar(python_hooks="python3", scripts_disponibles={"guard-kill.py"})

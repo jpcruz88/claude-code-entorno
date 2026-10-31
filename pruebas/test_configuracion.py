@@ -26,7 +26,8 @@ class AjustesBase(unittest.TestCase):
             for grupo in grupos:
                 for hook in grupo["hooks"]:
                     comando = hook["command"]
-                    nombre = Path(comando).name
+                    buscado = re.search(r"[\w.-]+\.(?:py|sh)", comando)
+                    nombre = buscado.group(0) if buscado else Path(comando).name
                     if nombre.startswith(HOOKS_DE_OTRO_PROGRAMA):
                         continue
                     with self.subTest(evento=evento, comando=comando):

@@ -25,7 +25,8 @@
       },
       "guard-fable.py": {
         "matcher": "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit"
-      }
+      },
+      "memoria-maestra.py": {}
     },
     "_plugins": "enabledPlugins se recorta a los que estén en plugins.txt."
   },

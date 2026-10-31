@@ -23,6 +23,13 @@ class ConfiguracionCompleta(unittest.TestCase):
         comandos = [h["command"] for g in self.base["hooks"]["PreToolUse"] for h in g["hooks"]]
         self.assertIn("python3 ~/.claude/hooks/guard-fable.py", comandos)
 
+    def test_memoria_maestra_inicio_y_fin(self):
+        eventos = {e: [h["command"] for g in self.base["hooks"][e] for h in g["hooks"]]
+                   for e in ("SessionStart", "Stop")}
+        self.assertIn("python3 ~/.claude/hooks/memoria-maestra.py inicio", eventos["SessionStart"])
+        self.assertIn("python3 ~/.claude/hooks/memoria-maestra.py fin", eventos["Stop"])
+        self.assertIn("memoria-maestra.py", self.filtros["settings"]["hooks_permitidos"])
+
     def test_reglas_de_git_piden_commit_y_push(self):
         texto = (RAIZ / "claude" / "rules" / "git.md").read_text(encoding="utf-8")
         self.assertIn("commit", texto)
