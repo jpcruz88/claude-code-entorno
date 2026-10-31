@@ -5,7 +5,8 @@ Lo llaman instalar.sh e instalar.ps1 cuando ya están Python, Node, Git y jq.
 Hace, en orden:
   1. Copia reglas, hooks y statusline a ~/.claude (respaldo si ya había otra versión).
   2. Fusiona claude/settings.base.json con ~/.claude/settings.json.
-  3. Instala los plugins de plugins.txt.
+  3. Instala los plugins de plugins.txt y los mods de mods/ (el marketplace es
+     este mismo repo; --sin-mods omite los mods).
   4. Instala las skills de skills/lista.json.
   5. Registra los servidores MCP de mcp/.
   6. herdr: su config, la integración con Claude, su skill y los plugins de
@@ -34,6 +35,8 @@ import fusionar_settings  # noqa: E402
 
 ES_WINDOWS = os.name == "nt"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
+# Este repo es su propio marketplace de mods (.claude-plugin/marketplace.json).
+NOMBRE_MARKETPLACE_MODS = "claude-code-entorno"
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
 MARCADOR_HERDR = "{{RUTA_HERDR}}"
 # Skill oficial de herdr: enseña a Claude a manejar paneles y otros agentes.
@@ -68,6 +71,7 @@ class Instalador:
         self.sin_cbm = a.sin_codebase_memory
         self.suponer_cbm = a.suponer_codebase_memory
         self.sin_skills = a.sin_skills
+        self.sin_mods = a.sin_mods
         self.git_bash = a.git_bash
         self.saltar_aviso = a.saltar_aviso_permisos
         self.sin_herdr = a.sin_herdr
@@ -266,6 +270,57 @@ class Instalador:
                 self.info("instalado: %s" % pid)
             else:
                 self.fallo("plugin %s: %s" % (pid, resumen_error(salida)))
+
+    # ------------------------------------------------------------ 3b. mods
+    def nombres_mods(self):
+        datos = json.loads((REPO / ".claude-plugin" / "marketplace.json")
+                           .read_text(encoding="utf-8"))
+        return [p["name"] for p in datos.get("plugins", [])]
+
+    def mods(self):
+        self.paso("Mods (mods/, marketplace de este repo)")
+        if self.sin_mods:
+            self.info("Se omiten (--sin-mods).")
+            return
+        nombres = self.nombres_mods()
+        if self.simular:
+            for nombre in nombres:
+                self.info("[simular] haría: claude plugin install %s@%s --scope user"
+                          % (nombre, NOMBRE_MARKETPLACE_MODS))
+            return
+        claude = self.claude()
+        if not claude:
+            self.aviso("No encontré el comando claude; se omiten los mods.")
+            self.pendientes.append("Instala Claude Code y vuelve a correr el instalador "
+                                   "para los mods.")
+            return
+        codigo, salida = self.correr([claude, "plugin", "marketplace", "list", "--json"],
+                                     timeout=120)
+        mercados = {m.get("name") for m in (self._json_de(salida) or []) if isinstance(m, dict)}
+        # Siempre desde esta carpeta: si el repo se movió, así se corrige la ruta.
+        if NOMBRE_MARKETPLACE_MODS in mercados:
+            comando = ["marketplace", "update", NOMBRE_MARKETPLACE_MODS]
+        else:
+            comando = ["marketplace", "add", str(REPO)]
+        self.info("$ claude plugin %s" % " ".join(comando))
+        codigo, salida = self.correr([claude, "plugin"] + comando)
+        if codigo != 0:
+            self.fallo("marketplace de mods: %s" % resumen_error(salida))
+            return
+        codigo, salida = self.correr([claude, "plugin", "list", "--json"], timeout=120)
+        lista = self._json_de(salida) if codigo == 0 else None
+        instalados = {p.get("id") for p in (lista or []) if isinstance(p, dict)}
+        for nombre in nombres:
+            pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
+            if pid in instalados:
+                self.info("ya instalado: %s" % pid)
+                continue
+            self.info("$ claude plugin install %s --scope user" % pid)
+            codigo, salida = self.correr([claude, "plugin", "install", pid, "--scope", "user"])
+            if codigo == 0:
+                self.info("instalado: %s" % pid)
+            else:
+                self.fallo("mod %s: %s" % (nombre, resumen_error(salida)))
 
     # ------------------------------------------------------------ 4. skills
     def instalar_skill(self, nombre, origen):
@@ -582,6 +637,8 @@ def main(argv=None):
     p.add_argument("--suponer-codebase-memory", action="store_true",
                    help="(simulación) actuar como si ya estuviera instalado")
     p.add_argument("--sin-skills", action="store_true")
+    p.add_argument("--sin-mods", action="store_true",
+                   help="no instala los mods de mods/ (por omisión sí)")
     p.add_argument("--saltar-aviso-permisos", action="store_true",
                    help="agrega skipDangerousModePermissionPrompt (apagado por omisión)")
     p.add_argument("--sin-herdr", action="store_true",
@@ -598,7 +655,7 @@ def main(argv=None):
     if os.path.isabs(a.python_hooks) and not a.python_hooks.startswith('"'):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
-    for paso in (inst.archivos, inst.settings, inst.plugins, inst.skills, inst.mcp,
+    for paso in (inst.archivos, inst.settings, inst.plugins, inst.mods, inst.skills, inst.mcp,
                  inst.herdr, inst.ghostty, inst.terminal, inst.git):
         try:
             paso()

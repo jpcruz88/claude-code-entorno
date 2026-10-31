@@ -62,6 +62,7 @@ dices que sí.
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
+| Mods | `mods/` | Ocho mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify`, `caveman-badge` y `tablero` (panel en español sobre el prompt). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
@@ -179,6 +180,7 @@ aceptar.
 | `-NoInteractivo` | No pregunta nada (para agentes y scripts): si falta la clave de Context7, la omite y explica cómo ponerla después. Se activa solo si no hay una consola que pueda contestar (entrada redirigida o `powershell -NonInteractive`). |
 | `-SinCodebaseMemory` | No instala codebase-memory-mcp ni sus hooks. |
 | `-SinSkills` | No instala las skills (son código de terceros; ver [Skills](#skills)). |
+| `-SinMods` | No instala los mods de `mods/` (por omisión sí). |
 | `-SaltarAvisoPermisos` | Agrega `skipDangerousModePermissionPrompt` (ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos)). Apagado si no lo pones. |
 
 ### Detalles de Windows que conviene saber
@@ -221,6 +223,7 @@ cd claude-code-entorno
   | `--no-interactivo` | No pregunta nada (para agentes y scripts): si falta la clave de Context7, la omite y explica cómo ponerla después. Se activa solo si la entrada no es una terminal. En Linux usa `sudo -n`, que falla en vez de esperar una contraseña. |
   | `--sin-codebase-memory` | No instala codebase-memory-mcp ni sus hooks. |
   | `--sin-skills` | No instala las skills de terceros (ver [Skills](#skills)). |
+  | `--sin-mods` | No instala los mods de `mods/` (por omisión sí). |
   | `--saltar-aviso-permisos` | Ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos). Apagado si no lo pones. |
   | `--sin-herdr` | No instala herdr, su config, su skill ni sus plugins, ni Ghostty. |
   | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
@@ -703,6 +706,8 @@ instalaría.
 ├── exportar.sh                    regenera el repo desde la Mac principal
 ├── conectar.sh                    asistente para controlar el herdr de otra Mac (SSH)
 ├── plugins.txt                    plugins a instalar
+├── mods/                          mods de Claude Code (plugins propios, con pruebas)
+├── .claude-plugin/marketplace.json marketplace de este repo (lista los mods)
 ├── claude/
 │   ├── settings.base.json         ajustes genéricos
 │   ├── statusline.sh              línea de estado

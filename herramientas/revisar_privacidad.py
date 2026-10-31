@@ -61,6 +61,9 @@ CORREOS_PERMITIDOS = re.compile(r"(noreply@anthropic\.com|@ejemplo\.(com|org|inv
 TAMANO_MAXIMO = 2 * 1024 * 1024
 
 
+MARCADOR_EJEMPLO = "privacidad-ok"  # en una línea: un ejemplo falso, no un dato real
+
+
 def valor_es_marcador(valor):
     """${VAR}, $env:VAR, %VAR%, <tu-clave>, vacío: no son valores reales."""
     return (not valor or valor.startswith(("$", "%", "<", "{", "(", "`")) or valor in ("...", "…"))
@@ -103,7 +106,10 @@ def enmascarar(texto):
 def revisar_texto(texto, origen, terminos):
     hallazgos = []
     for n, linea in enumerate(texto.splitlines(), 1):
-        for tipo, patron in PATRONES:
+        # Un ejemplo falso a propósito (p. ej. un token de prueba) se marca en su línea.
+        # Solo omite los patrones genéricos; los términos privados se revisan siempre.
+        ejemplo = MARCADOR_EJEMPLO in linea
+        for tipo, patron in ([] if ejemplo else PATRONES):
             for m in patron.finditer(linea):
                 valor = m.group(0)
                 if tipo == "IP" and (valor in IPS_PERMITIDAS or
@@ -112,7 +118,7 @@ def revisar_texto(texto, origen, terminos):
                 if tipo == "correo" and CORREOS_PERMITIDOS.search(valor):
                     continue
                 hallazgos.append((origen, n, tipo, enmascarar(valor)))
-        for m in VARIABLES.finditer(linea):
+        for m in ([] if ejemplo else VARIABLES.finditer(linea)):
             if not valor_es_marcador(m.group(2)):
                 hallazgos.append((origen, n, "%s con valor" % m.group(1), enmascarar(m.group(2))))
         for nombre, patron in terminos:

@@ -31,6 +31,17 @@ python3 -m unittest discover -s "$REPO/pruebas" 2>&1 | tail -n 3
 estado_pruebas=${PIPESTATUS[0]}
 
 fallo=0
+paso "Pruebas de los mods (mods/)"
+for carpeta in "$REPO"/mods/*/; do
+  salida_mod=$(claude plugin test "$carpeta" 2>&1)
+  echo "$(basename "$carpeta"): $(echo "$salida_mod" | grep -E ' [0-9]+ fail$' | tail -n 1)"
+  echo "$salida_mod" | grep -q ' 0 fail$' || { echo "$salida_mod" | tail -n 5; fallo=1; }
+done
+if ! command -v claude >/dev/null; then
+  echo "ERROR: falta el comando claude para probar los mods."
+  fallo=1
+fi
+
 paso "Revisión propia de datos privados"
 python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" --historial || fallo=1
 

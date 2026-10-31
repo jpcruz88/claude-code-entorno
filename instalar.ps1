@@ -36,6 +36,8 @@ param(
   [switch]$SinCodebaseMemory,
   # No instala las skills (son código de terceros; ver README).
   [switch]$SinSkills,
+  # No instala los mods de mods/ (por omisión sí; ver README).
+  [switch]$SinMods,
   # Agrega skipDangerousModePermissionPrompt: quita un aviso de seguridad (ver README).
   [switch]$SaltarAvisoPermisos
 )
@@ -338,6 +340,7 @@ if ($Simular) { $argumentos += '--simular' }
 if ($SinCodebaseMemory) { $argumentos += '--sin-codebase-memory' }
 if ($suponerCbm) { $argumentos += '--suponer-codebase-memory' }
 if ($SinSkills) { $argumentos += '--sin-skills' }
+if ($SinMods) { $argumentos += '--sin-mods' }
 if ($SaltarAvisoPermisos) { $argumentos += '--saltar-aviso-permisos' }
 if ($gitBash) { $argumentos += @('--git-bash', $gitBash) }
 & $python.Exe @argumentos

@@ -1,0 +1,59 @@
+{
+  "name": "claude-code-entorno",
+  "owner": {
+    "name": "jpcruz88"
+  },
+  "metadata": {
+    "description": "Mods de Claude Code del entorno claude-code-entorno"
+  },
+  "plugins": [
+    {
+      "name": "caveman-badge",
+      "source": "./mods/caveman-badge",
+      "description": "Muestra en la línea de estado el modo caveman (aproximado)",
+      "version": "0.1.0"
+    },
+    {
+      "name": "ctx-budget",
+      "source": "./mods/ctx-budget",
+      "description": "Avisa cuando el contexto cruza el 70 % y el 85 %",
+      "version": "0.1.0"
+    },
+    {
+      "name": "guard-kill-visible",
+      "source": "./mods/guard-kill-visible",
+      "description": "Avisa cuando un comando mata procesos por nombre (solo avisa, no bloquea)",
+      "version": "0.1.0"
+    },
+    {
+      "name": "secret-guard",
+      "source": "./mods/secret-guard",
+      "description": "Bloquea escribir secretos en archivos y comandos y pregunta antes de leer archivos sensibles",
+      "version": "0.1.0"
+    },
+    {
+      "name": "sound-notify",
+      "source": "./mods/sound-notify",
+      "description": "Avisa al terminar un turno largo y cuando Claude espera un permiso",
+      "version": "0.1.0"
+    },
+    {
+      "name": "spec-gate",
+      "source": "./mods/spec-gate",
+      "description": "Pregunta una vez por sesión si se edita código de producción sin una spec reciente",
+      "version": "0.1.0"
+    },
+    {
+      "name": "tablero",
+      "source": "./mods/tablero",
+      "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
+      "version": "0.1.0"
+    },
+    {
+      "name": "tdd-gate",
+      "source": "./mods/tdd-gate",
+      "description": "Pregunta una vez por sesión si se edita código de producción sin haber tocado antes una prueba",
+      "version": "0.1.0"
+    }
+  ]
+}

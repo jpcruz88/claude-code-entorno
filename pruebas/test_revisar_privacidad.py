@@ -57,6 +57,12 @@ class Privacidad(unittest.TestCase):
             with self.subTest(texto):
                 self.assertEqual(tipos(texto), set())
 
+    def test_marcador_omite_datos_de_ejemplo_de_pruebas(self):
+        # Las pruebas de secret-guard y de tablero llevan tokens y rutas falsas a propósito.
+        token = "gh" + "p_" + "A" * 36
+        self.assertIn("token de GitHub", tipos("const t = '%s'" % token))
+        self.assertEqual(tipos("const t = '%s' // privacidad-ok" % token), set())
+
     def test_terminos_privados(self):
         with tempfile.TemporaryDirectory() as d:
             archivo = Path(d) / "terminos.txt"

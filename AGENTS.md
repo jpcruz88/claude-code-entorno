@@ -29,6 +29,9 @@ ahora.
    - ¿Instalo las ~48 skills de terceros? Son código sin auditar; en una
      computadora del trabajo lo prudente es no instalarlas (`-SinSkills` en
      Windows, `--sin-skills` en Mac).
+   - ¿Instalo los mods de `mods/` (guardias de secretos y de TDD, avisos y panel)?
+     Son código propio de este repo, con pruebas. Por omisión se instalan; si no:
+     `-SinMods` / `--sin-mods`.
    - ¿Instalo codebase-memory-mcp? Es un programa que se descarga de GitHub y
      algunos antivirus de empresa lo marcan como falso positivo. Si no:
      `-SinCodebaseMemory` / `--sin-codebase-memory`.

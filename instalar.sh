@@ -11,6 +11,7 @@
 #                            Es automático cuando la entrada no es una terminal.
 #   --sin-codebase-memory    no instala codebase-memory-mcp ni sus hooks
 #   --sin-skills             no instala las skills (código de terceros; ver README)
+#   --sin-mods               no instala los mods de mods/ (por omisión sí; ver README)
 #   --saltar-aviso-permisos  agrega skipDangerousModePermissionPrompt (quita un aviso
 #                            de seguridad; apagado por omisión, ver README)
 #   --sin-herdr              no instala herdr (ni su config, skill, plugins) ni Ghostty
@@ -38,6 +39,7 @@ URL_CBM_RELEASE="https://github.com/DeusData/codebase-memory-mcp/releases/downlo
 SIMULAR=0
 SIN_CBM=0
 SIN_SKILLS=0
+SIN_MODS=0
 SALTAR_AVISO=0
 SIN_HERDR=0
 SIN_GHOSTTY=0
@@ -57,6 +59,7 @@ for arg in "$@"; do
     --no-interactivo) NO_INTERACTIVO=1 ;;
     --sin-codebase-memory) SIN_CBM=1 ;;
     --sin-skills) SIN_SKILLS=1 ;;
+    --sin-mods) SIN_MODS=1 ;;
     --saltar-aviso-permisos) SALTAR_AVISO=1 ;;
     --sin-herdr) SIN_HERDR=1 ;;
     --sin-ghostty) SIN_GHOSTTY=1 ;;
@@ -468,6 +471,7 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SIN_CBM" = 1 ] && args+=(--sin-codebase-memory)
 [ "$SUPONER_CBM" = 1 ] && args+=(--suponer-codebase-memory)
 [ "$SIN_SKILLS" = 1 ] && args+=(--sin-skills)
+[ "$SIN_MODS" = 1 ] && args+=(--sin-mods)
 [ "$SALTAR_AVISO" = 1 ] && args+=(--saltar-aviso-permisos)
 [ "$SIN_HERDR" = 1 ] && args+=(--sin-herdr)
 [ "$SIN_PLUGINS_HERDR" = 1 ] && args+=(--sin-plugins-herdr)
