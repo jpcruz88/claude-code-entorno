@@ -6,7 +6,7 @@ import type { FilaBanda, Tono } from './banda-modelo'
 
 type Elementos = ReturnType<EngineInterface['ui']['resolve']>
 
-const COLOR_DE: Record<Tono, keyof Colors> = {
+export const COLOR_DE: Record<Tono, keyof Colors> = {
   normal: 'text',
   tenue: 'dim',
   aviso: 'amber',

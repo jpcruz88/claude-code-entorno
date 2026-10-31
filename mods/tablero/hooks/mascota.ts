@@ -8,7 +8,7 @@ export type Animo = 'feliz' | 'cansada' | 'enferma' | 'muriendo' | 'muerta'
 const ANCHO_SPRITE = 5
 const ANCHO_MAX_ESCENA = 20
 // Cada cuántos milisegundos cambia el paso de la animación.
-const PASO_MS = 800
+export const PASO_MS = 800
 
 const TONO_DE: Record<Animo, Tono> = {
   feliz: 'acento',
@@ -66,7 +66,9 @@ export const filasMascota = (e: { contextoPct: number | null; ahora: number; col
   const vida = vidaDe(e.contextoPct)
   if (vida === null) return []
   const animo = animoDe(vida)
-  const etiqueta = ` ${TEXTO_DE[animo]} · vida ${vida}%`
+  const completa = ` ${TEXTO_DE[animo]} · vida ${vida}%`
+  // En un panel angosto la etiqueta corta: solo la vida, para que la fila no se salga.
+  const etiqueta = ANCHO_SPRITE + completa.length <= e.columnas ? completa : ` ${vida}%`
   // Lo que sobra de la banda después del sprite y la etiqueta es el espacio por el que camina.
   const ancho = Math.min(ANCHO_MAX_ESCENA, Math.max(0, e.columnas - ANCHO_SPRITE - etiqueta.length))
   const tick = Math.floor(e.ahora / PASO_MS)

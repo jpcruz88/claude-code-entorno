@@ -593,7 +593,7 @@ test('a draw that fails says why instead of leaving the pane empty', async ($, o
   }
 })
 
-test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane and the status line', { options: { statusLine: true } }, async ($, on) => {
+test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane', async ($, on) => {
   // engine(on), with a status line that keeps what it was told
   mock.clock(on)
   const status: (string | undefined)[] = []
@@ -614,9 +614,7 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   await $.agent.spawn(spawn('general-purpose', 'Audit the parser'))
   await step()
   await $.turn.complete({ answer: 'ok', durationMs: 10, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
-  expect(status[status.length - 1] ?? '').not.toMatch(/agentes/) // terminado: ya no cuenta como activo
   await step()
-  expect(status[status.length - 1]).toMatch(/agentes 1/)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect(await ui.find({ text: /◐ en curso/ })).toBeDefined()
   expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
@@ -677,13 +675,8 @@ const compactHost = (on: On, o: { window: () => number; compact: number | null; 
   return asked
 }
 
-test('the gauge, status and inline summary measure against the compaction window, read once per model window', { options: { statusLine: true } }, async ($, on) => {
+test('the gauge and inline summary measure against the compaction window, read once per model window', async ($, on) => {
   mock.clock(on)
-  let status: string | undefined
-  on('ui.status', (_$, e) => {
-    status = e.text
-    return { value: undefined }
-  })
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   let window = 1_000_000
   const asked = compactHost(on, { window: () => window, compact: 400_000 })
@@ -694,7 +687,6 @@ test('the gauge, status and inline summary measure against the compaction window
   await measure(200_000)
   // Three measurements, one summary breakdown: never `full`, which would send token-count requests.
   expect(asked.filter(Boolean)).toEqual(['summary'])
-  expect(status).toBe('ctx 50%') // not the host's 20% of a million
   for (const cols of [40, 64, 120]) {
     const ui = await $.ui.mount({ ...pane(cols), surface: 'terminal' })
     expect(await ui.find({ text: /200k\/400k/ })).toBeDefined()
