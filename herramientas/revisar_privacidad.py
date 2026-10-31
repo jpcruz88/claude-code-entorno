@@ -166,9 +166,12 @@ def revisar_identidades(repo):
         if len(partes) != 5:
             continue
         h, an, ae, cn, ce = partes
-        if (an, ae) != (nombre, correo):
+        # Se acepta el correo acordado aunque el nombre de usuario de git sea otro (p. ej.
+        # commits viejos hechos con un nombre de usuario distinto): lo que no debe salir
+        # es el correo, y ese se compara siempre.
+        if ae != correo:
             hallazgos.append(("commit " + h, 0, "autor distinto del acordado", enmascarar(ae)))
-        if (cn, ce) != (nombre, correo):
+        if ce != correo:
             hallazgos.append(("commit " + h, 0, "committer distinto del acordado", enmascarar(ce)))
     return hallazgos
 
