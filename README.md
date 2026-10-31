@@ -378,6 +378,11 @@ Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto
 usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
 Fable no se usa por omisión: solo si lo pides de forma explícita.
 
+**Agentes y subagentes:** siempre `claude-haiku-5-5` con esfuerzo **medio**, sin
+excepción; ningún otro modelo y ningún esfuerzo más alto (se acepta «low»). Lo
+bloquea el hook `claude/hooks/guard-subagentes.py`, que revisa las llamadas a Agent,
+Task y Workflow. La configuración base también fija el esfuerzo de Haiku en medio.
+
 Para cambiar el modelo por defecto en todas tus computadoras, edita
 `claude/settings.base.json`, haz commit y corre el instalador en cada una. En la
 Mac principal, `exportar.sh` regenera ese archivo desde tu config viva
