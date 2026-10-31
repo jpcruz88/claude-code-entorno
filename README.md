@@ -1,4 +1,8 @@
-# claude-code-entorno
+# nexus-claude
+
+> Un solo nodo para todo mi Claude Code: reglas, hooks, skills, plugins,
+> mods y memoria. Este repo se llama `claude-code-entorno` (el nombre del marketplace y
+> de los plugins); «nexus-claude» es el nombre del proyecto.
 
 Mi configuración de [Claude Code](https://code.claude.com) lista para copiar en otra
 computadora, con **Windows** o con **Mac**. Un solo comando deja reglas, hooks,
