@@ -141,6 +141,58 @@ def traer(clon):
         git(clon, "pull", "-q", "--ff-only", "origin", "HEAD")
 
 
+PIDE_HANDOFF = (
+    "Al cerrar la sesión, o cuando el usuario diga que cierra, actualiza handoff.md en la "
+    "carpeta de memoria de este proyecto: qué se hizo, qué sigue, decisiones y archivos "
+    "tocados. Así la próxima sesión retoma sin que el usuario repita el contexto."
+)
+
+
+def ruta_handoff(cwd, base=None):
+    return carpeta_memoria(cwd, base) / "handoff.md"
+
+
+def resumen_git(cwd):
+    """Estado de git del proyecto: rama, últimos commits y cambios sin commitear. '' si no hay git."""
+    if git(cwd, "rev-parse", "--is-inside-work-tree").returncode != 0:
+        return ""
+    rama = git(cwd, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    commits = git(cwd, "log", "-5", "--format=- %h %s").stdout.strip()
+    cambios = git(cwd, "status", "--short").stdout.strip()
+    partes = ["Rama: %s" % rama, "", "Últimos commits:", commits or "(ninguno)"]
+    if cambios:
+        partes += ["", "Cambios sin commitear:", cambios]
+    return "\n".join(partes) + "\n"
+
+
+def escribir_handoff_auto(cwd, base=None):
+    """Guarda el estado de git en handoff-auto.md. Sin cambios no reescribe el archivo."""
+    texto = resumen_git(cwd)
+    if not texto:
+        return
+    destino = carpeta_memoria(cwd, base) / "handoff-auto.md"
+    if destino.exists() and destino.read_text(encoding="utf-8") == texto:
+        return
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(texto, encoding="utf-8")
+
+
+def texto_inicio(cwd, base=None):
+    """Lo que Claude lee al abrir: handoff de la sesión anterior y estado de git."""
+    partes = []
+    manual = ruta_handoff(cwd, base)
+    if manual.exists():
+        partes.append("Handoff de la sesión anterior (handoff.md):\n" +
+                      manual.read_text(encoding="utf-8"))
+    auto = carpeta_memoria(cwd, base) / "handoff-auto.md"
+    if auto.exists():
+        partes.append("Estado de git al cierre (handoff-auto.md):\n" +
+                      auto.read_text(encoding="utf-8"))
+    if not partes:
+        return ""
+    return "\n\n".join(partes) + "\n\n" + PIDE_HANDOFF
+
+
 def leer_config():
     try:
         return json.loads(config_path().read_text(encoding="utf-8"))
@@ -148,22 +200,35 @@ def leer_config():
         return None
 
 
-def modo_inicio():
+def _leer_datos():
     try:
-        datos = json.loads(sys.stdin.read() or "{}")
+        return json.loads(sys.stdin.read() or "{}")
     except ValueError:
-        datos = {}
+        return {}
+
+
+def _emitir(contexto):
+    if contexto:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                 "additionalContext": contexto}}))
+
+
+def modo_inicio():
+    datos = _leer_datos()
+    cwd = datos.get("cwd") or os.getcwd()
     cfg = leer_config()
     if cfg is None:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
-                                                 "additionalContext": PREGUNTA}}))
+        _emitir("\n\n".join(x for x in [PREGUNTA, texto_inicio(cwd)] if x))
         return
     traer(cfg.get("clon", ""))
-    cwd = datos.get("cwd") or os.getcwd()
     enlazar_proyecto(cwd, cfg.get("clon", ""))
+    _emitir(texto_inicio(cwd))
 
 
 def modo_fin():
+    datos = _leer_datos()
+    cwd = datos.get("cwd") or os.getcwd()
+    escribir_handoff_auto(cwd)
     cfg = leer_config()
     if cfg is not None:
         sincronizar(cfg.get("clon", ""))
