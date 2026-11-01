@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
@@ -116,6 +116,17 @@
       "description": "Anima la banda: barras que se llenan, indicador que pulsa y cuenta regresiva. Apagarla evita redibujar cada segundo",
       "type": "boolean",
       "default": true
+    },
+    "agentesAbrir": {
+      "title": "Abrir el panel de agentes",
+      "description": "savvy: cuando arranca un trabajador savvy-* o se reporta un plan; any: también al arrancar cualquier otro subagente; off: nunca solo",
+      "type": "string",
+      "options": [
+        "savvy",
+        "any",
+        "off"
+      ],
+      "default": "savvy"
     },
     "statusLine": {
       "title": "Línea de estado",

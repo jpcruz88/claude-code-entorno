@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 (tablero)
+
+- Panel «Agentes» y barra de progreso sobre el prompt, adaptados de savvy-progress (MIT): flujo con fase y tareas, subagentes en marcha, terminados y planificados, cangrejos animados por nivel, y el comando `/agentes-info`.
+- Los subagentes `savvy-*` reciben al final de su encargo la instrucción de reportar pasos (`mcp__tablero__paso`). Cambia el encargo de esos subagentes.
+- La barra de vida se dibuja con degradado continuo en la app de escritorio. En la terminal sigue en tres tonos.
+- El reloj de los agentes se cancela al terminar la sesión.
+- Sin el nivel `fable`, sin traducciones a inglés, ruso ni hebreo.
+
 ## 0.5.1
 
 - The main box's `last req` line shows only the time to first token. Its tokens per second divided the reported output tokens, which include thinking, by the time from the first streamed piece, so when thinking wasn't streamed it read thousands of tokens a second. It is gone rather than wrong. ([#19](https://github.com/scasella/claude-flightdeck/pull/19))

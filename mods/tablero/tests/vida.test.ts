@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BARRA_ANCHO, filasVida, vidaDe } from '../hooks/vida'
+import { BARRA_ANCHO, filasVida, svgVida, vidaDe } from '../hooks/vida'
 
 const celdas = (fila: { tramos: { texto: string }[] }, simbolo: string) =>
   fila.tramos.reduce((n, t) => n + [...t.texto].filter(c => c === simbolo).length, 0)
@@ -47,4 +47,29 @@ test('en un panel angosto la etiqueta se recorta y la fila no se sale', () => {
   expect(ancho).toBeLessThanOrEqual(12 - 4)
   expect(fila.tramos[0].texto).toBe('50% ')
   expect(celdas(fila, '█')).toBeGreaterThan(0)
+})
+
+// --- escritorio: degradado continuo
+
+test('en escritorio la barra de vida es un SVG con degradado rojo, ámbar y verde', () => {
+  const s = svgVida(50, 200)
+  expect(s.includes('<linearGradient')).toBe(true)
+  expect(s.includes('#D0453F')).toBe(true)
+  expect(s.includes('#E0A030')).toBe(true)
+  expect(s.includes('#3B9C5F')).toBe(true)
+  expect(s.includes('vida 50%')).toBe(true)
+})
+
+test('el relleno cubre la vida: la mitad de la barra con vida al 50 %', () => {
+  expect(svgVida(50, 200).includes('width="100"')).toBe(true)
+  expect(svgVida(100, 200).includes('width="200"')).toBe(true)
+})
+
+test('el degradado se extiende por toda la barra, no solo por el relleno', () => {
+  expect(svgVida(20, 200).includes('gradientUnits="userSpaceOnUse"')).toBe(true)
+})
+
+test('la vida fuera de rango se acota a 0..100', () => {
+  expect(svgVida(-5, 200).includes('vida 0%')).toBe(true)
+  expect(svgVida(150, 200).includes('vida 100%')).toBe(true)
 })

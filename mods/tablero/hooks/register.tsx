@@ -75,11 +75,12 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
 import { glifoAgente } from './agentes-anim'
-import { filasVida } from './vida'
+import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
+import { type OpcionesAgentes, detenerRelojAgentes, finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -345,8 +346,12 @@ export const register: Register = (on, options) => {
   const C = PALETTES[cfg.palette]
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
+  // Panel de progreso y de agentes (savvy-progress, adaptado): barra sobre el prompt y panel «Agentes».
+  registrarAgentes(on, options as OpcionesAgentes)
 
   on('session.start', async ($, e, next) => {
+    // Un host sin herramientas o comandos arranca sin el panel de agentes, como la banda sin uso.
+    await iniciarAgentes($).catch(() => undefined)
     await $.command.register({
       name: 'tablero',
       description: 'Tablero: abre, cierra, reinicia o cambia la distribución del panel completo',
@@ -386,6 +391,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     detenerReloj()
+    detenerRelojAgentes()
     if (e.reason === 'clear') {
       await resetAll($)
       await refreshStatus($)
@@ -515,6 +521,7 @@ export const register: Register = (on, options) => {
       }
     }
     const result = yield* next(e)
+    await pasoDeSubagente($, e, result)
     const [cards, a] = await Promise.all([getCards($), getArchitect($)])
     if (cards.some(c => c.id === id)) {
       const step = { model: e.model, usage: result.usage, stopReason: result.stopReason }
@@ -669,7 +676,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const started = await next(e)
+    const started = await lanzarAgente($, e, next, options as OpcionesAgentes)
     if (!e.parentAgentId) await noteMode($, e.permissionMode)
     if (started.deny !== undefined || !started.agentId) return started
     const id = started.agentId
@@ -708,6 +715,7 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    await finDeTurno($, e)
     const id = e.agentId
     const now = await $.clock.now()
     if (!id) {
@@ -1312,6 +1320,16 @@ export const register: Register = (on, options) => {
         </Box>
       ))
     }
+    // En escritorio la vida es un SVG con degradado continuo; en la terminal, la fila de texto.
+    const vidaEscritorio = (w: number) => {
+      if (e.surface === 'terminal') return null
+      const ui = $.ui.resolve(e)
+      const v = vidaDe(ctxFill.pct)
+      if (!('Svg' in ui) || v === null) return null
+      const { Svg } = ui
+      const px = Math.max(120, Math.min(600, w * 8 - 48))
+      return <Svg source={svgVida(v, px)} alt={`vida ${v}%`} width={px} height={18} />
+    }
     const sesionPanel = (w: number) => (
       <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} width={w}>
         <Text dimColor wrap="truncate">
@@ -1333,7 +1351,7 @@ export const register: Register = (on, options) => {
             <Text wrap="wrap">{`${f.etiqueta}: ${f.valor}`}</Text>
           ),
         )}
-        {vidaSesion(w)}
+        {vidaEscritorio(w) ?? vidaSesion(w)}
       </Box>
     )
 

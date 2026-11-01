@@ -145,6 +145,38 @@ declare module 'claude-code' {
       view: View
       roster: Roster
       sesion: Sesion
+      /** Panel de progreso y de agentes (savvy-progress, adaptado). */
+      'savvy-flujo': {
+        title: string
+        total: number
+        done: number
+        running: number
+        phase: 'plan' | 'design' | 'delegate' | 'review' | 'close'
+        isFinished: boolean
+        tasks: { title: string; tier: string; after: number[] }[]
+      } | null
+      'savvy-agentes': {
+        id: string
+        agentId?: string
+        type: string
+        description: string
+        model: string
+        effort?: string
+        status: 'running' | 'done' | 'failed'
+        startedAt: number
+        endedAt?: number
+        contextTokens: number
+        contextMax: number
+        tokens: number
+        costUsd: number
+        steps: number
+        round: number
+        stepDone?: number
+        stepTotal?: number
+        stepNote?: string
+      }[]
+      'savvy-panel': { plegado: boolean; terminadosPlegados: boolean; autoAbiertoPara: string }
+      'savvy-ahora': number
     }
   }
 }
