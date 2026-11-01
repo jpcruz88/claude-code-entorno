@@ -2,3 +2,6 @@
 .claude-plugin/types/
 node_modules/
 .DS_Store
+
+# JavaScript compilado por el cargador de Claude Code en hooks/ y tests/ (se regenera al cargar; el mod no tiene JS a mano)
+*.js

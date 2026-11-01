@@ -38,3 +38,23 @@ export const filasVida = (e: { contextoPct: number | null; columnas: number }): 
     },
   ]
 }
+
+// Escritorio: la barra es un SVG con un degradado continuo. El degradado cubre toda la barra en
+// coordenadas del usuario, así el color del relleno depende de cuánta vida queda: rojo cerca de 0,
+// ámbar a media, verde al llenarse.
+const ROJO = '#D0453F'
+const AMBAR = '#E0A030'
+const VERDE = '#3B9C5F'
+const PIXELES_ALTO = 18
+
+/** Vida de 0 a 100 (acotada) como SVG de `ancho` píxeles; el texto va en `alt`, no en el dibujo. */
+export const svgVida = (vida: number, ancho: number): string => {
+  const v = Math.min(100, Math.max(0, Math.round(vida)))
+  const llena = Math.round((ancho * v) / 100)
+  const etiqueta = `vida ${v}%`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${PIXELES_ALTO}" viewBox="0 0 ${ancho} ${PIXELES_ALTO}" role="img" aria-label="${etiqueta}">
+<defs><linearGradient id="vida" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${ancho}" y2="0"><stop offset="0" stop-color="${ROJO}"/><stop offset="0.5" stop-color="${AMBAR}"/><stop offset="1" stop-color="${VERDE}"/></linearGradient></defs>
+<rect x="0" y="4" width="${ancho}" height="10" rx="5" fill="#8a8a8a" opacity="0.25"/>
+<rect x="0" y="4" width="${llena}" height="10" rx="5" fill="url(#vida)"/>
+</svg>`
+}
