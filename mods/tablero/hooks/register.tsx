@@ -74,7 +74,8 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { PASO_MS, filasMascota } from './mascota'
+import { glifoAgente } from './agentes-anim'
+import { filasVida } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
@@ -319,7 +320,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.contextoPct === null ? 0 : Math.floor(e.ahora / PASO_MS), e.agentesActivos, e.permisosPendientes, e.costoUsd])
+  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.agentesActivos, e.permisosPendientes, e.costoUsd])
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
@@ -793,8 +794,8 @@ export const register: Register = (on, options) => {
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
-    // La mascota vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
-    const mascotaVisible = contextFill(u).pct !== null
+    // La barra de vida vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
+    const vidaVisible = contextFill(u).pct !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
       architect: !showArchitect,
@@ -802,7 +803,7 @@ export const register: Register = (on, options) => {
       agents: cards.length === 0,
       loops: lp.length === 0,
       receipt: !m.isRunning && !r,
-      sesion: sesionRows.length === 0 && !mascotaVisible,
+      sesion: sesionRows.length === 0 && !vidaVisible,
       log: false,
     }
     const panels = cfg.panels.filter(p => !isEmpty[p])
@@ -1100,7 +1101,7 @@ export const register: Register = (on, options) => {
 
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
-    const glyph = (c: AgentCard) => (c.status === 'running' ? '◐' : c.status === 'done' ? '✓' : c.status === 'failed' ? '✗' : '■')
+    const glyph = (c: AgentCard) => glifoAgente(now, c.status)
     const expandOnPress = (id: string) => () =>
       update($, view, x => ({ ...normalize(DEFAULT_VIEW, x), expanded: normalize(DEFAULT_VIEW, x).expanded === id ? null : id }))
 
@@ -1289,10 +1290,10 @@ export const register: Register = (on, options) => {
 
     // ---- sesión: lo que la sesión ha hecho (herramientas, archivos, tareas, MCP, skills, hooks)
     // Un panel ancho pone la etiqueta en su columna; uno angosto la deja en la misma línea, que se parte.
-    // La mascota: sus dos filas dentro del panel, con la vida que le queda de contexto.
+    // La barra de vida: una fila dentro del panel, con la vida que le queda de contexto.
     // Una fila por línea, con cada trozo en su Text y los espacios de los bordes en cajas: el gap va en la Box.
-    const mascotaSesion = (w: number) => {
-      const filas = filasMascota({ contextoPct: ctxFill.pct, ahora: now, columnas: w - 4 })
+    const vidaSesion = (w: number) => {
+      const filas = filasVida({ contextoPct: ctxFill.pct, columnas: w - 4 })
       return filas.map((fila, i) => (
         <Box key={`m${i}`} flexDirection="row">
           {fila.tramos.flatMap((tr, j) => {
@@ -1332,13 +1333,13 @@ export const register: Register = (on, options) => {
             <Text wrap="wrap">{`${f.etiqueta}: ${f.valor}`}</Text>
           ),
         )}
-        {mascotaSesion(w)}
+        {vidaSesion(w)}
       </Box>
     )
 
     // ---- log: whatever rows the other panels leave, 4 to 8
     // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || mascotaVisible) ? sesionRows.length + 2 + (mascotaVisible ? 2 : 0) : 0)
+    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
     const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
     const nLog = logRows(bodyRows, used)
     const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)

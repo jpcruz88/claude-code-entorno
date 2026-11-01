@@ -1,8 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { PASO_MS } from '../hooks/mascota'
-
 const BANDA = (overrides: Record<string, unknown> = {}) => ({
   plugin: 'tablero',
   component: 'AbovePrompt' as const,
@@ -100,7 +98,7 @@ test('con animación apagada no pide redibujar cada segundo', { options: { banda
   expect(invalidaciones).toBe(0)
 })
 
-test('con la mascota viva redibuja a su paso, no a cada cuadro', { options: { banda: true } }, async ($, on) => {
+test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada cambia', { options: { banda: true } }, async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -122,7 +120,6 @@ test('con la mascota viva redibuja a su paso, no a cada cuadro', { options: { ba
   expect(invalidaciones).toBeGreaterThan(quieto)
   const tras = invalidaciones
   await reloj.advance(5_000)
-  // La mascota camina con contexto medido: un redibujo por paso (PASO_MS), no uno por cuadro de 120 ms.
-  expect(invalidaciones - tras).toBeGreaterThan(0)
-  expect(invalidaciones - tras).toBeLessThanOrEqual(Math.ceil(5_000 / PASO_MS) + 1)
+  // La barra de vida no se mueve sola: solo redibuja cuando cambia su clave (el minuto o el contexto), no en cada cuadro de 120 ms.
+  expect(invalidaciones - tras).toBeLessThanOrEqual(1)
 })
