@@ -135,36 +135,25 @@ test('el panel muestra el nivel en español, no en inglés', async ($, on) => {
 
 // --- la opción de abrir el panel solo
 
-test('por defecto, lanzar un trabajador savvy-* abre el panel solo', async ($, on) => {
+test('lanzar un trabajador savvy-* no abre ninguna pestaña de agentes', async ($, on) => {
   motor(on)
-  let abiertos = 0
-  on('ui.open', () => {
-    abiertos += 1
+  const abiertos: string[] = []
+  on('ui.open', (_$, e) => {
+    abiertos.push(e.id)
     return { value: { isPlaced: true as const } }
   })
   await lanzar($, 'savvy-careful', 'revisar auth')
-  expect(abiertos).toBe(1)
+  expect(abiertos.filter(id => id === PANE_AGENTES)).toEqual([])
 })
 
-test('por defecto, lanzar cualquier subagente abre el panel solo', async ($, on) => {
+test('lanzar cualquier subagente no abre ninguna pestaña de agentes', async ($, on) => {
   motor(on)
-  let abiertos = 0
-  on('ui.open', () => {
-    abiertos += 1
+  const abiertos: string[] = []
+  on('ui.open', (_$, e) => {
+    abiertos.push(e.id)
     return { value: { isPlaced: true as const } }
   })
   await lanzar($, 'general-purpose', 'revisar auth')
-  expect(abiertos).toBe(1)
+  expect(abiertos.filter(id => id === PANE_AGENTES)).toEqual([])
 })
 
-test('con agentesAbrir apagado, lanzar un trabajador no abre el panel solo', { options: { agentesAbrir: 'off' } }, async ($, on) => {
-  motor(on)
-  let abiertos = 0
-  on('ui.open', () => {
-    abiertos += 1
-    return { value: { isPlaced: true as const } }
-  })
-  await lanzar($, 'savvy-careful', 'revisar auth')
-  await $.tool.call({ tool: PROGRESS_TOOL, title: 'migrar', total: 2, done: 0, tasks: [{ title: 'uno', tier: 'light' }] } as never)
-  expect(abiertos).toBe(0)
-})
