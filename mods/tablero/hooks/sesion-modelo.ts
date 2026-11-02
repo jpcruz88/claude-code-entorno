@@ -90,9 +90,9 @@ export const sesionFilas = (s: Sesion): FilaSesion[] => {
   if (s.files.length > 0) filas.push({ etiqueta: 'archivos', valor: [...s.files].reverse().join(', ') })
   const mcp = Object.entries(s.mcp).sort((a, b) => b[1].calls - a[1].calls || a[0].localeCompare(b[0]))
   if (mcp.length > 0) {
-    filas.push({ etiqueta: 'mcp', valor: mcp.map(([n, v]) => `${n} ${v.calls}${v.errors > 0 ? ` (${errores(v.errors)})` : ''}`).join(' · ') })
+    filas.push({ etiqueta: 'MCP', valor: mcp.map(([n, v]) => `${n} ${v.calls}${v.errors > 0 ? ` (${errores(v.errors)})` : ''}`).join(' · ') })
   }
   const skills = ordenados(s.skills)
-  if (skills.length > 0) filas.push({ etiqueta: 'skills', valor: skills.map(([n, c]) => `${n} ×${c}`).join(' · ') })
+  if (skills.length > 0) filas.push({ etiqueta: 'habilidades', valor: skills.map(([n, c]) => `${n} ×${c}`).join(' · ') })
   return filas
 }
