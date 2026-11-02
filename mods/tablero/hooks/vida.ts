@@ -16,16 +16,20 @@ export const vidaDe = (contextoPct: number | null): number | null => {
 export const tonoDeVida = (vida: number): Tono => (vida >= 60 ? 'acento' : vida >= 30 ? 'aviso' : 'peligro')
 
 /**
- * Una fila: la etiqueta («vida 50%») y la barra. En un panel angosto la etiqueta se recorta a
- * solo el número, y la barra se encoge para que la fila no pase de las columnas.
+ * Una fila: la etiqueta («vida 50%») y la barra. `columnas` es el ancho del panel, con su borde
+ * y su padding (4 columnas), así que el contenido disponible es `columnas - 4`. En un panel
+ * angosto la etiqueta se recorta a solo el número, y la barra se encoge para que la fila no pase
+ * de ese contenido. Sin espacio para nada, no hay fila.
  */
 export const filasVida = (e: { contextoPct: number | null; columnas: number }): FilaBanda[] => {
   const vida = vidaDe(e.contextoPct)
   if (vida === null) return []
+  const disponible = e.columnas - 4
+  if (disponible <= 0) return []
   const completa = `vida ${vida}% `
   const corta = `${vida}% `
-  const etiqueta = completa.length + 4 <= e.columnas ? completa : corta
-  const ancho = Math.min(BARRA_ANCHO, Math.max(0, e.columnas - 4 - etiqueta.length))
+  const etiqueta = (completa.length <= disponible ? completa : corta).slice(0, disponible)
+  const ancho = Math.min(BARRA_ANCHO, Math.max(0, disponible - etiqueta.length))
   const llenas = Math.round((vida / 100) * ancho)
   const tono = tonoDeVida(vida)
   return [
@@ -49,7 +53,8 @@ const PIXELES_ALTO = 18
 
 /** Vida de 0 a 100 (acotada) como SVG de `ancho` píxeles; el texto va en `alt`, no en el dibujo. */
 export const svgVida = (vida: number, ancho: number): string => {
-  const v = Math.min(100, Math.max(0, Math.round(vida)))
+  // Un valor no finito no tiene vida que mostrar: el caller ya filtra null, esto solo evita escribir NaN.
+  const v = Number.isFinite(vida) ? Math.min(100, Math.max(0, Math.round(vida))) : 0
   const llena = Math.round((ancho * v) / 100)
   const etiqueta = `vida ${v}%`
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${PIXELES_ALTO}" viewBox="0 0 ${ancho} ${PIXELES_ALTO}" role="img" aria-label="${etiqueta}">

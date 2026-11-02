@@ -74,7 +74,8 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { fotogramaDeMarcha, glifoAgente } from './agentes-anim'
+import { glifoAgente } from './agentes-anim'
+import { claveDeRedibujo } from './clave-redibujo'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
@@ -321,7 +322,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.agentesActivos, fotogramaDeMarcha(e.ahora, e.agentesActivos), e.permisosPendientes, e.costoUsd])
+  const clave = claveDeRedibujo(e)
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
@@ -1301,7 +1302,7 @@ export const register: Register = (on, options) => {
     // La barra de vida: una fila dentro del panel, con la vida que le queda de contexto.
     // Una fila por línea, con cada trozo en su Text y los espacios de los bordes en cajas: el gap va en la Box.
     const vidaSesion = (w: number) => {
-      const filas = filasVida({ contextoPct: ctxFill.pct, columnas: w - 4 })
+      const filas = filasVida({ contextoPct: ctxFill.pct, columnas: w })
       return filas.map((fila, i) => (
         <Box key={`m${i}`} flexDirection="row">
           {fila.tramos.flatMap((tr, j) => {
