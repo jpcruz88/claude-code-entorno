@@ -74,7 +74,7 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { glifoAgente } from './agentes-anim'
+import { fotogramaDeMarcha, glifoAgente } from './agentes-anim'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
@@ -321,7 +321,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.agentesActivos, e.permisosPendientes, e.costoUsd])
+  const clave = JSON.stringify([e.contextoPct, e.limites.map(l => l.pct), e.pulso, Math.floor(e.ahora / 60_000), e.agentesActivos, fotogramaDeMarcha(e.ahora, e.agentesActivos), e.permisosPendientes, e.costoUsd])
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
@@ -1109,7 +1109,7 @@ export const register: Register = (on, options) => {
 
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
-    const glyph = (c: AgentCard) => glifoAgente(now, c.status)
+    const glyph = (c: AgentCard) => glifoAgente(now, c.status, cfg.animacion)
     const expandOnPress = (id: string) => () =>
       update($, view, x => ({ ...normalize(DEFAULT_VIEW, x), expanded: normalize(DEFAULT_VIEW, x).expanded === id ? null : id }))
 
