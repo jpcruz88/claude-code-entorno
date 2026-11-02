@@ -112,3 +112,21 @@ test('el SVG con vida NaN no escribe NaN en el dibujo ni en la etiqueta', () => 
   const s = svgVida(Number.NaN, 200)
   expect(s.includes('NaN')).toBe(false)
 })
+
+test('nunca se dibuja una etiqueta recortada: en cualquier ancho es entera o vacía', () => {
+  for (let columnas = 5; columnas <= 40; columnas++) {
+    for (const contextoPct of [0, 29.5, 50, 70, 100]) {
+      const filas = filasVida({ contextoPct, columnas })
+      if (filas.length === 0) continue
+      const vida = vidaDe(contextoPct)!
+      const etiqueta = filas[0].tramos[0].texto
+      const entera = [`vida ${vida}% `, `${vida}% `, '']
+      expect(entera).toContain(etiqueta)
+    }
+  }
+})
+
+test('con 5 columnas (1 de contenido) no aparece el número suelto "5" de una etiqueta cortada', () => {
+  const filas = filasVida({ contextoPct: 50, columnas: 5 })
+  expect(filas[0].tramos[0].texto).not.toBe('5')
+})

@@ -28,7 +28,8 @@ export const filasVida = (e: { contextoPct: number | null; columnas: number }): 
   if (disponible <= 0) return []
   const completa = `vida ${vida}% `
   const corta = `${vida}% `
-  const etiqueta = (completa.length <= disponible ? completa : corta).slice(0, disponible)
+  // Una etiqueta cortada se lee mal («5» por «50%»): va entera o no va.
+  const etiqueta = completa.length <= disponible ? completa : corta.length <= disponible ? corta : ''
   const ancho = Math.min(BARRA_ANCHO, Math.max(0, disponible - etiqueta.length))
   const llenas = Math.round((vida / 100) * ancho)
   const tono = tonoDeVida(vida)

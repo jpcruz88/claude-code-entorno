@@ -804,7 +804,8 @@ export const register: Register = (on, options) => {
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
     // La barra de vida vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
-    const vidaVisible = contextFill(u).pct !== null
+    // Misma regla que filasVida: NaN e Infinity no son vida, así que no reservan fila vacía.
+    const vidaVisible = vidaDe(contextFill(u).pct) !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
       architect: !showArchitect,
