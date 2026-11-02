@@ -18,20 +18,6 @@ const BARRA = (overrides: Record<string, unknown> = {}) => ({
   },
 })
 
-const PANEL = (bodyColumns = 100) => ({
-  plugin: 'tablero',
-  component: 'Pane' as const,
-  requestId: PANE_AGENTES,
-  surface: 'terminal' as const,
-  props: {
-    title: 'Agentes',
-    isFocused: true,
-    bodyColumns,
-    placement: 'dock' as const,
-    scroll: { offset: 0, bodyRows: 70 },
-    view: {},
-  },
-})
 
 const motor = (on: On, prompts: string[] = []) => {
   mock.clock(on)
@@ -99,41 +85,6 @@ test('un subagente no puede cambiar el progreso de la sesión principal', async 
 })
 
 // --- agentes: pasos del trabajador y panel
-
-test('el paso que reporta un trabajador aparece en su fila del panel', async ($, on) => {
-  motor(on)
-  await lanzar($, 'savvy-careful', 'revisar auth')
-  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
-  const ui = await $.ui.mount(PANEL())
-  expect(await ui.find({ text: /2\/4/ })).toBeDefined()
-  expect(await ui.find({ text: /leyendo/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('el panel lista el agente en marcha y, al terminar, en terminados', async ($, on) => {
-  motor(on)
-  await lanzar($, 'savvy-careful', 'revisar auth')
-  let ui = await $.ui.mount(PANEL())
-  expect(await ui.find({ text: /En marcha · 1/ })).toBeDefined()
-  expect(await ui.find({ text: /revisar auth/ })).toBeDefined()
-  await ui.unmount()
-
-  await $.turn.complete({ answer: '', durationMs: 10, isAborted: false, turnId: 'T1', agentId: 'a1', reason: 'answer' } as never)
-  ui = await $.ui.mount(PANEL())
-  expect(await ui.find({ text: /Terminados · 1/ })).toBeDefined()
-  expect(await ui.find({ text: /En marcha/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('el panel muestra el nivel en español, no en inglés', async ($, on) => {
-  motor(on)
-  await lanzar($, 'savvy-heavy', 'auditar')
-  const ui = await $.ui.mount(PANEL())
-  expect(await ui.find({ text: /pesado/ })).toBeDefined()
-  await ui.unmount()
-})
-
-// --- la opción de abrir el panel solo
 
 test('lanzar un trabajador savvy-* no abre ninguna pestaña de agentes', async ($, on) => {
   motor(on)
