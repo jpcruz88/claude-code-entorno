@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 (tablero)
+
+- Los agentes integrados se muestran en español: `Explore` → «explorar», `general-purpose` → «propósito general», `Plan` → «plan», en la fila, la tarjeta y el panel expandido.
+- Con la animación apagada, el reloj mira el estado cada segundo (antes cada 30 s): un agente que termina se ve al momento. Sigue sin redibujar si nada cambió.
+- El tono de la barra de vida usa la vida redondeada, como la barra: 29.6 de vida es ámbar, no rojo.
+
 ## 0.2.2 (tablero)
 
 - Textos en español: las etiquetas «mcp» y «skills» pasan a «MCP» y «habilidades», y «max_tokens» a «tope de tokens» (tarjeta y aviso).

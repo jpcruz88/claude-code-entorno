@@ -142,3 +142,9 @@ test('no hay dibujo de derecha a izquierda: el mod solo va en español', () => {
   expect(rowSvg(flujo(), 400, false).includes('direction="rtl"')).toBe(false)
   expect(agentSvg(400, agente(), 1000).includes('direction="rtl"')).toBe(false)
 })
+
+test('un agente built-in sin descripción se muestra con su nombre en español', () => {
+  const s = agentSvg(400, agente({ type: 'Explore', description: '' }), 10_000)
+  expect(s.includes('explorar')).toBe(true)
+  expect(s.includes('Explore')).toBe(false)
+})

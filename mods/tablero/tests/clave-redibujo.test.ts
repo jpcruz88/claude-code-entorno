@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { PASO_AGENTE_MS } from '../hooks/agentes-anim'
-import { claveDeRedibujo } from '../hooks/clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo } from '../hooks/clave-redibujo'
 
 const base = {
   contextoPct: 40,
@@ -23,4 +23,9 @@ test('sin agentes caminando, la clave no cambia con el paso del tiempo (dentro d
   const a = claveDeRedibujo({ ...base, agentesActivos: 0, ahora: 0 })
   const b = claveDeRedibujo({ ...base, agentesActivos: 0, ahora: PASO_AGENTE_MS })
   expect(a).toBe(b)
+})
+
+test('sin animación, el reloj mira el estado cada segundo para que un agente que termina se vea al momento', () => {
+  expect(PERIODO_RELOJ_MS(true)).toBe(120)
+  expect(PERIODO_RELOJ_MS(false)).toBeLessThanOrEqual(1000)
 })

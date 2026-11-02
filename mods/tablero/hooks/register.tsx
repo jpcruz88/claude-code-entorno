@@ -75,7 +75,8 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
 import { emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
-import { claveDeRedibujo } from './clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
+import { nombreDeTipo } from './savvy-core'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
@@ -336,8 +337,8 @@ function detenerReloj() {
 
 function iniciarReloj($: EngineInterface, cfg: Config) {
   detenerReloj()
-  // Con animación, un cuadro cada 120 ms que solo redibuja si algo cambió; sin ella, el reloj de minutos cada 30 s.
-  reloj = $.clock.every(cfg.animacion ? 120 : 30_000, () => void cuadroDeReloj($, cfg).catch(() => undefined))
+  // Un cuadro por periodo; solo redibuja si la clave cambió (ver PERIODO_RELOJ_MS).
+  reloj = $.clock.every(PERIODO_RELOJ_MS(cfg.animacion), () => void cuadroDeReloj($, cfg).catch(() => undefined))
 }
 
 // ---------------------------------------------------------------- hooks
@@ -1217,7 +1218,7 @@ export const register: Register = (on, options) => {
                     {titleLines(cardTitle(c), cardW - 7, cardW - 4)[1]}
                   </Text>
                   <Text color={C.dim} wrap="truncate">
-                    {sameModel ? c.type : `${c.type} · ${prettyModel(c.model)}`}
+                    {sameModel ? nombreDeTipo(c.type) : `${nombreDeTipo(c.type)} · ${prettyModel(c.model)}`}
                   </Text>
                   <Text dimColor wrap="truncate">
                     {pasos.has(c.id)
@@ -1245,9 +1246,9 @@ export const register: Register = (on, options) => {
       expandedCard ? (
         <Box flexDirection="column" borderStyle="single" borderColor={C.agent} paddingX={1} width={w}>
           <Text bold wrap="wrap">
-            {expandedCard.description || expandedCard.type}
+            {expandedCard.description || nombreDeTipo(expandedCard.type)}
           </Text>
-          <Text dimColor wrap="truncate">{`${expandedCard.type} · ${prettyModel(expandedCard.model)} · ${statusLabel(expandedCard.status)} · ${expandedCard.steps} pasos`}</Text>
+          <Text dimColor wrap="truncate">{`${nombreDeTipo(expandedCard.type)} · ${prettyModel(expandedCard.model)} · ${statusLabel(expandedCard.status)} · ${expandedCard.steps} pasos`}</Text>
           {expandedCard.tools.length === 0 ? <Text color={C.faint}>sin llamadas aún</Text> : null}
           {expandedCard.tools.map(n => (
             <Text color={n.isError ? C.warn : C.text} wrap="truncate">

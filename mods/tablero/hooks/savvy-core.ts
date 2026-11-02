@@ -133,6 +133,14 @@ export const PALABRAS = {
 }
 
 export const palabraNivel = (nivel: string): string => PALABRAS.nivel[nivel] ?? nivel
+
+/** Nombres de los agentes integrados de Claude Code, en español. Lo que no está en la tabla sale tal cual. */
+const NOMBRES_TIPO: Record<string, string> = {
+  Explore: 'explorar',
+  'general-purpose': 'propósito general',
+  Plan: 'plan',
+}
+export const nombreDeTipo = (tipo: string): string => NOMBRES_TIPO[tipo] ?? tipo
 export const palabraEsfuerzo = (esfuerzo: string): string => PALABRAS.esfuerzo[esfuerzo] ?? esfuerzo
 
 // Instrucción que se añade al final del encargo de cada subagente savvy-*. Su prompt de sistema
