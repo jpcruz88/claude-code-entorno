@@ -74,7 +74,7 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { glifoAgente } from './agentes-anim'
+import { emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
 import { claveDeRedibujo } from './clave-redibujo'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
@@ -1112,6 +1112,26 @@ export const register: Register = (on, options) => {
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
     const glyph = (c: AgentCard) => glifoAgente(now, c.status, cfg.animacion)
+    // El emoji del agente en su pista: va de un lado a otro mientras trabaja y se queda quieto al terminar.
+    // `g` son las celdas de la pista (antes, barra, después); `i` desfasa a cada agente para que no vayan a la vez.
+    const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }, i: number) => {
+      const total = g.before + g.bar + g.after
+      const quieto = Math.max(0, Math.min(total - 2, g.before + g.bar - 2))
+      const p = total < 2 ? null : c.status === 'running' && cfg.animacion ? posicionMarcha(now, total, i * 3) : quieto
+      const { antes, despues } = pistaCarril(g, p)
+      const color = (t: { barra: boolean }) => (t.barra ? statusColor(c) : C.faint)
+      return (
+        <Text>
+          {antes.map((t, k) => (
+            <Text key={`a${k}`} color={color(t)}>{t.texto}</Text>
+          ))}
+          {p === null ? null : <Text>{emojiDe(c.id)}</Text>}
+          {despues.map((t, k) => (
+            <Text key={`d${k}`} color={color(t)}>{t.texto}</Text>
+          ))}
+        </Text>
+      )
+    }
     const expandOnPress = (id: string) => () =>
       update($, view, x => ({ ...normalize(DEFAULT_VIEW, x), expanded: normalize(DEFAULT_VIEW, x).expanded === id ? null : id }))
 
@@ -1163,11 +1183,7 @@ export const register: Register = (on, options) => {
                     <Button key={`card-${c.id}`} plain hotkey={String(i + 1)} label={shorten(cardTitle(c), labelW - 3)} onPress={expandOnPress(c.id)} />
                   </Box>
                   <Box flexShrink={0}>
-                    <Text>
-                      <Text color={C.faint}>{'·'.repeat(gm?.before ?? 0)}</Text>
-                      <Text color={statusColor(c)}>{'━'.repeat(gm?.bar ?? 1)}</Text>
-                      <Text color={C.faint}>{'·'.repeat(gm?.after ?? 0)}</Text>
-                    </Text>
+                    {pistaDe(c, gm ?? { before: 0, bar: barW, after: 0 }, i)}
                   </Box>
                   {clock(`lane-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}
                 </Box>
@@ -1206,6 +1222,7 @@ export const register: Register = (on, options) => {
                   <Text dimColor wrap="truncate">
                     {c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
                   </Text>
+                  {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
                   <Box columnGap={1}>
                     <Text color={c.lastStop === 'max_tokens' ? C.warn : statusColor(c)}>
                       {cardW >= 26 ? `${glyph(c)} ${c.lastStop === 'max_tokens' ? 'max_tokens' : statusLabel(c.status)}` : glyph(c)}
