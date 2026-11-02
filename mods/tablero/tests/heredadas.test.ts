@@ -50,6 +50,7 @@ import {
   startConsult,
   stepSpeed,
 } from '../hooks/core'
+import { EMOJI_AGENTES } from '../hooks/agentes-anim'
 import type { Check } from '../types'
 
 // ---------------------------------------------------------------- pure behaviour
@@ -347,6 +348,7 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
     const lanesUi = await $.ui.mount({ ...pane(64), surface })
     expect(await lanesUi.find({ text: /4 total/ })).toBeDefined()
     expect(await lanesUi.find({ text: /━/ })).toBeDefined()
+    expect(await lanesUi.find({ text: new RegExp(EMOJI_AGENTES.join('|')) })).toBeDefined() // el cangrejo del carril
     await lanesUi.unmount()
   }
 })
