@@ -203,7 +203,7 @@ export async function lanzarAgente<E extends EncargoBase, R extends RespuestaBas
     return agregarRun(lista, run)
   })
   await update($, ahora, () => en)
-  const abrir = modoAbrir(opciones.agentesAbrir)
+  const abrir = modoAbrir(opciones?.agentesAbrir)
   if (abrir === 'off') return iniciado
   if (e.subagentType.startsWith('savvy-')) {
     const f = cargarFlujo(await read($, flujo))
@@ -238,8 +238,8 @@ export async function finDeTurno($: EngineInterface, e: { agentId?: string; reas
   await update($, ahora, () => en)
 }
 
-export const registrarAgentes = (on: On, opciones: OpcionesAgentes = {}): void => {
-  const abrir = modoAbrir(opciones.agentesAbrir)
+export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}): void => {
+  const abrir = modoAbrir(opciones?.agentesAbrir)
   on('command.run', { command: 'agentes-info' }, async ($, e) => {
     // `/agentes-info abrir` lo abre, o lo trae al frente, sin alternarlo.
     if ((e.args ?? '').trim() === 'abrir') {

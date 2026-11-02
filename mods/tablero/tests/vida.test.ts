@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { BARRA_ANCHO, filasVida, svgVida, vidaDe } from '../hooks/vida'
+import { BARRA_ANCHO, filasVida, svgVida, tonoDeVida, vidaDe } from '../hooks/vida'
 
 const celdas = (fila: { tramos: { texto: string }[] }, simbolo: string) =>
   fila.tramos.reduce((n, t) => n + [...t.texto].filter(c => c === simbolo).length, 0)
@@ -72,4 +72,43 @@ test('el degradado se extiende por toda la barra, no solo por el relleno', () =>
 test('la vida fuera de rango se acota a 0..100', () => {
   expect(svgVida(-5, 200).includes('vida 0%')).toBe(true)
   expect(svgVida(150, 200).includes('vida 100%')).toBe(true)
+})
+
+// --- casos límite: anchos mínimos, umbrales exactos, valores no finitos
+
+const anchoTotal = (fila: { tramos: { texto: string }[] }) => fila.tramos.reduce((n, t) => n + [...t.texto].length, 0)
+
+test('en un panel de 4 columnas o menos no hay espacio: no se dibuja la fila', () => {
+  expect(filasVida({ contextoPct: 0, columnas: 4 })).toEqual([])
+  expect(filasVida({ contextoPct: 0, columnas: 3 })).toEqual([])
+})
+
+test('con 100% y 5 columnas la fila cabe: la etiqueta se recorta y no excede el ancho', () => {
+  const filas = filasVida({ contextoPct: 0, columnas: 5 })
+  expect(filas.length).toBe(1)
+  expect(anchoTotal(filas[0])).toBeLessThanOrEqual(5 - 4)
+})
+
+test('los umbrales exactos de color: 29 peligro, 30 aviso, 59 aviso, 60 acento', () => {
+  const tono = (vida: number) => tonoDeVida(vida)
+  expect(tono(29)).toBe('peligro')
+  expect(tono(30)).toBe('aviso')
+  expect(tono(59)).toBe('aviso')
+  expect(tono(60)).toBe('acento')
+})
+
+test('el redondeo sube 59.5 a 60 (acento) y 29.5 a 30 (aviso)', () => {
+  expect(vidaDe(40.5)).toBe(60)
+  expect(vidaDe(70.5)).toBe(30)
+})
+
+test('NaN e Infinity no producen vida', () => {
+  expect(vidaDe(Number.NaN)).toBeNull()
+  expect(vidaDe(Number.POSITIVE_INFINITY)).toBeNull()
+  expect(vidaDe(Number.NEGATIVE_INFINITY)).toBeNull()
+})
+
+test('el SVG con vida NaN no escribe NaN en el dibujo ni en la etiqueta', () => {
+  const s = svgVida(Number.NaN, 200)
+  expect(s.includes('NaN')).toBe(false)
 })
