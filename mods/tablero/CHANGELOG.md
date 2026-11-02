@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (tablero)
+
+- Quita la pestaña «Agentes»: ya no se abre sola al lanzar subagentes ni con `/agentes-info`. Los agentes viven en el Tablero (PR #7 y #8 en `main`).
+- Sube la versión para que Claude Code reinstale el mod en lugar de seguir con la copia en caché 0.2.0.
+
 ## 0.2.0 (tablero)
 
 - Panel «Agentes» y barra de progreso sobre el prompt, adaptados de savvy-progress (MIT): flujo con fase y tareas, subagentes en marcha, terminados y planificados, cangrejos animados por nivel, y el comando `/agentes-info`.
