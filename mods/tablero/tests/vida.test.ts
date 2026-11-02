@@ -130,3 +130,9 @@ test('con 5 columnas (1 de contenido) no aparece el número suelto "5" de una et
   const filas = filasVida({ contextoPct: 50, columnas: 5 })
   expect(filas[0].tramos[0].texto).not.toBe('5')
 })
+
+test('el tono sale de la vida redondeada, igual que la barra (29.6 → 30 → ámbar)', () => {
+  expect(tonoDeVida(29.6)).toBe('aviso')
+  expect(tonoDeVida(59.6)).toBe('acento')
+  expect(tonoDeVida(29.4)).toBe('peligro')
+})

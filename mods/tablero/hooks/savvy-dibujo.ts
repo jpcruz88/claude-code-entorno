@@ -17,6 +17,7 @@ import {
   modelName,
   nivelDe,
   nivelDeTarea,
+  nombreDeTipo,
   palabraNivel,
   progresoRun,
   ratio,
@@ -289,8 +290,8 @@ export const agentSvg = (W: number, a: AgenteRun, ahora: number): string => {
     W,
     66,
     `${rowCrab(0, 14, costumeOf(a.type), false, a.status === 'running')}
-<text class="t" x="42" y="18" font-family="${TIPO}" font-size="13" font-weight="600">${xml(fitText(a.description || a.type, 13, textoW))}</text>
-<text x="42" y="34" font-family="${TIPO}" font-size="11"><tspan fill="${color}">${xml(nivel === 'other' ? a.type : palabraNivel(nivel))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
+<text class="t" x="42" y="18" font-family="${TIPO}" font-size="13" font-weight="600">${xml(fitText(a.description || nombreDeTipo(a.type), 13, textoW))}</text>
+<text x="42" y="34" font-family="${TIPO}" font-size="11"><tspan fill="${color}">${xml(nivel === 'other' ? nombreDeTipo(a.type) : palabraNivel(nivel))}</tspan><tspan class="s">  ${xml(meta.join('  ·  '))}</tspan></text>
 ${pasos && pasosW > 30 ? `<text class="t" x="42" y="49" font-family="${TIPO}" font-size="11" font-variant-numeric="tabular-nums">${xml(fitText(pasos, 11, pasosW))}</text>` : ''}
 <text class="s" x="${42 + textoW}" y="49" text-anchor="end" font-family="${TIPO}" font-size="11" font-variant-numeric="tabular-nums">${estadisticas}</text>
 <rect class="k" x="42" y="55" width="${textoW}" height="4" rx="2"/><rect${progreso === null ? ' class="m"' : ''} x="42" y="55" width="${llenoW}" height="4" rx="2"${progreso === null ? '' : ` fill="${color}"`}/>

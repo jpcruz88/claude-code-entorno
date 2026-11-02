@@ -13,7 +13,10 @@ export const vidaDe = (contextoPct: number | null): number | null => {
 }
 
 /** Color de la parte llena: verde con vida alta, ámbar a media, rojo cuando queda poca. */
-export const tonoDeVida = (vida: number): Tono => (vida >= 60 ? 'acento' : vida >= 30 ? 'aviso' : 'peligro')
+export const tonoDeVida = (vida: number): Tono => {
+  const v = Math.round(vida)
+  return v >= 60 ? 'acento' : v >= 30 ? 'aviso' : 'peligro'
+}
 
 /**
  * Una fila: la etiqueta («vida 50%») y la barra. `columnas` es el ancho del panel, con su borde

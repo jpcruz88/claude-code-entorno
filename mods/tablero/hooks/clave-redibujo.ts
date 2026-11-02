@@ -12,6 +12,10 @@ export type EntradaClave = {
   costoUsd: number
 }
 
+/** Con animación, el reloj corre cada 120 ms. Sin ella, cada segundo: así un agente que termina
+ * se ve al momento y no hasta 30 s después. Cada cuadro solo redibuja si la clave cambió. */
+export const PERIODO_RELOJ_MS = (animacion: boolean): number => (animacion ? 120 : 1000)
+
 export const claveDeRedibujo = (e: EntradaClave): string =>
   JSON.stringify([
     e.contextoPct,
