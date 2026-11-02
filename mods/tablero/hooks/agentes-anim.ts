@@ -9,8 +9,12 @@ const MARCHA = ['◐', '◓', '◑', '◒'] as const
 
 const FIJOS: Record<string, string> = { done: '✓', failed: '✗' }
 
-/** El glifo de un carril en el momento `ahora` (ms). */
-export const glifoAgente = (ahora: number, estado: string): string => {
-  if (estado === 'running') return MARCHA[Math.floor(ahora / PASO_AGENTE_MS) % MARCHA.length]
+/** El glifo de un carril en el momento `ahora` (ms). Con `animado` en falso, un agente en marcha muestra siempre el primer cuadro. */
+export const glifoAgente = (ahora: number, estado: string, animado = true): string => {
+  if (estado === 'running') return MARCHA[animado ? Math.floor(ahora / PASO_AGENTE_MS) % MARCHA.length : 0]
   return FIJOS[estado] ?? '■'
 }
+
+/** El fotograma de marcha que cuenta para redibujar: cambia cada paso solo si hay agentes caminando. */
+export const fotogramaDeMarcha = (ahora: number, enMarcha: number): number =>
+  enMarcha > 0 ? Math.floor(ahora / PASO_AGENTE_MS) : 0
