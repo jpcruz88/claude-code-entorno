@@ -47,7 +47,7 @@
       "name": "tablero",
       "source": "./mods/tablero",
       "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
-      "version": "0.1.0"
+      "version": "0.2.1"
     },
     {
       "name": "tdd-gate",
