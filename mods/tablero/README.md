@@ -19,7 +19,7 @@ En el panel SESIÓN, una barra muestra la vida que te queda de contexto (`vida 5
 ## Progreso y agentes (de savvy-progress)
 
 - **Barra sobre el prompt**: el título del flujo, la fase, las tareas aceptadas frente a las planificadas, y un botón `×N` con el tamaño de la cuadrilla que abre el panel. Se muestra cuando la sesión principal reporta un flujo (`mcp__tablero__progreso`) o cuando arranca un subagente `savvy-*`.
-- **Panel «Agentes»** (`/agentes-info`): subagentes en marcha, terminados y planificados, con nivel, modelo, esfuerzo, progreso de pasos, contexto, costo estimado y tiempo.
+- **Agentes**: los subagentes en marcha y terminados se ven como tarjetas dentro del panel «Tablero», con nivel, modelo, esfuerzo, progreso de pasos, contexto, costo estimado y tiempo.
 - **Cangrejos**: cada subagente es un cangrejo que camina mientras trabaja. Cada nivel lleva un accesorio (`cuidadoso` gira una llave, `pesado` pasa la lupa, `medio` voltea la tortilla, `ligero` corre con bandera). En la app de escritorio, `prefers-reduced-motion` los deja quietos. En la terminal, la opción `animacion: false` fija el glifo de cada agente en marcha y hace que el reloj se redibuje cada 30 s.
 - **Costos**: son estimados con la tabla de precios de `hooks/savvy-core.ts`; Claude Code reporta tokens, no dinero.
 
@@ -29,7 +29,6 @@ Cada subagente `savvy-*` que no traiga la instrucción recibe al final de su enc
 
 ### Opciones
 
-- `agentesAbrir`: `any` (por omisión) abre el panel solo al arrancar cualquier subagente; `savvy` solo al arrancar un `savvy-*` o al reportar un plan; `off` nunca solo. Se puede abrir con `/agentes-info abrir`.
 
 ### Lo que no se portó
 
