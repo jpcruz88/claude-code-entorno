@@ -2,6 +2,10 @@
 // en español y sin el nivel «fable». Solo cálculo: sin red, sin procesos y sin escribir a disco.
 // savvy-dibujo.ts pinta estos datos y savvy-registro.ts los conecta a los eventos del motor.
 
+/** La opción `agentesAbrir` validada: cualquier valor desconocido cae en `savvy`, el valor por omisión. */
+export const modoAbrir = (valor: unknown): 'savvy' | 'any' | 'off' =>
+  valor === 'any' || valor === 'off' ? valor : 'savvy'
+
 export type Fase = 'plan' | 'design' | 'delegate' | 'review' | 'close'
 
 export type TareaPlanificada = { title: string; tier: string; after: number[] }

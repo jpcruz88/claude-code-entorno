@@ -6,6 +6,7 @@ import {
   TIER_COLOR,
   agregarRun,
   cargarFlujo,
+  modoAbrir,
   cleanTasks,
   costOf,
   ctxOf,
@@ -306,4 +307,13 @@ test('la instrucción nombra la herramienta de pasos y empieza con un salto de l
 
 test('cleanTasks devuelve undefined si no hay lista', () => {
   expect(cleanTasks(undefined)).toBeUndefined()
+})
+
+test('modoAbrir acepta solo savvy, any u off; cualquier otro valor cae en savvy', () => {
+  expect(modoAbrir('any')).toBe('any')
+  expect(modoAbrir('off')).toBe('off')
+  expect(modoAbrir('savvy')).toBe('savvy')
+  expect(modoAbrir('Any')).toBe('savvy')
+  expect(modoAbrir(undefined)).toBe('savvy')
+  expect(modoAbrir(42)).toBe('savvy')
 })
