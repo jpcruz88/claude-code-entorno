@@ -39,7 +39,6 @@ import {
   palabraEsfuerzo,
   type Uso,
   MODELO_NIVEL,
-  modoAbrir,
 } from './savvy-core'
 import {
   agentSvg,
@@ -64,13 +63,10 @@ const COLOR_ACENTO = '#8f8cf4'
 const COLOR_HECHO = '#5fbf8f'
 const ESTADO: Record<string, string> = { running: '●', done: '✓', failed: '✗', planned: '◷' }
 
-export type OpcionesAgentes = { agentesAbrir?: 'savvy' | 'any' | 'off' }
-
 const TOOL_PROGRESO = PROGRESS_TOOL
 const TOOL_PASO = STEP_TOOL
 
-// Lo que el mod registra al iniciar la sesión: herramientas, comando y reloj del panel.
-let relojAgentes: { cancel: () => void } | null = null
+// Lo que el mod registra al iniciar la sesión: herramientas y comando.
 
 export async function iniciarAgentes($: EngineInterface): Promise<void> {
   await $.tool.register({
@@ -123,24 +119,8 @@ export async function iniciarAgentes($: EngineInterface): Promise<void> {
     // En la lista de herramientas de todos los agentes, no detrás de ToolSearch: los trabajadores no la buscan.
     isDeferred: false,
   })
-
-  // Actualiza el reloj de los agentes en marcha; en silencio cuando no hay ninguno. Un solo reloj a la vez.
-  relojAgentes?.cancel()
-  relojAgentes = $.clock.every(1000, () => {
-    void (async () => {
-      const lista = await read($, agentes)
-      if (!lista.some(a => a.status === 'running')) return
-      const at = await $.clock.now()
-      await update($, ahora, () => at)
-    })()
-  })
 }
 
-/** Lo llama el mod al terminar la sesión: el reloj de agentes no sigue corriendo sin sesión. */
-export function detenerRelojAgentes(): void {
-  relojAgentes?.cancel()
-  relojAgentes = null
-}
 
 type EncargoBase = { prompt: string; description: string; subagentType: string; tool_use_id: string }
 type RespuestaBase = { model: string; agentId?: string; deny?: unknown }
@@ -150,7 +130,6 @@ export async function lanzarAgente<E extends EncargoBase, R extends RespuestaBas
   $: EngineInterface,
   e: E,
   next: (x: E) => Promise<R>,
-  opciones: OpcionesAgentes,
 ): Promise<R> {
   const encargo = debeInstruirse(e.subagentType, e.prompt) ? ({ ...e, prompt: instruccion(e.prompt) } as E) : e
   const iniciado = await next(encargo)
@@ -204,7 +183,16 @@ export async function finDeTurno($: EngineInterface, e: { agentId?: string; reas
   await update($, ahora, () => en)
 }
 
-export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}): void => {
+/** El avance que reporta cada trabajador (paso, total y nota), por id, para dibujarlo en su tarjeta de Tablero. */
+export async function pasosDeAgentes($: EngineInterface): Promise<Map<string, { done: number; total: number; note?: string }>> {
+  const mapa = new Map<string, { done: number; total: number; note?: string }>()
+  for (const a of await read($, agentes)) {
+    if (a.stepTotal) mapa.set(a.id, { done: a.stepDone ?? 0, total: a.stepTotal, note: a.stepNote })
+  }
+  return mapa
+}
+
+export const registrarAgentes = (on: On): void => {
   on('tool.call', { tool: TOOL_PROGRESO }, async ($, e) => {
     // El flujo es de la sesión principal: una llamada con agentId no cambia nada.
     if (e.agentId) return { result: 'ignored: solo la sesión principal reporta el flujo' }
@@ -246,172 +234,6 @@ export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}):
     } finally {
       await update($, flujo, prev => (prev ? { ...prev, running: Math.max(0, prev.running - 1) } : prev))
     }
-  })
-
-  on('ui.render', { component: 'Pane', requestId: PANE_AGENTES }, async ($, e) => {
-    const ui = $.ui.resolve(e)
-    const { Box, Text, Button } = ui
-    const lista = await read($, agentes)
-    const f = cargarFlujo(await read($, flujo))
-    const p: Panel = await read($, panel)
-    const at = Math.max(await read($, ahora), ...lista.map(a => a.startedAt), 0)
-
-    const enMarcha = lista.filter(a => a.status === 'running').reverse()
-    const terminados = lista.filter(a => a.status !== 'running').reverse()
-    const planificadas = plannedOf(f, lista)
-    const t = totales(lista, at)
-    // El título del panel dice «Agentes»; dentro, solo el nombre del flujo.
-    const titulo = f && !f.isFinished ? f.title : ''
-
-    const botonPlegar = (
-      <Button key="plegar" label={p.plegado ? PALABRAS.desplegar : PALABRAS.plegar} plain onPress={() => update($, panel, prev => ({ ...prev, plegado: !prev.plegado }))} />
-    )
-    const botonTerminados = (
-      <Button
-        key="terminados"
-        label={`${p.terminadosPlegados ? '▸' : '▾'} ${PALABRAS.terminados} · ${terminados.length}`}
-        plain
-        onPress={() => update($, panel, prev => ({ ...prev, terminadosPlegados: !prev.terminadosPlegados }))}
-      />
-    )
-    const vacio = lista.length === 0 && planificadas.length === 0
-    const resumen = `≈${fmtCost(t.cost)}, ${fmtTokens(t.tokens)} ${PALABRAS.tokensPalabra}, ${fmtTime(t.time)}`
-
-    if (e.surface === 'desktop' && 'Svg' in ui) {
-      const { Svg } = ui
-      const W = Math.max(240, Math.min(900, (e.props.bodyColumns || 40) * 8 - 8))
-      const seccion = (clave: string, texto: string) => (
-        <Text key={clave} dimColor>
-          {texto}
-        </Text>
-      )
-      if (p.plegado) {
-        return (
-          <Box flexDirection="column" gap={1}>
-            <Svg source={compactSvg(W, lista, planificadas, t)} alt={`${lista.length} ${PALABRAS.agentes}, ${resumen}`} width={W} height={32} />
-            {botonPlegar}
-          </Box>
-        )
-      }
-      const terminadosMostrados = p.terminadosPlegados ? 0 : terminados.length
-      const lineas = 1 + (vacio ? 1 : 0) + (enMarcha.length > 0 ? 1 : 0) + (terminados.length > 0 ? 1 : 0) + (planificadas.length > 0 ? 1 : 0)
-      const altoCabecera = titulo ? 72 : 44
-      const altoRejilla = altoCabecera + lineas * 24 + (enMarcha.length + terminadosMostrados) * 66 + planificadas.length * 46
-      return (
-        <Box flexDirection="column">
-          {/* La rejilla da el alto del panel; el contenido va encima, como un Box absoluto. */}
-          {gridTiles(altoRejilla).map((altoTesela, i) => (
-            <Svg key={`rejilla-${i}`} source={gridSvg(W, altoTesela)} alt="rejilla de puntos" width={W} height={altoTesela} />
-          ))}
-          <Box flexDirection="column" position="absolute" top={0} left={0} right={0}>
-            <Svg source={headerSvg(W, titulo, t)} alt={titulo ? `${titulo}: ${resumen}` : resumen} width={W} height={altoCabecera} />
-            {botonPlegar}
-            {vacio && <Text dimColor>{PALABRAS.vacio}</Text>}
-            {enMarcha.length > 0 && seccion('h-marcha', `${PALABRAS.enMarcha} · ${enMarcha.length}`)}
-            {enMarcha.map(a => (
-              <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${PALABRAS.enMarchaSing}`} width={W} height={66} />
-            ))}
-            {terminados.length > 0 && botonTerminados}
-            {!p.terminadosPlegados &&
-              terminados.map(a => (
-                <Svg key={a.id} source={agentSvg(W, a, at)} alt={`${a.description}: ${modelName(a.model)}, ${PALABRAS.terminadoSing}`} width={W} height={66} />
-              ))}
-            {planificadas.length > 0 && seccion('h-plan', `${PALABRAS.planificados} · ${planificadas.length}`)}
-            {planificadas.map(pl => (
-              <Svg key={`plan-${pl.n}`} source={plannedSvg(W, pl)} alt={`${pl.n}. ${pl.title}: ${PALABRAS.planificadoSing}`} width={W} height={46} />
-            ))}
-          </Box>
-        </Box>
-      )
-    }
-
-    // Terminal: el mismo contenido en filas de texto.
-    const columnas = Math.max(24, e.props.bodyColumns || 40)
-    const anchoBarra = Math.max(6, Math.min(20, columnas - 34))
-    const fila = (a: AgenteRun) => {
-      const nivel = nivelDe(a.type)
-      const color = colorDeNivel(nivel)
-      const progreso = a.stepTotal ? Math.min(1, (a.stepDone ?? 0) / a.stepTotal) : a.status === 'done' ? 1 : null
-      const ctx = a.contextMax ? Math.min(100, Math.round((a.contextTokens / a.contextMax) * 100)) : 0
-      const pasos = a.stepTotal ? `${a.stepDone ?? 0}/${a.stepTotal}${a.stepNote ? ' ' + a.stepNote : ''} · ` : ''
-      return (
-        <Box key={a.id} flexDirection="column" marginBottom={1}>
-          <Box flexDirection="row" gap={1}>
-            <Text color={color}>▣</Text>
-            <Text bold wrap="truncate-end">
-              {a.description || a.type}
-            </Text>
-            <Text color={a.status === 'failed' ? 'red' : a.status === 'done' ? 'green' : color}>{ESTADO[a.status] ?? '●'}</Text>
-          </Box>
-          <Text dimColor wrap="truncate-end">
-            {'  '}
-            {nivel === 'other' ? a.type : palabraNivel(nivel)} · {a.effort ? `${modelName(a.model)} · ${palabraEsfuerzo(a.effort)}` : modelName(a.model)}
-            {a.round > 1 ? ` · ${PALABRAS.ronda} ${a.round}` : ''}
-          </Text>
-          <Text wrap="truncate-end">
-            {'  '}
-            {progreso === null ? <Text dimColor>{ctxBarra(ctx, anchoBarra)}</Text> : <Text color={color}>{ctxBarra(progreso * 100, anchoBarra)}</Text>}
-            <Text dimColor>
-              {' '}
-              {pasos}
-              {PALABRAS.ctx} {ctx}% · {fmtTokens(a.contextTokens)} ≈{fmtCost(a.costUsd)} {fmtTime(elapsed(a, at))}
-            </Text>
-          </Text>
-        </Box>
-      )
-    }
-
-    return (
-      <Box flexDirection="column">
-        <Box flexDirection="row" justifyContent="space-between">
-          <Text bold wrap="truncate-end">
-            {titulo}
-          </Text>
-          {botonPlegar}
-        </Box>
-        <Text dimColor>
-          ≈{fmtCost(t.cost)} · {fmtTokens(t.tokens)} {PALABRAS.tokensPalabra} · {fmtTime(t.time)}
-        </Text>
-        {p.plegado ? (
-          <Text wrap="truncate-end">
-            {[...enMarcha, ...terminados].map(a => (
-              <Text key={a.id} color={colorDeNivel(nivelDe(a.type))}>
-                {ESTADO[a.status] ?? '●'}{' '}
-              </Text>
-            ))}
-            {planificadas.map(pl => (
-              <Text key={`plan-${pl.n}`} dimColor>
-                ◷{' '}
-              </Text>
-            ))}
-          </Text>
-        ) : (
-          <Box flexDirection="column" marginTop={1}>
-            {vacio && <Text dimColor>{PALABRAS.vacio}</Text>}
-            {enMarcha.length > 0 && <Text dimColor>{PALABRAS.enMarcha} · {enMarcha.length}</Text>}
-            {enMarcha.map(fila)}
-            {terminados.length > 0 && botonTerminados}
-            {!p.terminadosPlegados && terminados.map(fila)}
-            {planificadas.length > 0 && <Text dimColor>{PALABRAS.planificados} · {planificadas.length}</Text>}
-            {planificadas.map(pl => {
-              const nivel = nivelDeTarea(pl)
-              return (
-                <Box key={`plan-${pl.n}`} flexDirection="column" marginBottom={1}>
-                  <Text dimColor wrap="truncate-end">
-                    <Text color={colorDeNivel(nivel)}>▢</Text> {pl.n}. {pl.title} ◷
-                  </Text>
-                  <Text dimColor wrap="truncate-end">
-                    {'  '}
-                    {palabraNivel(nivel)} · {MODELO_NIVEL[nivel] ? `${MODELO_NIVEL[nivel]?.[0]} · ${palabraEsfuerzo(MODELO_NIVEL[nivel]?.[1] ?? '')}` : ''}
-                    {pl.after.length ? ` · ${PALABRAS.despues} ${pl.after.join(', ')}` : ''}
-                  </Text>
-                </Box>
-              )
-            })}
-          </Box>
-        )}
-      </Box>
-    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {

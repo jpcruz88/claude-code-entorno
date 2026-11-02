@@ -6,7 +6,6 @@ import {
   TIER_COLOR,
   agregarRun,
   cargarFlujo,
-  modoAbrir,
   cleanTasks,
   costOf,
   ctxOf,
@@ -309,19 +308,4 @@ test('cleanTasks devuelve undefined si no hay lista', () => {
   expect(cleanTasks(undefined)).toBeUndefined()
 })
 
-test('modoAbrir acepta solo savvy, any u off; cualquier otro valor cae en any', () => {
-  expect(modoAbrir('any')).toBe('any')
-  expect(modoAbrir('off')).toBe('off')
-  expect(modoAbrir('savvy')).toBe('savvy')
-  expect(modoAbrir('Any')).toBe('any')
-  expect(modoAbrir(undefined)).toBe('any')
-  expect(modoAbrir(42)).toBe('any')
-})
 
-test('modoAbrir ignora mayúsculas y espacios: "OFF" y " off " apagan; "SAVVY" es savvy', () => {
-  expect(modoAbrir('OFF')).toBe('off')
-  expect(modoAbrir(' off ')).toBe('off')
-  expect(modoAbrir('SAVVY')).toBe('savvy')
-  expect(modoAbrir('')).toBe('any')
-  expect(modoAbrir(null)).toBe('any')
-})
