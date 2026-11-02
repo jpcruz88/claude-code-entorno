@@ -123,3 +123,27 @@ test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada ca
   // La barra de vida no se mueve sola: solo redibuja cuando cambia su clave (el minuto o el contexto), no en cada cuadro de 120 ms.
   expect(invalidaciones - tras).toBeLessThanOrEqual(1)
 })
+
+test('al terminar la sesión, el reloj de la banda deja de pedir redibujos', { options: { banda: true } }, async ($, on) => {
+  const reloj = mock.clock(on)
+  on('ui.status', () => ({ value: undefined }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.cwd', () => ({ value: '/work' }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  on('command.register', () => ({ value: { command: 'tablero' } }))
+  on('ui.open', () => ({ value: { isPlaced: true as const } }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  let invalidaciones = 0
+  on('ui.invalidate', () => {
+    invalidaciones += 1
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await reloj.advance(1_000)
+  await $.session.end({ reason: 'exit', sessionId: 's' } as never)
+  const tras = invalidaciones
+  // Dos minutos de reloj: si el reloj siguiera vivo, el cambio de minuto pediría al menos un redibujo.
+  await reloj.advance(120_000)
+  expect(invalidaciones - tras).toBe(0)
+})
