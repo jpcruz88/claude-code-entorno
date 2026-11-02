@@ -146,6 +146,17 @@ test('por defecto, lanzar un trabajador savvy-* abre el panel solo', async ($, o
   expect(abiertos).toBe(1)
 })
 
+test('por defecto, lanzar cualquier subagente abre el panel solo', async ($, on) => {
+  motor(on)
+  let abiertos = 0
+  on('ui.open', () => {
+    abiertos += 1
+    return { value: { isPlaced: true as const } }
+  })
+  await lanzar($, 'general-purpose', 'revisar auth')
+  expect(abiertos).toBe(1)
+})
+
 test('con agentesAbrir apagado, lanzar un trabajador no abre el panel solo', { options: { agentesAbrir: 'off' } }, async ($, on) => {
   motor(on)
   let abiertos = 0
