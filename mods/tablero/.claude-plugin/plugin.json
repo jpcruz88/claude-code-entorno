@@ -126,7 +126,7 @@
         "any",
         "off"
       ],
-      "default": "savvy"
+      "default": "any"
     },
     "statusLine": {
       "title": "Línea de estado",

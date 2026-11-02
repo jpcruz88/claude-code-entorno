@@ -29,7 +29,7 @@ Cada subagente `savvy-*` que no traiga la instrucción recibe al final de su enc
 
 ### Opciones
 
-- `agentesAbrir`: `savvy` (por omisión) abre el panel solo al arrancar un `savvy-*` o al reportar un plan; `any` también al arrancar cualquier otro subagente; `off` nunca solo. Se puede abrir con `/agentes-info abrir`.
+- `agentesAbrir`: `any` (por omisión) abre el panel solo al arrancar cualquier subagente; `savvy` solo al arrancar un `savvy-*` o al reportar un plan; `off` nunca solo. Se puede abrir con `/agentes-info abrir`.
 
 ### Lo que no se portó
 
