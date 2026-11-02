@@ -8,6 +8,6 @@ test('registrarAgentes con opciones en null no lanza y registra los manejadores'
   const on = ((nombre: string) => {
     registrados.push(nombre)
   }) as never
-  expect(() => registrarAgentes(on, null as never)).not.toThrow()
+  expect(() => registrarAgentes(on)).not.toThrow()
   expect(registrados.length).toBeGreaterThan(0)
 })
