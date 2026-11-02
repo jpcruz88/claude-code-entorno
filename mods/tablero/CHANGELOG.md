@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2 (tablero)
+
+- Textos en español: las etiquetas «mcp» y «skills» pasan a «MCP» y «habilidades», y «max_tokens» a «tope de tokens» (tarjeta y aviso).
+
 ## 0.2.1 (tablero)
 
 - Quita la pestaña «Agentes»: ya no se abre sola al lanzar subagentes ni con `/agentes-info`. Los agentes viven en el Tablero (PR #7 y #8 en `main`).
