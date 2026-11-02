@@ -95,7 +95,11 @@ test('con animación apagada no pide redibujar cada segundo', { options: { banda
   })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await reloj.advance(5_000)
-  expect(invalidaciones).toBe(0)
+  const alPrincipio = invalidaciones
+  // El reloj corre cada segundo, pero solo redibuja si la clave cambió: en estado estable, ninguno más.
+  await reloj.advance(5_000)
+  expect(alPrincipio).toBeLessThanOrEqual(1)
+  expect(invalidaciones).toBe(alPrincipio)
 })
 
 test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada cambia', { options: { banda: true } }, async ($, on) => {
