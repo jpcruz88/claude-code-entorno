@@ -69,28 +69,6 @@ export type OpcionesAgentes = { agentesAbrir?: 'savvy' | 'any' | 'off' }
 const TOOL_PROGRESO = PROGRESS_TOOL
 const TOOL_PASO = STEP_TOOL
 
-/** Abre el panel de agentes, o lo cierra si ya está abierto; devuelve si queda abierto. */
-async function alternarPanel($: EngineInterface): Promise<boolean> {
-  const abierto = (await $.ui.panes()).some(p => p.id === PANE_AGENTES)
-  if (abierto) {
-    await $.ui.close({ id: PANE_AGENTES })
-    return false
-  }
-  const at = await $.clock.now()
-  await update($, ahora, () => at)
-  await $.ui.open({ id: PANE_AGENTES, title: PALABRAS.panel })
-  return true
-}
-
-/** Abre el panel una vez por flujo o por tanda, según la opción `agentesAbrir`. */
-async function abrirAuto($: EngineInterface, clave: string): Promise<void> {
-  const p = await read($, panel)
-  if (p.autoAbiertoPara === clave) return
-  await update($, panel, prev => ({ ...prev, autoAbiertoPara: clave }))
-  void $.ui.open({ id: PANE_AGENTES, title: PALABRAS.panel }).catch(() => undefined)
-}
-
-
 // Lo que el mod registra al iniciar la sesión: herramientas, comando y reloj del panel.
 let relojAgentes: { cancel: () => void } | null = null
 
@@ -144,10 +122,6 @@ export async function iniciarAgentes($: EngineInterface): Promise<void> {
     },
     // En la lista de herramientas de todos los agentes, no detrás de ToolSearch: los trabajadores no la buscan.
     isDeferred: false,
-  })
-  await $.command.register({
-    name: 'agentes-info',
-    description: 'Muestra u oculta el panel de subagentes: en marcha, terminados y planificados, con modelo, contexto, costo y tiempo',
   })
 
   // Actualiza el reloj de los agentes en marcha; en silencio cuando no hay ninguno. Un solo reloj a la vez.
@@ -203,14 +177,6 @@ export async function lanzarAgente<E extends EncargoBase, R extends RespuestaBas
     return agregarRun(lista, run)
   })
   await update($, ahora, () => en)
-  const abrir = modoAbrir(opciones?.agentesAbrir)
-  if (abrir === 'off') return iniciado
-  if (e.subagentType.startsWith('savvy-')) {
-    const f = cargarFlujo(await read($, flujo))
-    await abrirAuto($, f && !f.isFinished ? f.title : 'savvy-flow')
-  } else if (abrir === 'any') {
-    await abrirAuto($, 'any-agent')
-  }
   return iniciado
 }
 
@@ -239,19 +205,6 @@ export async function finDeTurno($: EngineInterface, e: { agentId?: string; reas
 }
 
 export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}): void => {
-  const abrir = modoAbrir(opciones?.agentesAbrir)
-  on('command.run', { command: 'agentes-info' }, async ($, e) => {
-    // `/agentes-info abrir` lo abre, o lo trae al frente, sin alternarlo.
-    if ((e.args ?? '').trim() === 'abrir') {
-      const at = await $.clock.now()
-      await update($, ahora, () => at)
-      await $.ui.open({ id: PANE_AGENTES, title: PALABRAS.panel })
-      return { text: PALABRAS.abierto }
-    }
-    const abierto = await alternarPanel($)
-    return { text: abierto ? PALABRAS.abierto : PALABRAS.cerrado }
-  })
-
   on('tool.call', { tool: TOOL_PROGRESO }, async ($, e) => {
     // El flujo es de la sesión principal: una llamada con agentId no cambia nada.
     if (e.agentId) return { result: 'ignored: solo la sesión principal reporta el flujo' }
@@ -262,7 +215,6 @@ export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}):
       await update($, agentes, lista => lista.filter(a => a.status === 'running'))
     }
     const siguiente = await update($, flujo, p => fusionarFlujo(cargarFlujo(p), input))
-    if (siguiente && input.tasks?.length && abrir !== 'off') await abrirAuto($, siguiente.title)
     return { result: `ok: ${etiquetaFlujo(siguiente ?? nuevoFlujo())}` }
   })
 
@@ -474,7 +426,7 @@ export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}):
     const lista = await read($, agentes)
     const cuadrilla = lista.length + plannedOf(f, lista).length
     const trabajando = lista.some(a => a.status === 'running')
-    const botonCuadrilla = <Button key="tablero-agentes" label={`×${cuadrilla}`} plain onPress={() => void alternarPanel($)} />
+    const cuentaCuadrilla = <Text key="tablero-agentes">{`×${cuadrilla}`}</Text>
     const porcentaje = `${Math.round(ratio(f) * 100)}%`
     const descartar = (
       <Button key="tablero-descartar" label="✕" plain role="dismiss" onPress={() => update($, flujo, () => null)} />
@@ -488,7 +440,7 @@ export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}):
         <Box flexDirection="column">
           <Box flexDirection="row" alignItems="center" gap={1}>
             <Svg source={rowSvg(f, ancho, trabajando)} alt={`${f.title}: ${etiquetaFlujo(f)}, ${porcentaje}`} width={ancho} height={22} />
-            {botonCuadrilla}
+            {cuentaCuadrilla}
             {descartar}
           </Box>
           {debajo}
@@ -510,7 +462,7 @@ export const registrarAgentes = (on: On, opciones: OpcionesAgentes | null = {}):
           <Text bold>{etiquetaFlujo(f)}</Text>
           <Text dimColor>{porcentaje}</Text>
           <Text color="#D97757">▣</Text>
-          {botonCuadrilla}
+          {cuentaCuadrilla}
           {descartar}
         </Box>
         {debajo}

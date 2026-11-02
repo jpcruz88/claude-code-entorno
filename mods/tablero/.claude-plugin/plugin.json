@@ -117,17 +117,6 @@
       "type": "boolean",
       "default": true
     },
-    "agentesAbrir": {
-      "title": "Abrir el panel de agentes",
-      "description": "savvy: cuando arranca un trabajador savvy-* o se reporta un plan; any: también al arrancar cualquier otro subagente; off: nunca solo",
-      "type": "string",
-      "options": [
-        "savvy",
-        "any",
-        "off"
-      ],
-      "default": "any"
-    },
     "statusLine": {
       "title": "Línea de estado",
       "description": "Muestra contexto, agentes, permisos y uso en el footer",
