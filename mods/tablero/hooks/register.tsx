@@ -81,7 +81,7 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
-import { type OpcionesAgentes, detenerRelojAgentes, finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, registrarAgentes } from './savvy-registro'
+import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -348,7 +348,7 @@ export const register: Register = (on, options) => {
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
   // Panel de progreso y de agentes (savvy-progress, adaptado): barra sobre el prompt y panel «Agentes».
-  registrarAgentes(on, options as OpcionesAgentes)
+  registrarAgentes(on)
 
   on('session.start', async ($, e, next) => {
     // Un host sin herramientas o comandos arranca sin el panel de agentes, como la banda sin uso.
@@ -392,7 +392,6 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     detenerReloj()
-    detenerRelojAgentes()
     if (e.reason === 'clear') {
       await resetAll($)
       await refreshStatus($)
@@ -677,7 +676,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const started = await lanzarAgente($, e, next, options as OpcionesAgentes)
+    const started = await lanzarAgente($, e, next)
     if (!e.parentAgentId) await noteMode($, e.permissionMode)
     if (started.deny !== undefined || !started.agentId) return started
     const id = started.agentId
@@ -775,7 +774,7 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se] = await Promise.all([
+    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se, pasos] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
@@ -789,6 +788,7 @@ export const register: Register = (on, options) => {
       $.clock.now(),
       $.session.cwd().catch(() => ''),
       getSesion($),
+      pasosDeAgentes($),
     ])
     const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
@@ -1220,7 +1220,9 @@ export const register: Register = (on, options) => {
                     {sameModel ? c.type : `${c.type} · ${prettyModel(c.model)}`}
                   </Text>
                   <Text dimColor wrap="truncate">
-                    {c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
+                    {pasos.has(c.id)
+                      ? `${pasos.get(c.id)!.done}/${pasos.get(c.id)!.total}${pasos.get(c.id)!.note ? ` ${pasos.get(c.id)!.note}` : ''}`
+                      : c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
                   </Text>
                   {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
                   <Box columnGap={1}>
