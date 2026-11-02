@@ -102,10 +102,10 @@ test('sesionFilas arma las filas del panel y omite las vacías', () => {
   expect(filas.tareas).toBe('0/1 listas · ahora: Haciendo A')
   expect(filas.herramientas).toBe('Read 3 · Bash 2 · Edit 1 · TodoWrite 1')
   expect(filas.archivos).toBe('x.ts')
-  expect(filas.mcp).toBe('context7 2 (1 error)')
-  expect(filas.skills).toBe('caveman ×1')
+  expect(filas.MCP).toBe('context7 2 (1 error)')
+  expect(filas.habilidades).toBe('caveman ×1')
   // Los hooks no se muestran: eran una fila larga y sin uso.
-  expect(Object.keys(filas)).toEqual(['tareas', 'herramientas', 'archivos', 'mcp', 'skills'])
+  expect(Object.keys(filas)).toEqual(['tareas', 'herramientas', 'archivos', 'MCP', 'habilidades'])
 })
 
 test('los errores de MCP se pluralizan y se ordena por uso', () => {
@@ -113,6 +113,6 @@ test('los errores de MCP se pluralizan y se ordena por uso', () => {
   s = llamada(s, 'mcp__a__t', {}, true)
   s = llamada(s, 'mcp__a__t', {}, true)
   for (let i = 0; i < 3; i += 1) s = llamada(s, 'mcp__b__t', {})
-  const mcp = sesionFilas(s).find(f => f.etiqueta === 'mcp')?.valor
+  const mcp = sesionFilas(s).find(f => f.etiqueta === 'MCP')?.valor
   expect(mcp).toBe('b 3 · a 2 (2 errores)')
 })

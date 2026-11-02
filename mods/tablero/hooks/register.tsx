@@ -526,7 +526,7 @@ export const register: Register = (on, options) => {
     if (cards.some(c => c.id === id)) {
       const step = { model: e.model, usage: result.usage, stopReason: result.stopReason }
       await update($, agents, list => listOf<unknown>(list).map(normalizeCard).map(c => (c.id === id ? applyStep(c, step) : c)))
-      if (result.stopReason === 'max_tokens') await say($, await whoIs($, id), 'llegó a max_tokens', 'error', id)
+      if (result.stopReason === 'max_tokens') await say($, await whoIs($, id), 'llegó al tope de tokens', 'error', id)
     } else if (!a.ids.includes(id)) {
       const now = await $.clock.now()
       await update($, loops, l => stepLoop(listOf<Loop>(l), id, now))
@@ -1227,7 +1227,7 @@ export const register: Register = (on, options) => {
                   {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
                   <Box columnGap={1}>
                     <Text color={c.lastStop === 'max_tokens' ? C.warn : statusColor(c)}>
-                      {cardW >= 26 ? `${glyph(c)} ${c.lastStop === 'max_tokens' ? 'max_tokens' : statusLabel(c.status)}` : glyph(c)}
+                      {cardW >= 26 ? `${glyph(c)} ${c.lastStop === 'max_tokens' ? 'tope de tokens' : statusLabel(c.status)}` : glyph(c)}
                     </Text>
                     <Box flexShrink={0}>{clock(`card-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}</Box>
                   </Box>
