@@ -1,11 +1,13 @@
 ## Modelo y esfuerzo
 
-**Agentes y subagentes (herramienta Agent, Task y Workflow):** siempre
-`claude-haiku-5-5` con esfuerzo **medio**. Sin excepciones: ningún otro modelo, y
-ningún esfuerzo más alto que medio. Pasa siempre `model: "haiku"` y
-`effort: "medium"` (en un workflow, `model: 'haiku'` y `effort: 'medium'` en cada
-`agent()`). Un agente sin esos dos parámetros explícitos, o con otros valores, se
-bloquea (`claude/hooks/guard-subagentes.py`). El esfuerzo «low» también se acepta.
+**Agentes y subagentes (herramienta Agent, Task y Workflow):** pueden usar
+`haiku`, `sonnet` u `opus` (o su id completo, como `claude-opus-5-5`), con esfuerzo
+`low`, `medium` o `high`. Jev, el modelo de decisiones, puede cambiar esa elección
+por agente. `xhigh` y `max` se bloquean, y **Fable nunca** se permite, ni como
+elección de Jev ni como modelo fijado a mano. Un agente sin `model` o `effort`
+explícitos, o con valores fuera de esa lista, se bloquea
+(`claude/hooks/guard-subagentes.py`). En un workflow, cada `agent()` fija `model` y
+`effort` con esos mismos valores.
 
 **Sesión principal:** arranca con **Haiku**. Solo cambia de modelo si el usuario lo
 pide de forma explícita en ese mensaje (por ejemplo «usa opus», «/model opus»). Esa

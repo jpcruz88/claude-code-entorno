@@ -45,14 +45,30 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertEqual(correr(agente("claude-haiku-5-5", "medium")), "")
 
     def test_otro_modelo_se_bloquea(self):
-        for modelo in ("opus", "sonnet", "claude-opus-5-5", "claude-sonnet-5-5"):
+        for modelo in ("fable", "claude-fable-5-1", "gpt-5", "claude-instant"):
             with self.subTest(modelo=modelo):
                 self.assertTrue(negado(correr(agente(modelo, "medium"))))
 
     def test_esfuerzo_mas_alto_que_medio_se_bloquea(self):
-        for esfuerzo in ("high", "xhigh", "max"):
+        for esfuerzo in ("xhigh", "max"):
             with self.subTest(esfuerzo=esfuerzo):
                 self.assertTrue(negado(correr(agente("haiku", esfuerzo))))
+
+    def test_sonnet_alto_pasa(self):
+        self.assertEqual(correr(agente("sonnet", "high")), "")
+
+    def test_opus_medio_pasa(self):
+        self.assertEqual(correr(agente("claude-opus-5-5", "medium")), "")
+
+    def test_xhigh_se_bloquea(self):
+        self.assertTrue(negado(correr(agente("opus", "xhigh"))))
+
+    def test_fable_se_bloquea(self):
+        self.assertTrue(negado(correr(agente("fable", "low"))))
+
+    def test_workflow_sonnet_pasa(self):
+        guion = "agent('a', {model: 'sonnet', effort: 'high'})"
+        self.assertEqual(correr({"tool_name": "Workflow", "tool_input": {"script": guion}}), "")
 
     def test_sin_modelo_se_bloquea(self):
         self.assertTrue(negado(correr(agente(None, "medium"))))
@@ -61,7 +77,7 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertTrue(negado(correr(agente("haiku", None))))
 
     def test_task_tambien_se_revisa(self):
-        self.assertTrue(negado(correr(agente("opus", "medium", herramienta="Task"))))
+        self.assertTrue(negado(correr(agente("fable", "medium", herramienta="Task"))))
 
     def test_otras_herramientas_no_se_tocan(self):
         self.assertEqual(correr({"tool_name": "Bash", "tool_input": {"command": "ls"}}), "")
@@ -76,11 +92,11 @@ class Workflows(unittest.TestCase):
         self.assertEqual(correr(self.workflow(guion)), "")
 
     def test_script_con_otro_modelo_se_bloquea(self):
-        guion = "await agent('x', {model: 'opus', effort: 'medium'})"
+        guion = "await agent('x', {model: 'gpt-5', effort: 'medium'})"
         self.assertTrue(negado(correr(self.workflow(guion))))
 
     def test_script_con_esfuerzo_alto_se_bloquea(self):
-        guion = "await agent('x', {model: 'haiku', effort: 'high'})"
+        guion = "await agent('x', {model: 'haiku', effort: 'xhigh'})"
         self.assertTrue(negado(correr(self.workflow(guion))))
 
     def test_script_sin_modelo_se_bloquea(self):
