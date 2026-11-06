@@ -8,6 +8,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -15,6 +16,7 @@ import time
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from unittest import mock
 
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "claude" / "hooks"))
@@ -29,10 +31,11 @@ OPCIONES = ["haiku", "sonnet", "opus"]
 class ServidorFalso:
     """Servidor HTTP de juguete en 127.0.0.1 que responde lo que se le indique."""
 
-    def __init__(self, status=200, cuerpo=None, espera=0.0):
+    def __init__(self, status=200, cuerpo=None, espera=0.0, goteo=False):
         self.status = status
         self.cuerpo = cuerpo if cuerpo is not None else {}
         self.espera = espera
+        self.goteo = goteo
         self.peticiones = []
         servidor = self
 
@@ -45,6 +48,17 @@ class ServidorFalso:
                     "cabeceras": dict(self.headers),
                     "cuerpo": json.loads(crudo.decode("utf-8")),
                 })
+                if servidor.goteo:
+                    # Cabeceras y luego un byte cada 0,3 s durante 3 s: nunca se agota
+                    # el timeout por operación del socket, pero la respuesta tarda.
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.end_headers()
+                    for _ in range(10):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.3)
+                    return
                 if servidor.espera:
                     time.sleep(servidor.espera)
                 datos = servidor.cuerpo
@@ -303,6 +317,74 @@ class Seguridad(JevBase):
             d = jev_cliente.decidir(PREGUNTA, "x", OPCIONES, None, CLAVE)  # config inválida
         self.assertIsNone(d)
         self.assertNotIn(CLAVE, salida.getvalue())
+
+
+class UrlSegura(JevBase):
+    def test_jev_url_ajena_no_recibe_la_clave(self):
+        os.environ["JEV_URL"] = "https://ejemplo.invalid/api/alpha/decisions"
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("sin red")) as abrir:
+            self.assertIsNone(self.decidir(clave=CLAVE))
+        self.assertEqual(abrir.call_count, 1)
+        self.assertEqual(abrir.call_args[0][0].full_url, self.config["url"])
+
+    def test_jev_url_con_userinfo_enganosa_se_ignora(self):
+        os.environ["JEV_URL"] = "https://127.0.0.1@ejemplo.invalid/api/alpha/decisions"
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("sin red")) as abrir:
+            self.decidir(clave=CLAVE)
+        self.assertEqual(abrir.call_args[0][0].full_url, self.config["url"])
+
+    def test_jev_url_local_se_acepta(self):
+        for url in ("http://127.0.0.1:9/api/alpha/decisions",
+                    "http://localhost:9/api/alpha/decisions"):
+            with self.subTest(url=url):
+                os.environ["JEV_URL"] = url
+                with mock.patch("urllib.request.urlopen", side_effect=OSError("sin red")) as abrir:
+                    self.decidir(clave=CLAVE)
+                self.assertEqual(abrir.call_args[0][0].full_url, url)
+
+
+class PodaSegura(JevBase):
+    def test_separadores_unicode_no_corrompen_la_poda(self):
+        carpeta = Path(self.home, ".claude", "jev")
+        carpeta.mkdir(parents=True)
+        archivo = carpeta / "decisiones.jsonl"
+        archivo.write_text("".join(json.dumps({"n": i}) + "\n" for i in range(2000)),
+                           encoding="utf-8")
+        descripcion = "a b c\u0085d"
+        jev_cliente.registrar(self.home, {"descripcion": descripcion, "opcion": "opus"})
+        lineas = archivo.read_text(encoding="utf-8").split("\n")[:-1]
+        self.assertEqual(len(lineas), 2000)
+        for linea in lineas:
+            json.loads(linea)
+        self.assertEqual(json.loads(lineas[-1])["descripcion"], descripcion)
+
+
+class Concurrencia(JevBase):
+    def test_dos_procesos_dejan_exactamente_100_lineas_validas(self):
+        script = ("import sys; sys.path.insert(0, sys.argv[1]); import jev_cliente; "
+                  "jev_cliente.LIMITE_REGISTRO = 100; "
+                  "[jev_cliente.registrar(sys.argv[2], {'proceso': sys.argv[3], 'i': i}) "
+                  "for i in range(300)]")
+        hooks = str(RAIZ / "claude" / "hooks")
+        procesos = [subprocess.Popen([sys.executable, "-c", script, hooks, self.home, etiqueta])
+                    for etiqueta in ("a", "b")]
+        for proceso in procesos:
+            self.assertEqual(proceso.wait(timeout=120), 0)
+        carpeta = Path(self.home, ".claude", "jev")
+        lineas = (carpeta / "decisiones.jsonl").read_text(encoding="utf-8").split("\n")[:-1]
+        self.assertEqual(len(lineas), 100)
+        for linea in lineas:
+            json.loads(linea)
+        self.assertEqual([p.name for p in carpeta.iterdir() if "tmp" in p.name], [])
+
+
+class TiempoTotal(JevBase):
+    def test_goteo_no_alarga_el_tiempo_maximo(self):
+        self.servir(goteo=True)
+        self.config["timeout"] = 1.0
+        inicio = time.monotonic()
+        self.assertIsNone(self.decidir())
+        self.assertLess(time.monotonic() - inicio, 1.5)
 
 
 if __name__ == "__main__":
