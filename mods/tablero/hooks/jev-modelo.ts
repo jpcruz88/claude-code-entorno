@@ -108,11 +108,22 @@ export const lineaLog = (d: DecisionJev): string => {
   return `${etiqueta} → ${d.opcion}${confianza} ${d.sharp ? 'sharp → código' : 'split → claude'}`
 }
 
+const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus']
+
+/** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
+const familiaDe = (modelo: string): string => {
+  const m = modelo.toLowerCase()
+  for (const familia of FAMILIAS_MODELO) {
+    if (m === familia || m.startsWith(`claude-${familia}`)) return familia
+  }
+  return m
+}
+
 /** `jev ↑ sonnet` o `jev ↓ haiku` si Jev cambió lo que eligió Claude; null si no se aplicó o no se puede comparar. */
 export const marcaTarjeta = (d: DecisionJev | undefined): string | null => {
   if (!d || !d.aplicada || d.opcion === null || d.claude === null) return null
-  const claude = RANGO.get(d.claude)
-  const jev = RANGO.get(d.opcion)
+  const claude = RANGO.get(familiaDe(d.claude))
+  const jev = RANGO.get(familiaDe(d.opcion))
   if (claude === undefined || jev === undefined || claude === jev) return null
   return `jev ${jev > claude ? '↑' : '↓'} ${d.opcion}`
 }

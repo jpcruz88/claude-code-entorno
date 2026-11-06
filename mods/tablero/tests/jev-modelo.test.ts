@@ -132,3 +132,10 @@ test('misma elección sin marca', () => {
   expect(marcaTarjeta(decision({ claude: 'sonnet', opcion: 'sonnet', aplicada: false }))).toBe(null)
   expect(marcaTarjeta(decision({ claude: 'sonnet', opcion: 'sonnet', aplicada: true }))).toBe(null)
 })
+
+test('marca con ids completos de modelo: claude-sonnet-5-5 cuenta como sonnet', () => {
+  expect(marcaTarjeta(decision({ claude: 'claude-sonnet-5-5', opcion: 'opus', aplicada: true }))).toBe('jev ↑ opus')
+  expect(marcaTarjeta(decision({ claude: 'claude-haiku-5-5', opcion: 'sonnet', aplicada: true }))).toBe('jev ↑ sonnet')
+  expect(marcaTarjeta(decision({ claude: 'claude-opus-5-1', opcion: 'haiku', aplicada: true }))).toBe('jev ↓ haiku')
+  expect(marcaTarjeta(decision({ claude: 'claude-sonnet-5-5', opcion: 'sonnet', aplicada: true }))).toBe(null)
+})
