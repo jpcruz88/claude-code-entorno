@@ -56,3 +56,13 @@ test('un subagente terminado sigue en Tablero', async ($, on) => {
   expect(await ui.find({ text: /revisar auth/ })).toBeDefined()
   await ui.unmount()
 })
+
+test('la tarjeta dibuja una barra de avance con los pasos del trabajador', async ($, on) => {
+  motor(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await lanzar($)
+  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
+  const ui = await $.ui.mount(pane as never)
+  expect(await ui.find({ text: /████░░░░|██░░░░░░/ })).toBeDefined()
+  await ui.unmount()
+})

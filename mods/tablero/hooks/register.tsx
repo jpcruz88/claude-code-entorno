@@ -74,7 +74,7 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
+import { barraAvance, barraIndeterminada, emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
 import { nombreDeTipo } from './savvy-core'
 import { filasVida, svgVida, vidaDe } from './vida'
@@ -1225,6 +1225,13 @@ export const register: Register = (on, options) => {
                       ? `${pasos.get(c.id)!.done}/${pasos.get(c.id)!.total}${pasos.get(c.id)!.note ? ` ${pasos.get(c.id)!.note}` : ''}`
                       : c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
                   </Text>
+                  {cardW >= 14 && (pasos.has(c.id) || c.status === 'running') ? (
+                    <Text color={c.status === 'running' ? C.agent : C.dim} wrap="truncate">
+                      {pasos.has(c.id)
+                        ? barraAvance(pasos.get(c.id)!.done, pasos.get(c.id)!.total, cardW - 4)
+                        : barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
+                    </Text>
+                  ) : null}
                   {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
                   <Box columnGap={1}>
                     <Text color={c.lastStop === 'max_tokens' ? C.warn : statusColor(c)}>

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { EMOJI_AGENTES, PASO_AGENTE_MS, emojiDe, fotogramaDeMarcha, glifoAgente, pistaCarril, posicionMarcha } from '../hooks/agentes-anim'
+import { EMOJI_AGENTES, PASO_AGENTE_MS, barraAvance, barraIndeterminada, emojiDe, fotogramaDeMarcha, glifoAgente, pistaCarril, posicionMarcha } from '../hooks/agentes-anim'
 
 test('con la animación apagada, un agente en marcha muestra siempre el mismo cuadro', () => {
   expect(glifoAgente(0, 'running', false)).toBe('◐')
@@ -74,4 +74,26 @@ test('la barra del carril usa el tono de barra y lo demás es tenue', () => {
     { texto: '·', barra: false },
     { texto: '━━', barra: true },
   ])
+})
+
+test('la barra de avance llena celdas según done/total', () => {
+  expect(barraAvance(0, 4, 8)).toBe('░░░░░░░░')
+  expect(barraAvance(2, 4, 8)).toBe('████░░░░')
+  expect(barraAvance(4, 4, 8)).toBe('████████')
+})
+
+test('la barra de avance se acota y tolera datos raros', () => {
+  expect(barraAvance(9, 4, 8)).toBe('████████')
+  expect(barraAvance(-1, 4, 8)).toBe('░░░░░░░░')
+  expect(barraAvance(1, 0, 8)).toBe('░░░░░░░░')
+  expect(barraAvance(NaN, 4, 8)).toBe('░░░░░░░░')
+  expect(barraAvance(1, 4, 0)).toBe('')
+})
+
+test('la barra indeterminada tiene el ancho pedido y su bloque se mueve con el tiempo', () => {
+  const a = barraIndeterminada(0, 10)
+  const b = barraIndeterminada(3 * PASO_AGENTE_MS, 10)
+  expect([...a].length).toBe(10)
+  expect(a).not.toBe(b)
+  expect(barraIndeterminada(0, 2)).toBe('██')
 })
