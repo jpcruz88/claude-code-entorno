@@ -1,3 +1,5 @@
+import type { DecisionJev } from '../hooks/jev-modelo'
+
 export type Moment = 'before a plan' | 'error repeats' | 'before done'
 
 export type Bucket = 'file' | 'shell' | 'other'
@@ -76,6 +78,8 @@ export type AgentCard = {
   lastStop: string | null
   tools: ToolNote[]
   answer: string
+  /** La marca de Jev de este subagente (`jev ↑ sonnet`), o null si Jev no cambió lo que eligió Claude. */
+  jev: string | null
 }
 
 /** A model loop whose id matches no card: a workflow agent, a compaction or a memory fork. */
@@ -180,3 +184,6 @@ declare module 'claude-code' {
     }
   }
 }
+
+/** Las decisiones de Jev de la sesión y cuántas ya pasaron al log del tablero. */
+export type JevEstado = { decisiones: DecisionJev[]; vistas: number }

@@ -82,6 +82,7 @@ export const normalizeCard = (stored: unknown): AgentCard =>
       lastStop: null,
       tools: [],
       answer: '',
+      jev: null,
     },
     stored,
   )

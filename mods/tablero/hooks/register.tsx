@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, Layout, LogLine, Loop, Main, Roster, Sesion, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, LogLine, Loop, Main, Roster, Sesion, Turn, Usage, View } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -82,6 +82,8 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
+import { leerDecisiones, lineaLog, marcaTarjeta } from './jev-modelo'
+import type { DecisionJev } from './jev-modelo'
 import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
@@ -103,6 +105,7 @@ const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
 const sesion = atom({ plugin: 'tablero', key: 'sesion' } as const, DEFAULT_SESION)
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], vistas: 0 } as JevEstado)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
 
@@ -147,6 +150,32 @@ async function getSesion($: EngineInterface): Promise<Sesion> {
 /** Writes through `normalize`, so a value saved before a key existed still takes the change. */
 async function cambiarSesion($: EngineInterface, cambio: (s: Sesion) => Sesion) {
   await update($, sesion, s => cambio(normalize(DEFAULT_SESION, s)))
+}
+
+async function getJev($: EngineInterface): Promise<JevEstado> {
+  const j = normalize<JevEstado>({ decisiones: [], vistas: 0 }, await read($, jev))
+  return { decisiones: listOf<DecisionJev>(j.decisiones), vistas: j.vistas }
+}
+
+/**
+ * Relee las decisiones de Jev de esta sesión y pasa al log solo las nuevas. Sin id de sesión, sin carpeta
+ * personal o sin archivo, no hay ninguna: el tablero no muestra nada de Jev.
+ */
+async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
+  const sesionId = await $.session.id().catch(() => null)
+  const home = await $.env.get('HOME').catch(() => undefined)
+  const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
+  const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
+  const previo = await getJev($)
+  await update($, jev, () => ({ decisiones: ds, vistas: ds.length }))
+  for (const d of ds.slice(previo.vistas)) await say($, 'jev', lineaLog(d), 'info')
+  return ds
+}
+
+/** La marca de la decisión de modelo más reciente cuya descripción coincide con la del encargo (recortada a 60). */
+const marcaDeSpawn = (ds: DecisionJev[], descripcion: string): string | null => {
+  const clave = [...descripcion].slice(0, 60).join('')
+  return marcaTarjeta(ds.filter(d => d.tipo === 'modelo' && d.descripcion === clave).at(-1))
 }
 
 /**
@@ -646,6 +675,7 @@ export const register: Register = (on, options) => {
     if (ran.deny !== undefined) await say($, await whoIs($, e.agentId), `${text}  denegado`, 'error', e.agentId ?? null)
     else if (hasFailed) await say($, await whoIs($, e.agentId), `${text}  ✗`, 'error', e.agentId ?? null)
     else if (isEdit) await say($, await whoIs($, e.agentId), text, 'info', e.agentId ?? null)
+    if (hasFailed) await releerJev($)
     if (isSettled || !didRun) await refreshStatus($)
     return ran
   })
@@ -678,6 +708,7 @@ export const register: Register = (on, options) => {
 
   on('agent.spawn', async ($, e, next) => {
     const started = await lanzarAgente($, e, next)
+    const decisiones = await releerJev($)
     if (!e.parentAgentId) await noteMode($, e.permissionMode)
     if (started.deny !== undefined || !started.agentId) return started
     const id = started.agentId
@@ -696,6 +727,7 @@ export const register: Register = (on, options) => {
       type: e.name ?? e.subagentType,
       model: started.model,
       description: e.description,
+      jev: marcaDeSpawn(decisiones, e.description),
       spawnedAt: await $.clock.now(),
     }
     // Decided in the write: a resume whose first step already put its card back to running is not logged again.
@@ -717,6 +749,7 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     await finDeTurno($, e)
+    await releerJev($)
     const id = e.agentId
     const now = await $.clock.now()
     if (!id) {
@@ -775,7 +808,7 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se, pasos] = await Promise.all([
+    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se, pasos, jevs] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
@@ -790,7 +823,9 @@ export const register: Register = (on, options) => {
       $.session.cwd().catch(() => ''),
       getSesion($),
       pasosDeAgentes($),
+      getJev($),
     ])
+    const jevN = jevs.decisiones.length
     const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
@@ -1218,7 +1253,7 @@ export const register: Register = (on, options) => {
                     {titleLines(cardTitle(c), cardW - 7, cardW - 4)[1]}
                   </Text>
                   <Text color={C.dim} wrap="truncate">
-                    {sameModel ? nombreDeTipo(c.type) : `${nombreDeTipo(c.type)} · ${prettyModel(c.model)}`}
+                    {`${sameModel ? nombreDeTipo(c.type) : `${nombreDeTipo(c.type)} · ${prettyModel(c.model)}`}${c.jev ? ` · ${c.jev}` : ''}`}
                   </Text>
                   <Text dimColor wrap="truncate">
                     {pasos.has(c.id)
@@ -1517,6 +1552,7 @@ export const register: Register = (on, options) => {
                   ? { spans: [{ text: `⟲${u.compactions}`, color: C.amber }] }
                   : null,
               u.costUsd !== null ? { spans: [{ text: `· ${fmtUsd(u.costUsd)}`, dim: true }] } : null,
+              jevN > 0 ? { spans: [{ text: `· jev [${jevN} decisiones]`, color: C.agent }] } : null,
               showArchitect ? { spans: [{ text: `· ${cfg.architectLabel.toLowerCase()} ${advising ? 'asesorando' : a.consults.length}`, color: C.arch }] } : null,
             ],
             W,
