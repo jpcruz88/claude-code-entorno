@@ -61,3 +61,23 @@ export const pistaCarril = (
   if (p === null) return { antes: celdas(0, total), despues: [] }
   return { antes: celdas(0, p), despues: celdas(p + 2, total) }
 }
+
+/** Barra de avance de `ancho` celdas: `done` de `total` llenas. Sin total válido o con `done` raro, queda vacía; se acota a 0..total. */
+export const barraAvance = (done: number, total: number, ancho: number): string => {
+  if (!(ancho > 0)) return ''
+  const frac = Number.isFinite(done) && total > 0 ? Math.min(1, Math.max(0, done / total)) : 0
+  const llenas = Math.round(frac * ancho)
+  return '█'.repeat(llenas) + '░'.repeat(ancho - llenas)
+}
+
+/** Barra sin total conocido: un bloque de tres celdas que va y viene mientras el agente trabaja. */
+export const barraIndeterminada = (ahora: number, ancho: number): string => {
+  if (!(ancho > 0)) return ''
+  const bloque = Math.min(3, ancho)
+  const recorrido = ancho - bloque
+  if (recorrido === 0) return '█'.repeat(ancho)
+  const ciclo = 2 * recorrido
+  const t = (((Math.floor(ahora / PASO_AGENTE_MS) % ciclo) + ciclo) % ciclo)
+  const pos = t <= recorrido ? t : ciclo - t
+  return '░'.repeat(pos) + '█'.repeat(bloque) + '░'.repeat(ancho - bloque - pos)
+}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4 (tablero)
+
+- Cada tarjeta de subagente tiene una barra de avance: llena según los pasos que reporta (`██████░░ 3/4`). Sin pasos, mientras camina, un bloque va y viene por la barra; con la animación apagada queda fijo.
+
 ## 0.2.3 (tablero)
 
 - Los agentes integrados se muestran en español: `Explore` → «explorar», `general-purpose` → «propósito general», `Plan` → «plan», en la fila, la tarjeta y el panel expandido.
