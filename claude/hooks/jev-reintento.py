@@ -37,7 +37,6 @@ FRASES = {
 DESCRIPCION_MAX = 60
 ERROR_REGISTRO_MAX = 60
 ERROR_NORMAL_MAX = 200
-ENTRADA_MAX = 4000
 
 RUTA_WINDOWS = re.compile(r"\b[A-Za-z]:\\[^\s'\"`<>|]*")
 RUTA_UNIX = re.compile(r"(?<![\w.])/[^\s'\"`<>|]*")
@@ -108,9 +107,11 @@ def registrar_fallo(home, sesion, herramienta, error_normal):
     with _bloqueo(carpeta):
         estado = _leer_estado(carpeta)
         previo = estado.get(sesion) if isinstance(estado.get(sesion), dict) else {}
-        misma = previo.get("herramienta") == herramienta and previo.get("error_normal") == error_normal
+        misma = (previo.get("herramienta") == herramienta
+                 and previo.get("error_normal") == error_normal)
         cuenta = _entero(previo.get("cuenta")) + 1 if misma else 1
-        estado[sesion] = {"herramienta": herramienta, "error_normal": error_normal, "cuenta": cuenta}
+        estado[sesion] = {"herramienta": herramienta, "error_normal": error_normal,
+                          "cuenta": cuenta}
         _escribir_estado(carpeta, estado)
     return cuenta
 
@@ -130,16 +131,19 @@ def reiniciar(home, sesion, herramienta):
             _escribir_estado(carpeta, estado)
 
 
-def consultar_jev(home, herramienta, error, tool_input):
-    """Devuelve (decision, config). decision es None si Jev no responde. Nunca lanza."""
+def consultar_jev(home, herramienta, error):
+    """Devuelve (decision, config). decision es None si Jev no responde. Nunca lanza.
+
+    Jev recibe solo el nombre de la herramienta y el error: la entrada (en Bash, el comando
+    completo) puede llevar tokens y no sale del equipo.
+    """
     if jev_cliente is None:
         return None, None
     config = jev_cliente.cargar_config(home)
     clave = jev_cliente.leer_clave(home, os.environ)
     if not clave:
         return None, config
-    entrada = json.dumps(tool_input, ensure_ascii=False, default=str)[:ENTRADA_MAX]
-    encargo = "Herramienta: %s\n\nError:\n%s\n\nEntrada:\n%s" % (herramienta, error, entrada)
+    encargo = "Herramienta: %s\n\nError:\n%s" % (herramienta, error)
     return jev_cliente.decidir(PREGUNTA, encargo, OPCIONES, config, clave), config
 
 
@@ -174,7 +178,7 @@ def evaluar(entrada):
     if cuenta != 2:
         return None
 
-    decision, config = consultar_jev(home, herramienta, error, entrada.get("tool_input"))
+    decision, config = consultar_jev(home, herramienta, error)
     sharp = decision is not None and jev_cliente.es_sharp(decision, config)
     linea = {
         "hora": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),

@@ -229,6 +229,16 @@ class ReintentoConJev(unittest.TestCase):
                 self.assertEqual(salida, "")
                 self.assertEqual(self.registro()[-1]["motivo"], "sin respuesta")
 
+    def test_comando_de_la_herramienta_no_sale_a_jev(self):
+        servidor = self.servir({"reintento": (200, respuesta("reintento", "parar_y_preguntar", 0.99))})
+        entrada = fallo()
+        entrada["tool_input"] = {"command": "echo MARCADOR-XYZ"}
+        self.correr(entrada)
+        self.correr(entrada)
+        self.assertEqual(len(servidor.peticiones), 1)
+        self.assertNotIn("MARCADOR-XYZ", json.dumps(servidor.peticiones[0]))
+        self.assertIn("Bash", servidor.peticiones[0]["state"]["encargo"])
+
     def test_interrupcion_se_ignora(self):
         servidor = self.servir({"reintento": (200, respuesta("reintento", "parar_y_preguntar", 0.99))})
         self.assertEqual(self.correr(fallo(interrumpido=True)), "")
