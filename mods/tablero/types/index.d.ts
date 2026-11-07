@@ -185,5 +185,8 @@ declare module 'claude-code' {
   }
 }
 
-/** Las decisiones de Jev de la sesión y cuántas ya pasaron al log del tablero. */
-export type JevEstado = { decisiones: DecisionJev[]; vistas: number }
+/**
+ * Las decisiones de Jev de la sesión y el cursor del log: la hora de la última logueada y las claves (hora, tipo,
+ * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora.
+ */
+export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[] }
