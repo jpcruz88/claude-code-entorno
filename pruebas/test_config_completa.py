@@ -23,6 +23,20 @@ class ConfiguracionCompleta(unittest.TestCase):
         comandos = [h["command"] for g in self.base["hooks"]["PreToolUse"] for h in g["hooks"]]
         self.assertIn("python3 ~/.claude/hooks/guard-fable.py", comandos)
 
+    def test_reintento_en_fallos_y_en_exitos(self):
+        for evento in ("PostToolUseFailure", "PostToolUse"):
+            with self.subTest(evento=evento):
+                comandos = [(g.get("matcher"), h["command"], h.get("timeout"))
+                            for g in self.base["hooks"].get(evento, []) for h in g["hooks"]]
+                self.assertIn(("*", "python3 ~/.claude/hooks/jev-reintento.py", 5), comandos)
+
+    def test_reintento_y_su_cliente_estan_en_el_repo_y_exportados(self):
+        # instalar_comun.py copia la carpeta claude/hooks completa: basta con que estén aquí.
+        for archivo in ("jev-reintento.py", "jev_cliente.py"):
+            with self.subTest(archivo=archivo):
+                self.assertTrue((RAIZ / "claude" / "hooks" / archivo).is_file())
+        self.assertIn("jev-reintento.py", self.filtros["settings"]["hooks_permitidos"])
+
     def test_memoria_maestra_inicio_y_fin(self):
         eventos = {e: [h["command"] for g in self.base["hooks"][e] for h in g["hooks"]]
                    for e in ("SessionStart", "Stop")}

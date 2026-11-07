@@ -10,6 +10,10 @@ test('openOnStart es true por defecto y se puede apagar', () => {
   expect(parseConfig({ openOnStart: false }).openOnStart).toBe(false)
 })
 
+test('la etiqueta del asesor por defecto es ASESOR, como en el manifiesto', () => {
+  expect(parseConfig({}).architectLabel).toBe('ASESOR')
+})
+
 test('carpetaDe devuelve solo el nombre final, sin importar el separador, y lo trunca', () => {
   expect(carpetaDe('C:\\Proyectos\\mods\\tablero', 20)).toBe('tablero')
   expect(carpetaDe('/home/ana/proyecto/', 20)).toBe('proyecto') // privacidad-ok gitleaks:allow

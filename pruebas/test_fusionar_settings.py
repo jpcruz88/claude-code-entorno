@@ -13,7 +13,7 @@ import fusionar_settings as fs  # noqa: E402
 
 BASE = RAIZ / "claude" / "settings.base.json"
 TODOS = {"guard-kill.py", "cbm-code-discovery-gate", "cbm-session-reminder",
-         "guard-fable.py", "guard-subagentes.py", "memoria-maestra.py"}
+         "guard-fable.py", "guard-subagentes.py", "memoria-maestra.py", "jev-reintento.py"}
 
 
 def comandos(settings, evento):

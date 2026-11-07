@@ -25,6 +25,8 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
 | Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
+| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet` u `opus`, con esfuerzo `low`, `medium` o `high`. Jev puede elegir el modelo y el esfuerzo (§3). |
+| Hook `jev-reintento.py` | Después de un fallo de herramienta | Al segundo fallo seguido con el mismo error, pregunta a Jev si reintentar, cambiar de enfoque o parar. Su sugerencia llega como nota. |
 | Memoria persistente | Al empezar y al guardar un dato | Ver §5. |
 
 Los mods de guardia (`secret-guard`, `tdd-gate`, `spec-gate`) son **avisos
@@ -38,8 +40,55 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 - Para otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o usa
   `/model`. Vale solo para esa tarea.
 - Fable no se usa por omisión; solo si lo pides de forma explícita.
-- **Agentes y subagentes:** siempre Haiku con esfuerzo medio. El hook
-  `guard-subagentes.py` bloquea cualquier otro modelo o un esfuerzo mayor.
+- **Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
+  `low`, `medium` o `high`. Fable, `xhigh` y `max` se bloquean. El hook
+  `guard-subagentes.py` aplica esa regla a Agent, Task y Workflow. En un workflow,
+  cada `agent()` debe fijar un `model` permitido, y ningún `effort` puede pasar de
+  `high`. Jev no elige modelos dentro de los workflows.
+
+### Jev: decisiones de modelo y de reintento
+
+Jev es un modelo de decisiones de TypeSafe que se consulta por la Decisions API de
+OpenRouter (`typesafe/jev-1.14`). Solo responde preguntas cerradas, con una opción
+de una lista y una confianza.
+
+- **Modelo y esfuerzo de un subagente.** Antes de lanzar un subagente con Agent o
+  Task, `guard-subagentes.py` pregunta a Jev qué modelo y qué esfuerzo le tocan.
+  Si la confianza de Jev llega a 0,80, su elección reemplaza la de Claude. Si no
+  llega, la decisión se registra y no cambia nada.
+- **Reintento.** Si la misma herramienta falla dos veces seguidas con el mismo error,
+  `jev-reintento.py` pregunta a Jev si reintentar tal cual, cambiar de enfoque o
+  parar y preguntar. Su respuesta llega a Claude como nota, no como orden.
+- **Registro.** Cada decisión se agrega a `~/.claude/jev/decisiones.jsonl`, sin el
+  encargo ni el texto del error. El archivo guarda solo las últimas 2000 líneas, y
+  cada línea lleva el `session_id` de su sesión. El panel del mod `tablero` lee ese
+  archivo; no hace llamadas de red.
+- **Sin clave, sin Jev.** Jev usa la variable `OPENROUTER_API_KEY` o, si no existe, el
+  archivo `~/.claude/jev/clave`, que solo se acepta con permisos 600. Sin clave, o si
+  Jev no responde, la decisión queda como «sin respuesta» y pasa lo que eligió Claude.
+  Cada subagente puede tardar hasta unos 2 segundos más por la consulta.
+
+#### Configuración: `~/.claude/jev/config.json`
+
+Es opcional. Si el archivo no existe o no es un objeto JSON válido, se usan los
+valores por defecto, que están en `claude/hooks/jev_cliente.py`. Estas son las
+claves principales:
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `umbral` | `0.80` | Confianza mínima para que la elección de Jev reemplace la de Claude. |
+| `timeout` | `2.0` | Segundos máximos por consulta a Jev. |
+| `modelo_jev` | `"typesafe/jev-1.14"` | Modelo de Jev que se pide a OpenRouter. |
+| `definiciones` | ver `jev_cliente.py` | Texto que Jev recibe para cada opción de cada pregunta (`modelo`, `esfuerzo`, `reintento`). Cada pregunta que pongas aquí reemplaza por completo la definición por defecto de esa pregunta. |
+
+Ejemplo, para subir el umbral y acortar el tiempo máximo:
+
+```json
+{
+  "umbral": 0.9,
+  "timeout": 1.5
+}
+```
 
 ## 4. Flujo recomendado para cambios de código
 
