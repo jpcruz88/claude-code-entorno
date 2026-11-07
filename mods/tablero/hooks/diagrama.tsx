@@ -1,5 +1,5 @@
 // La vista en diagrama: el asesor a la izquierda; a la derecha, el lead, la caja JEV, la línea «delegar a
-// subagentes», y debajo las tarjetas, la vuelta al lead, el resto de paneles, el registro y la barra.
+// subagentes», y debajo las tarjetas, la vuelta al lead, el resto de paneles y la barra.
 // Recibe los paneles ya dibujados (los de siempre) y solo los coloca. Solo dibujo.
 import type { EngineInterface, RenderChildren } from 'claude-code'
 
@@ -33,7 +33,6 @@ export type PiezasDiagrama = {
   /** Todas las tarjetas terminaron: la caja «de vuelta al lead». */
   vuelta: boolean
   resto: RenderChildren | null
-  registro: RenderChildren | null
   barra: string
   /** Movimiento activo en la configuración: los conectores verticales se animan. */
   motion: boolean
@@ -84,7 +83,6 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
         </Box>
       ) : null}
       {p.resto}
-      {p.registro}
       <Text dimColor wrap="truncate">
         {p.barra}
       </Text>

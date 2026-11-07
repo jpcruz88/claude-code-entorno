@@ -40,16 +40,16 @@ test('el pie del panel ya no muestra franja con carpeta ni costo', async ($, on)
   await ui.unmount()
 })
 
-test('la mascota vive en el panel SESIÓN, con su vida según el contexto', async ($, on) => {
+test('la mascota vive en la tarjeta principal, con su vida según el contexto, y no hay panel SESIÓN', async ($, on) => {
   motor(on)
   await medir($)
   const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /^sesión$/ })).toBeDefined()
+  expect(await ui.find({ text: /^sesión$/ })).toBeUndefined()
   expect(await ui.find({ text: /vida 50%/ })).toBeDefined()
   await ui.unmount()
 })
 
-// ---------------------------------------------------------------- panel SESIÓN
+// ---------------------------------------------------------------- rama
 
 const sesionStart = (on: On) => {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -58,39 +58,7 @@ const sesionStart = (on: On) => {
   on('fs.read', () => ({ value: 'ref: refs/heads/main\n' }))
 }
 
-test('el panel SESIÓN cuenta herramientas, archivos y servidores MCP de la sesión', async ($, on) => {
-  motor(on)
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
-  await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
-  await $.tool.call({ tool: 'Read', file_path: '/b.ts' } as never)
-  await $.tool.call({ tool: 'Edit', file_path: '/p/hecho.ts', old_string: 'a', new_string: 'b' } as never)
-  await $.tool.call({ tool: 'mcp__context7__query-docs' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /^sesión$/ })).toBeDefined()
-  expect(await ui.find({ text: /Read 2 · Edit 1/ })).toBeDefined()
-  expect(await ui.find({ text: /hecho\.ts/ })).toBeDefined()
-  expect(await ui.find({ text: /context7 1/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('el panel SESIÓN no ocupa lugar mientras no hay nada que contar', async ($, on) => {
-  motor(on)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /^sesión$/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('un skill usado queda en el panel SESIÓN', async ($, on) => {
-  motor(on)
-  on('skill.prompt', (_$, e) => ({ text: e.text }))
-  await $.skill.prompt({ skill: 'caveman', text: 'x', frontmatter: {}, source: 'built-in' } as never)
-  await $.skill.prompt({ skill: 'caveman', text: 'x', frontmatter: {}, source: 'built-in' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /caveman ×2/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('al iniciar, la rama se lee de .git/HEAD y el panel no muestra hooks', async ($, on) => {
+test('al iniciar, la rama se lee de .git/HEAD y se muestra bajo la carpeta, sin hooks', async ($, on) => {
   motor(on)
   sesionStart(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
@@ -110,16 +78,5 @@ test('sin repositorio la rama no sale y no rompe el inicio', async ($, on) => {
   await medir($)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /⎇/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('/clear reinicia el panel SESIÓN', async ($, on) => {
-  motor(on)
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
-  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
-  await $.session.end({ reason: 'clear', sessionId: 's' } as never)
-  const ui = await $.ui.mount(pane(120))
-  expect(await ui.find({ text: /^sesión$/ })).toBeUndefined()
   await ui.unmount()
 })
