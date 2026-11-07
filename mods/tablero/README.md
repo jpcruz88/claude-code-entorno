@@ -94,16 +94,21 @@ Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su re
 
 **Combinación.** Se toma el menor modelo y el menor esfuerzo de las dos ventanas. El motivo que se anota es el de la ventana que baja el modelo, por ejemplo `tope semana +12 pts → sonnet` o `tope 5h 78% → sonnet`.
 
-**`xhigh` con margen.** `xhigh` solo pasa en dos casos:
+**`xhigh` con margen.** `xhigh` solo pasa si se cumplen todas estas condiciones:
 
-- Antes del corte, cuando la semana va al menos 10 puntos por debajo del ritmo y la ventana de 5 horas está bajo 60 %.
-- Después del corte, mientras la semana esté bajo 97 % y la ventana de 5 horas bajo 60 %.
+- Hay datos de las dos ventanas (5 horas y semana) y la de 5 horas sigue vigente (su reinicio es futuro).
+- La ventana de 5 horas va por debajo de 60 %, o está en gracia (se reinicia en menos de 15 minutos).
+- Antes del corte, la semana va al menos 10 puntos por debajo del ritmo (exceso ≤ −10). Después del corte, la semana está por debajo de 97 %.
 
 En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas, `xhigh` baja a `high`, porque `xhigh` exige conocer las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado siempre. Un Workflow con `xhigh` se bloquea, porque un Workflow no se puede bajar; el tope no lo toca.
 
 **Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. El log la muestra como `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de Jev.
 
-**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Con 10 puntos o más por debajo del ritmo añade `xhigh ok`. Sin dato, la fila no aparece.
+**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
+
+**La fila usa los valores por defecto.** El mod no lee `~/.claude/jev/config.json`: calcula la fila con los valores de `DEFAULTS_LIMITES`. Si cambias `limites`, el tope real del guardián puede no coincidir con lo que muestra la fila (el ritmo, el corte y `xhigh ok`).
+
+**Quién escribe el dato.** `limites.json` lo escribe la línea de estado de este repo (`claude/statusline.sh`). Quien use otra línea de estado no tendrá topes ni fila de ritmo.
 
 **Configuración.** La clave `limites` de `~/.claude/jev/config.json` cambia los valores. Es opcional: sin ella, se usan los de `DEFAULTS_LIMITES` en `claude/hooks/jev_limites.py`. Si cambias una lista, reemplaza la lista entera. Ejemplo:
 
