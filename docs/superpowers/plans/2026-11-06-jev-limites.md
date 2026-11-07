@@ -62,7 +62,7 @@
   - Cinco statuslines en paralelo dejan siempre un JSON válido.
 - [ ] **Paso 2.** Rojo. **Paso 3.** Implementa con `jq` (ya es dependencia), escribiendo en un temporal de la misma carpeta y con `mv -f`. Todo en segundo plano o con errores silenciados, sin retrasar el dibujo. **Paso 4.** Verde y suite completa. **Paso 5.** Commit `feat(statusline): guarda el uso de la cuenta para Jev`.
 
-### Tarea 3: El guardián aplica el tope
+### Tarea 3: El guardián aplica el tope (y acepta xhigh solo si el tope lo permite; Jev con xhigh como 4.ª opción de esfuerzo en `jev_cliente.PREGUNTAS_FIJAS` y sus definiciones)
 
 **Archivos:** modificar `claude/hooks/guard-subagentes.py`; probar en `pruebas/test_guard_subagentes.py` (clase nueva `TopePorLimites`).
 
@@ -80,6 +80,7 @@
 
 **Archivos:** modificar `mods/tablero/hooks/jev-modelo.ts`, `hooks/panel-jev.tsx` y `hooks/register.tsx`; probar en `mods/tablero/tests/jev-modelo.test.ts` y `tests/diagrama.test.tsx`.
 
+- El orden de esfuerzos de `marcaTarjeta`/`RANGO` incluye `xhigh` (después de high).
 - `TipoDecision` suma `'tope'`. `lineaLog` de un tope devuelve `tope → sonnet · semana +12 pts` o `tope → haiku · 5h 90%`, según el motivo guardado. Los topes no entran en las filas de confianza de `resumenJev`.
 - `ritmoSemana(limites, ahora, cfg)` en TS replica la fórmula de la spec con los mismos valores por defecto. La fila de la caja JEV es `semana 52% · ritmo 40% · +12` (o `−15`). El color depende del exceso: verde si es ≤ 5, ámbar de 5 a 15 y rojo por encima de 15. La fila no aparece si no hay dato o si el dato es viejo.
 - `register.tsx` lee `limites.json` con la misma ruta base que `decisiones.jsonl`, en los mismos eventos.
