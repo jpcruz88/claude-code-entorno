@@ -181,7 +181,8 @@ const sinLoguear = (ds: DecisionJev[], estado: JevEstado): DecisionJev[] => {
  */
 async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const sesionId = await $.session.id().catch(() => null)
-  const home = await $.env.get('HOME').catch(() => undefined)
+  // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
+  const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
   // Las nuevas se calculan dentro de la escritura, sobre el cursor que ya dejó la lectura anterior: dos lecturas

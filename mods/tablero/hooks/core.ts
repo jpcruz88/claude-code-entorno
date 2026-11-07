@@ -142,7 +142,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
   const cols = typeof o.paneColumns === 'number' && Number.isFinite(o.paneColumns) ? Math.round(o.paneColumns) : 66
   return {
     architect: safeRegExp(str('architectPattern', ''), 'advisor|architect'),
-    architectLabel: str('architectLabel', 'ARQUITECTO'),
+    architectLabel: str('architectLabel', 'ASESOR'),
     gateLabel: str('gateLabel', 'PERMISOS'),
     panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS],
     motion: str('motion', 'while-active') !== 'off',

@@ -41,6 +41,8 @@ MODELO_EN_GUION = re.compile(r"""\bmodel["'\\]*\s*[:=]\s*["'\\]*([\w./:-]*)""", 
 # `effort: 'high'`, `effort = medium`
 ESFUERZO_EN_GUION = re.compile(r"""\beffort["'\\]*\s*[:=]\s*["'\\]*([\w./:-]*)""", re.I)
 LLAMADA_AGENTE = re.compile(r"\bagent\s*\(")
+# `claude-opus-5-5`: la familia seguida de guion; `claude-opusxyz` no cuenta
+RE_ID_DE_FAMILIA = re.compile(r"claude-(?:%s)(?:-.*)?" % "|".join(MODELOS_PERMITIDOS))
 
 CONSEJO = ("Regla (~/.claude/rules/modelo.md): los agentes y subagentes usan haiku, sonnet u "
            "opus, con esfuerzo low, medium o high; nunca Fable ni xhigh o max. Vuelve a "
@@ -70,8 +72,9 @@ def texto(valor):
 
 
 def es_modelo_permitido(modelo):
+    """`haiku`, `sonnet`, `opus` o un id completo de esa familia (`claude-opus-5-5`)."""
     m = modelo.lower()
-    return m in MODELOS_PERMITIDOS or any(m.startswith("claude-" + f) for f in MODELOS_PERMITIDOS)
+    return m in MODELOS_PERMITIDOS or RE_ID_DE_FAMILIA.fullmatch(m) is not None
 
 
 def familia_de_modelo(modelo):

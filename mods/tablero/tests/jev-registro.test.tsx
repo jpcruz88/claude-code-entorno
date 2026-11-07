@@ -33,14 +33,14 @@ const linea = (extra: Record<string, unknown>, sesion: string = SESION): string 
 type Archivo = { texto: string | null }
 type Herramienta = { error: boolean }
 
-const motor = (on: On, archivo: Archivo, sesion: string | null = SESION, herramienta: Herramienta = { error: false }) => {
+const motor = (on: On, archivo: Archivo, sesion: string | null = SESION, herramienta: Herramienta = { error: false }, entorno: Record<string, string> = { HOME: '/casa' }) => {
   mock.clock(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.status', () => ({ value: undefined }))
   on('session.cwd', () => ({ value: '/work' }))
   on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('session.id', () => ({ value: sesion }))
-  on('env.get', () => ({ value: '/casa' }))
+  on('env.get', (_$, e) => ({ value: entorno[e.name] }))
   on('fs.read', () => {
     if (archivo.texto === null) throw new Error('ENOENT')
     return { value: archivo.texto }
@@ -180,4 +180,12 @@ test('un error de herramienta relee el archivo y loguea la decisión nueva', asy
   herramienta.error = true
   await $.tool.call({ tool: 'Bash', tool_use_id: 'tb2' } as never)
   expect(await cuentaEnLog($, logModelo('0\\.83'))).toBe(1)
+})
+
+test('sin HOME lee el archivo de Jev desde USERPROFILE', async ($, on) => {
+  motor(on, { texto: linea({ hora: enSegundos(1), confianza: 0.84 }) }, SESION, { error: false }, { USERPROFILE: 'C:\\Usuarios\\ana' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true } as never)
+  await lanzar($, 'buscar')
+  await terminar($)
+  expect(await cuentaEnLog($, logModelo('0\\.84'))).toBe(1)
 })

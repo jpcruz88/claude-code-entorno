@@ -77,6 +77,10 @@ class AgentesYSubagentes(unittest.TestCase):
     def test_opus_medio_pasa(self):
         self.assertEqual(correr(agente("claude-opus-5-5", "medium")), "")
 
+    def test_prefijo_de_familia_sin_guion_se_bloquea(self):
+        self.assertTrue(negado(correr(agente("claude-opusxyz", "medium"))))
+        self.assertTrue(negado(correr(agente("claude-haikuo", "medium"))))
+
     def test_xhigh_se_bloquea(self):
         self.assertTrue(negado(correr(agente("opus", "xhigh"))))
 
