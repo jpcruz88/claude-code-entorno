@@ -144,19 +144,29 @@ ya pasó, cuenta como sin dato.
 El motivo que se anota es el de la ventana que baja el modelo, por ejemplo
 `tope semana +12 pts → sonnet` o `tope 5h 78% → sonnet`.
 
-**`xhigh`.** Solo pasa si la semana va al menos 10 puntos por debajo del ritmo y la
-ventana de 5 horas está bajo 60 %, o después del corte, mientras la semana esté bajo
-97 % y la ventana de 5 horas bajo 60 %. En otro caso baja a `high` o a lo que marque
-su escalón. Si falta una de las dos ventanas, baja a `high`, porque necesita conocer
-las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado.
+**`xhigh`.** Solo pasa si se cumplen todas estas condiciones: hay datos de las dos
+ventanas y la de 5 horas sigue vigente; la ventana de 5 horas va bajo 60 % o está en
+gracia (se reinicia en menos de 15 minutos); y, antes del corte, la semana va al
+menos 10 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro
+caso baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas,
+baja a `high`, porque necesita conocer las dos. Sin ningún dato, el esfuerzo máximo
+es `high`. `max` sigue bloqueado.
 
 **Qué ves.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`,
 con lo que quedó y lo que había, y el tablero la muestra en el log como
 `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de
 Jev. Con dato, la caja JEV del tablero muestra además la fila de ritmo, por ejemplo
 `semana 52% · ritmo 40% · +12`: verde hasta +5, ámbar de +5 a +15 y rojo por encima.
-Con 10 puntos o más por debajo del ritmo añade `xhigh ok`. Si vas por debajo del
-ritmo, el tope solo quita límites: no sube modelos para gastar más. Eso lo decides tú.
+Añade `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
+arriba (las dos ventanas con dato, la de 5 horas bajo 60 % o en gracia, y la semana a
+−10 o menos antes del corte, o bajo 97 % después). Si vas por debajo del ritmo, el
+tope solo quita límites: no sube modelos para gastar más. Eso lo decides tú.
+
+La fila del tablero usa los valores por defecto y no lee `config.json`. Si cambias
+`limites`, el tope real puede no coincidir con lo que muestra la fila.
+
+El dato lo escribe la línea de estado de este repo (`claude/statusline.sh`). Quien use
+otra línea de estado no tendrá topes.
 
 **Configuración.** La clave `limites` de `~/.claude/jev/config.json` cambia los
 valores. Es opcional: sin ella se usan los de `DEFAULTS_LIMITES` en
@@ -182,6 +192,9 @@ entera. Ejemplo:
 | `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
 | `corte_hora` | `23` | Hora local del corte. |
 | `max_antiguedad_h` | `6` | Horas máximas de antigüedad de `limites.json`. |
+
+`corte_dia` y `corte_hora` deben caer poco antes de tu reinicio semanal. Si el corte
+queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real.
 
 ## 4. Flujo recomendado para cambios de código
 

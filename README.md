@@ -402,7 +402,8 @@ usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku
 Fable no se usa por omisión: solo si lo pides de forma explícita.
 
 **Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-`low`, `medium` o `high`. Nunca Fable, ni `xhigh` ni `max`. Lo revisa el hook
+`low`, `medium` o `high`; `xhigh` solo cuando el tope de uso de la cuenta deja
+margen (si no, baja a `high`). Nunca `max` ni Fable. Lo revisa el hook
 `claude/hooks/guard-subagentes.py` en las llamadas a Agent, Task y Workflow. Si
 Jev está seguro (confianza de al menos 0,80), elige el modelo y el esfuerzo de cada
 subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base sigue fijando
@@ -439,6 +440,11 @@ Funciona igual en Mac, Linux y Git Bash de Windows. Solo necesita `jq` (en
 Windows: `winget install jqlang.jq`) y `git` para la rama. Todos los cálculos los
 hace `jq`, así que no depende de `bc`, de `date -r` (que solo existe en Mac) ni
 del idioma del sistema: los días salen en español siempre.
+
+Además, la línea de estado guarda el uso de la cuenta (ventana de 5 horas y semana,
+con su reinicio) en `~/.claude/jev/limites.json`. Jev lo usa para los topes de
+modelo y esfuerzo de los subagentes; ver «Tope por uso de la cuenta» en
+`docs/GUIA-DE-USO.md`.
 
 ## Mods
 
