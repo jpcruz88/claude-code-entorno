@@ -153,6 +153,12 @@ test('línea de log de un tope: modelo final y causa', () => {
   expect(lineaLog(tope({ opcion: 'opus', motivo: 'tope semana +6 pts → esfuerzo medium' }))).toBe('tope → opus · semana +6 pts · esfuerzo medium')
   expect(lineaLog(tope({ opcion: 'opus', motivo: 'tope 5h 65% → esfuerzo medium' }))).toBe('tope → opus · 5h 65% · esfuerzo medium')
   expect(lineaLog(tope({ motivo: '' }))).toBe('tope → sonnet')
+  expect(lineaLog(tope({ motivo: 'tope' }))).toBe('tope → sonnet')
+})
+
+test('línea de log de un tope que solo baja el esfuerzo o baja modelo y esfuerzo', () => {
+  expect(lineaLog(tope({ opcion: 'opus', motivo: 'tope; esfuerzo xhigh → high' }))).toBe('tope → opus · esfuerzo high')
+  expect(lineaLog(tope({ opcion: 'sonnet', motivo: 'tope semana +12 pts → sonnet; esfuerzo high → medium' }))).toBe('tope → sonnet · semana +12 pts · esfuerzo medium')
 })
 
 test('leerDecisiones acepta tipo tope y guarda el motivo', () => {

@@ -113,10 +113,18 @@ export const resumenJev = (ds: DecisionJev[]): { total: number; filas: FilaJev[]
  * `tope → opus · semana +6 pts · esfuerzo medium`. Sale del motivo que guarda el guardián (`tope <causa> → <límite>`).
  */
 const lineaTope = (d: DecisionJev): string => {
-  const base = `tope → ${d.opcion ?? 'sin modelo'}`
-  const [causa, limite] = d.motivo.replace(/^tope\s+/, '').split(' → ')
-  if (!causa) return base
-  return limite?.startsWith('esfuerzo') ? `${base} · ${causa} · ${limite}` : `${base} · ${causa}`
+  const partes: string[] = []
+  // El motivo trae partes separadas por «; »: `tope semana +12 pts → sonnet; esfuerzo high → medium`.
+  for (const parte of d.motivo.replace(/^tope[;\s]*/, '').split('; ')) {
+    const [causa = '', ...cambios] = parte.split(' → ').map(x => x.trim())
+    const final = cambios.at(-1)
+    if (causa.startsWith('esfuerzo')) partes.push(final ? `esfuerzo ${final.replace(/^esfuerzo\s+/, '')}` : causa)
+    else {
+      if (causa) partes.push(causa)
+      if (final?.startsWith('esfuerzo')) partes.push(final)
+    }
+  }
+  return [`tope → ${d.opcion ?? 'sin modelo'}`, ...partes].join(' · ')
 }
 
 /** La línea de log de una decisión: `qué modelo → sonnet   p=0.91 sharp → código`, `… split → claude` o `sin respuesta`. */
