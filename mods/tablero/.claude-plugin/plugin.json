@@ -39,9 +39,9 @@
     },
     "panels": {
       "title": "Paneles",
-      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, receipt, sesion, log. Omite uno para ocultarlo.",
+      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, receipt. Omite uno para ocultarlo.",
       "type": "string",
-      "default": "main,jev,architect,gate,agents,loops,receipt,sesion,log"
+      "default": "main,jev,architect,gate,agents,loops,receipt"
     },
     "motion": {
       "title": "Movimiento",

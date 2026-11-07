@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (tablero)
+
+- The session log (`registro de sesión`) and the session panel (`sesión`) are gone: the default `panels` is now `main,jev,architect,gate,agents,loops,receipt`. The context bar moves into the main card, under its speed line. The jev decisions no longer write lines to a log; they still show in the JEV box. The diagram layout loses its log box. The git branch no longer has a place in the pane (it was a row of the session panel); it is still read. Values saved under the old `log` and `sesion` keys are no longer read.
+
 ## 0.3.4 (tablero)
 
 - Latido en el panel SESIÓN: el punto de «en espera» de la tarjeta principal alterna entre ● y ○ con la animación encendida; con `animacion` apagada queda ○ fijo. Antes el latido de 0.3.3 se dibujaba en la banda sobre el prompt, que se quitó el 31-oct (commit 7f8b310), así que no se veía nada en reposo.

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, LogLine, Loop, Main, Roster, Sesion, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Roster, Turn, Usage, View } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -49,19 +49,16 @@ import {
   fmtResetIn,
   fmtSpeed,
   listOf,
-  logRows,
   marksIn,
   momentOf,
   normalize,
   normalizeCard,
   normalizeGate,
-  normalizeLog,
   noteTool,
   PALETTES,
   SVG_COLORS,
   parseConfig,
   prettyModel,
-  promptLine,
   handbackOf,
   adviceLine,
   receiptOf,
@@ -81,8 +78,8 @@ import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
-import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
+import { gitdirDe, ramaDeHead } from './rama'
+import { filaRitmo, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
@@ -101,13 +98,12 @@ const architect = atom({ plugin: 'tablero', key: 'architect' } as const, DEFAULT
 const gate = atom({ plugin: 'tablero', key: 'gate' } as const, DEFAULT_GATE)
 const agents = atom({ plugin: 'tablero', key: 'agents' } as const, [])
 const loops = atom({ plugin: 'tablero', key: 'loops' } as const, [])
-const log = atom({ plugin: 'tablero', key: 'log' } as const, [])
 const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
-const sesion = atom({ plugin: 'tablero', key: 'sesion' } as const, DEFAULT_SESION)
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [], limites: null } as JevEstado)
+const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
 
@@ -131,29 +127,6 @@ async function getCards($: EngineInterface): Promise<AgentCard[]> {
 async function getLoops($: EngineInterface): Promise<Loop[]> {
   return listOf<Loop>(await read($, loops))
 }
-async function getLog($: EngineInterface): Promise<LogLine[]> {
-  return normalizeLog(await read($, log))
-}
-async function getTurn($: EngineInterface): Promise<Turn> {
-  return normalize(DEFAULT_TURN, await read($, turn))
-}
-async function getView($: EngineInterface): Promise<View> {
-  return normalize(DEFAULT_VIEW, await read($, view))
-}
-async function getRoster($: EngineInterface): Promise<Roster> {
-  const r = normalize(DEFAULT_ROSTER, await read($, roster))
-  return { architectTypes: listOf(r.architectTypes) }
-}
-
-async function getSesion($: EngineInterface): Promise<Sesion> {
-  return normalize(DEFAULT_SESION, await read($, sesion))
-}
-
-/** Writes through `normalize`, so a value saved before a key existed still takes the change. */
-async function cambiarSesion($: EngineInterface, cambio: (s: Sesion) => Sesion) {
-  await update($, sesion, s => cambio(normalize(DEFAULT_SESION, s)))
-}
-
 /** Un valor guardado de cualquier forma: el de antes (`vistas`) se lee como cursor vacío, sin romperse. */
 function normalizeJev(stored: unknown): JevEstado {
   const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [], limites: null }, stored)
@@ -166,19 +139,30 @@ async function getJev($: EngineInterface): Promise<JevEstado> {
   return normalizeJev(await read($, jev))
 }
 
+async function getTurn($: EngineInterface): Promise<Turn> {
+  return normalize(DEFAULT_TURN, await read($, turn))
+}
+async function getView($: EngineInterface): Promise<View> {
+  return normalize(DEFAULT_VIEW, await read($, view))
+}
+async function getRoster($: EngineInterface): Promise<Roster> {
+  const r = normalize(DEFAULT_ROSTER, await read($, roster))
+  return { architectTypes: listOf(r.architectTypes) }
+}
+
 /** Cuántas claves recientes se guardan para no repetir decisiones con la misma hora. */
 const CLAVES_JEV = 50
 
 const claveDeDecision = (d: DecisionJev) => `${d.hora}|${d.tipo}|${d.opcion}|${d.descripcion}`
 
-/** Las decisiones que aún no están en el log: no más viejas que la última logueada y con clave no vista. */
+/** Las decisiones nuevas para el estado de Jev: no más viejas que la última vista y con clave no vista. */
 const sinLoguear = (ds: DecisionJev[], estado: JevEstado): DecisionJev[] => {
   const vistas = new Set(estado.claves)
   return ds.filter(d => !vistas.has(claveDeDecision(d)) && (estado.ultima === null || d.hora >= estado.ultima))
 }
 
 /**
- * Relee las decisiones de Jev de esta sesión y pasa al log solo las nuevas. Sin id de sesión, sin carpeta
+ * Relee las decisiones de Jev de esta sesión y guarda en su estado solo las nuevas. Sin id de sesión, sin carpeta
  * personal o sin archivo, no hay ninguna: el tablero no muestra nada de Jev.
  */
 async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
@@ -204,7 +188,6 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
       limites,
     }
   })
-  for (const d of nuevas) await say($, 'jev', lineaLog(d), 'info')
   return ds
 }
 
@@ -235,34 +218,21 @@ async function leerRama($: EngineInterface): Promise<string | null> {
 
 async function refrescarRama($: EngineInterface) {
   const branch = await leerRama($)
-  const actual = await getSesion($)
-  if (actual.branch !== branch) await cambiarSesion($, s => ({ ...s, branch }))
+  if ((await read($, gitBranch)) !== branch) await update($, gitBranch, () => branch)
 }
 
 /** A stored shape older than this build's: drop what cannot be read, keep the rest. */
 async function migrate($: EngineInterface) {
   const m = await read($, meta)
   if ((m?.schemaVersion ?? 0) >= SCHEMA_VERSION) return
-  await update($, log, list => normalizeLog(list))
   await update($, agents, list => listOf<unknown>(list).map(normalizeCard))
   await update($, gate, g => normalizeGate(g))
   await update($, meta, () => ({ schemaVersion: SCHEMA_VERSION }))
 }
 
-async function say($: EngineInterface, who: string, text: string, kind: LogLine['kind'] = 'info', agentId: string | null = null) {
-  const line: LogLine = { at: await $.clock.now(), who, text, kind, agentId }
-  await update($, log, list => [...normalizeLog(list), line].slice(-60))
-}
-
-// El footer nativo ya no lleva nada del mod: sus datos viven en el panel SESIÓN, a la derecha.
+// El footer nativo ya no lleva nada del mod.
 async function refreshStatus($: EngineInterface) {
   $.ui.status(undefined)
-}
-
-async function whoIs($: EngineInterface, agentId: string | undefined) {
-  if (!agentId) return 'main'
-  const card = (await getCards($)).find(c => c.id === agentId)
-  return card ? shorten(cardTitle(card), 14) : 'agente'
 }
 
 async function consultStarted($: EngineInterface, cfg: Config, id: string, via: string) {
@@ -271,7 +241,6 @@ async function consultStarted($: EngineInterface, cfg: Config, id: string, via: 
   const at = await $.clock.now()
   await update($, architect, a => startConsult(normalize(DEFAULT_ARCHITECT, a), { id, at, moment, via }))
   if (moment === 'before done') await update($, turn, x => ({ ...normalize(DEFAULT_TURN, x), isReviewing: true }))
-  await say($, cfg.architectLabel.toLowerCase(), cfg.moments ? `${momentLabel(moment)} · ${via}` : `consultado · ${via}`, 'consult')
   await refreshStatus($)
 }
 
@@ -281,13 +250,11 @@ async function consultEnded($: EngineInterface, cfg: Config, advice: string | nu
   const text = first ? shorten(first.replace(/^[#>*\s-]+/, ''), 160) : null
   await update($, architect, a => endConsult(normalize(DEFAULT_ARCHITECT, a), at, text, id))
   await update($, turn, t => ({ ...normalize(DEFAULT_TURN, t), isReviewing: false }))
-  await say($, cfg.architectLabel.toLowerCase(), text ? `consejo: ${shorten(text, 60)}` : 'consejo recibido', 'consult')
   await refreshStatus($)
 }
 
 async function noteAdvice($: EngineInterface, cfg: Config, advice: string) {
   await update($, architect, x => ({ ...normalize(DEFAULT_ARCHITECT, x), lastAdvice: advice }))
-  await say($, cfg.architectLabel.toLowerCase(), `consejo: ${shorten(advice, 60)}`, 'consult')
 }
 
 async function isArchitectType($: EngineInterface, cfg: Config, type: string) {
@@ -305,12 +272,9 @@ async function resetAll($: EngineInterface) {
   await update($, gate, () => DEFAULT_GATE)
   await update($, agents, () => [])
   await update($, loops, () => [])
-  await update($, log, () => [])
   await update($, turn, () => DEFAULT_TURN)
   await update($, receipt, () => null)
   await update($, view, () => DEFAULT_VIEW)
-  // What the session did starts over; the branch is the project's, not the session's.
-  await cambiarSesion($, s => ({ ...DEFAULT_SESION, branch: s.branch }))
   // The context gauge waits for the next measurement rather than showing the pre-clear fill.
   // /clear starts the session over: its edits and its clock count from here.
   const startedAt = await $.clock.now()
@@ -505,11 +469,6 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('skill.prompt', async ($, e, next) => {
-    await cambiarSesion($, s => notarSkill(s, e.skill))
-    return next(e)
-  })
-
   on('agent.offer', async ($, e, next) => {
     const offered = await next(e)
     if (cfg.architect.test(e.agent) || (cfg.matchDescriptions && cfg.architect.test(e.description))) {
@@ -534,9 +493,6 @@ export const register: Register = (on, options) => {
     if (back && a && a.ids.includes(back.from)) {
       const advice = adviceLine(back.body)
       if (advice && advice !== a.lastAdvice) await noteAdvice($, cfg, advice)
-    } else if (e.text) {
-      const p = promptLine(e.text)
-      await say($, p.who, p.text)
     }
     return next(e)
   })
@@ -581,7 +537,6 @@ export const register: Register = (on, options) => {
           }),
       )
       if (isResumed) {
-        await say($, await whoIs($, id), 'reanudado', 'info', id)
         await refreshStatus($)
       }
     }
@@ -591,7 +546,6 @@ export const register: Register = (on, options) => {
     if (cards.some(c => c.id === id)) {
       const step = { model: e.model, usage: result.usage, stopReason: result.stopReason }
       await update($, agents, list => listOf<unknown>(list).map(normalizeCard).map(c => (c.id === id ? applyStep(c, step) : c)))
-      if (result.stopReason === 'max_tokens') await say($, await whoIs($, id), 'llegó al tope de tokens', 'error', id)
     } else if (!a.ids.includes(id)) {
       const now = await $.clock.now()
       await update($, loops, l => stepLoop(listOf<Loop>(l), id, now))
@@ -632,7 +586,6 @@ export const register: Register = (on, options) => {
         const u = normalize(DEFAULT_USAGE, x)
         return { ...u, compactions: u.compactions + 1, lastCompactAt: now }
       })
-      await say($, 'main', `contexto compactado (${e.trigger})`)
     }
     return done
   })
@@ -652,7 +605,6 @@ export const register: Register = (on, options) => {
       await update($, gate, g => recordCheck(normalizeGate(g), check))
       // The status line updates when the call settles; only a refusal ends here.
       if (verdict.decision === 'deny') {
-        await say($, 'gate', `denegado por regla · ${check.detail}`, 'error')
         await refreshStatus($)
       }
     }
@@ -677,8 +629,7 @@ export const register: Register = (on, options) => {
       }
       return ran
     }
-    if (didRun) await cambiarSesion($, s => notarLlamada(s, e.tool, e, ran.isError === true))
-    if (e.tool === 'Agent') {
+      if (e.tool === 'Agent') {
       if (isSettled) await refreshStatus($)
       return ran
     }
@@ -706,10 +657,6 @@ export const register: Register = (on, options) => {
           .map(c => (c.id === id ? noteTool(c, { tool: e.tool, text, isError: hasFailed || ran.deny !== undefined }) : c)),
       )
     }
-    // The log keeps what is worth a glance: refusals, errors and edits; the rest is on the cards.
-    if (ran.deny !== undefined) await say($, await whoIs($, e.agentId), `${text}  denegado`, 'error', e.agentId ?? null)
-    else if (hasFailed) await say($, await whoIs($, e.agentId), `${text}  ✗`, 'error', e.agentId ?? null)
-    else if (isEdit) await say($, await whoIs($, e.agentId), text, 'info', e.agentId ?? null)
     if (hasFailed) await releerJev($)
     if (isSettled || !didRun) await refreshStatus($)
     return ran
@@ -766,17 +713,12 @@ export const register: Register = (on, options) => {
       spawnedAt: await $.clock.now(),
     }
     // Decided in the write: a resume whose first step already put its card back to running is not logged again.
-    let isNew = true
-    let isResumed = false
     await update($, agents, list => {
       const cards = listOf<unknown>(list).map(normalizeCard)
       const known = cards.find(c => c.id === id)
-      isNew = known === undefined
-      isResumed = known !== undefined && known.status !== 'running'
       return addCard(cards, card)
     })
     await update($, loops, l => listOf<Loop>(l).filter(x => x.id !== id))
-    if (isNew || isResumed) await say($, shorten(cardTitle(card), 12), isNew ? `iniciado · ${card.type}` : 'reanudado', 'info', id)
     await refreshStatus($)
     return started
   })
@@ -812,9 +754,6 @@ export const register: Register = (on, options) => {
           .map(normalizeCard)
           .map(c => (c.id === id ? { ...c, status, endedAt: now, answer: shorten(e.answer, 400) } : c)),
       )
-      // This run's own length: a resumed agent's card clock also spans the idle time between runs.
-      const took = fmtDuration(e.durationMs)
-      await say($, await whoIs($, id), status === 'done' ? `listo · ${took}` : statusLabel(status), status === 'done' ? 'done' : 'error', id)
     } else {
       await update($, loops, l => listOf<Loop>(l).map(x => (x.id === id ? { ...x, isDone: true, lastAt: now } : x)))
     }
@@ -843,26 +782,23 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se, pasos, jevs] = await Promise.all([
+    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
       getGate($),
       getCards($),
       getLoops($),
-      getLog($),
       getTurn($),
       read($, receipt),
       getView($),
       $.clock.now(),
       $.session.cwd().catch(() => ''),
-      getSesion($),
       pasosDeAgentes($),
       getJev($),
     ])
     const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
     const jevN = resumenJevs.total
-    const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
     const layout = v.layout ?? cfg.layout
@@ -878,9 +814,6 @@ export const register: Register = (on, options) => {
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
-    // La barra de vida vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
-    // Misma regla que filasVida: NaN e Infinity no son vida, así que no reservan fila vacía.
-    const vidaVisible = vidaDe(contextFill(u).pct) !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
       jev: jevN === 0,
@@ -889,8 +822,6 @@ export const register: Register = (on, options) => {
       agents: cards.length === 0,
       loops: lp.length === 0,
       receipt: !m.isRunning && !r,
-      sesion: sesionRows.length === 0 && !vidaVisible,
-      log: false,
     }
     const panels = cfg.panels.filter(p => !isEmpty[p])
     const decider = m.mode === 'auto' ? 'auto' : 'tú'
@@ -933,7 +864,7 @@ export const register: Register = (on, options) => {
     // border flush against it, so the legend keeps one row of air there.
     const legendGap = isTerminal ? 0 : 1
 
-    // A line of coloured pieces, drawn as a row of boxes the way the log draws its lines. A Text nesting
+    // A line of coloured pieces, drawn as a row of boxes. A Text nesting
     // coloured Texts truncates as one line in a terminal, but the desktop app wraps each nested piece on its
     // own, lays truncating ones out as blocks of their own, and collapses runs of spaces. So pieces sit `gap`
     // cells apart (a piece's `lead` adds more), each keeps its width, and pieces that don't fit in `room` are
@@ -1056,6 +987,7 @@ export const register: Register = (on, options) => {
             )
           : null}
         {m.speed ? <Text dimColor wrap="truncate">{`última respuesta  ${fmtSpeed(m.speed)}`}</Text> : null}
+        {vidaEscritorio(w) ?? vidaSesion(w)}
       </Box>
     )
 
@@ -1402,8 +1334,6 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // ---- sesión: lo que la sesión ha hecho (herramientas, archivos, tareas, MCP, skills, hooks)
-    // Un panel ancho pone la etiqueta en su columna; uno angosto la deja en la misma línea, que se parte.
     // La barra de vida: una fila dentro del panel, con la vida que le queda de contexto.
     // Una fila por línea, con cada trozo en su Text y los espacios de los bordes en cajas: el gap va en la Box.
     const vidaSesion = (w: number) => {
@@ -1436,65 +1366,6 @@ export const register: Register = (on, options) => {
       const px = Math.max(120, Math.min(600, w * 8 - 48))
       return <Svg source={svgVida(v, px)} alt={`vida ${v}%`} width={px} height={18} />
     }
-    const sesionPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} width={w}>
-        <Text dimColor wrap="truncate">
-          sesión
-        </Text>
-        {sesionRows.map(f =>
-          w >= 40 ? (
-            <Box columnGap={1}>
-              <Box width={12} flexShrink={0}>
-                <Text dimColor wrap="truncate">
-                  {f.etiqueta}
-                </Text>
-              </Box>
-              <Box flexShrink={1}>
-                <Text wrap="wrap">{f.valor}</Text>
-              </Box>
-            </Box>
-          ) : (
-            <Text wrap="wrap">{`${f.etiqueta}: ${f.valor}`}</Text>
-          ),
-        )}
-        {vidaEscritorio(w) ?? vidaSesion(w)}
-      </Box>
-    )
-
-    // ---- log: whatever rows the other panels leave, 4 to 8
-    // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 + (resumenJevs.ritmo ? 1 : 0) : 0) + (enDiagrama ? (jevVisible ? 1 : 0) + (panels.includes('agents') ? 3 : 0) + (panels.includes('agents') && running.length === 0 ? 3 : 0) + 1 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
-    const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
-    const nLog = logRows(bodyRows, used)
-    const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)
-    const whoLabel = (who: string) => ({ main: 'principal', gate: 'permisos', you: 'tú', engine: 'motor' } as Record<string, string>)[who] ?? who
-    const colorOf = (l: LogLine) =>
-      l.kind === 'error' ? C.warn : l.kind === 'consult' ? C.arch : l.who === 'main' ? C.main : l.who === 'gate' ? C.gate : l.who === 'you' ? C.text : C.agent
-    // Below 40 columns a line keeps its minute, not its second, and a shorter name.
-    const logPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} marginTop={1} width={w}>
-        <Text dimColor wrap="truncate">
-          {viewed ? 'registro · este agente' : 'registro de sesión'}
-        </Text>
-        {shownLines.length === 0 ? <Text color={C.faint}>nada aún</Text> : null}
-        {shownLines.map(l => (
-          <Box>
-            <Box width={w < 40 ? 6 : 9} flexShrink={0}>
-              <Text color={C.faint}>{w < 40 ? fmtClock(l.at).slice(0, 5) : fmtClock(l.at)}</Text>
-            </Box>
-            <Box width={w < 40 ? 9 : 13} flexShrink={0}>
-              <Text color={colorOf(l)} bold wrap="truncate">
-                {whoLabel(l.who)}
-              </Text>
-            </Box>
-            <Text color={l.kind === 'error' ? C.warn : C.text} wrap="truncate">
-              {l.text}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-    )
-
     // La caja JEV sale en la columna solo con decisiones; en el diagrama, siempre que el panel esté en `panels`.
     const jevPanel = (w: number) => panelJev(els, C, w, resumenJevs)
 
@@ -1511,11 +1382,7 @@ export const register: Register = (on, options) => {
                 ? agentsPanel(w)
                 : p === 'loops'
                   ? loopsPanel(w)
-                  : p === 'receipt'
-                    ? receiptPanel(w)
-                    : p === 'sesion'
-                      ? sesionPanel(w)
-                      : logPanel(w)
+                  : receiptPanel(w)
 
     // Panels with the flow between them; the agents panel draws its own rails.
     const column = (ps: Panel[], w: number) => (
@@ -1523,7 +1390,7 @@ export const register: Register = (on, options) => {
         {ps.map((p, i) => {
           const prev = ps[i - 1]
           const link =
-            i === 0 || p === 'agents' || prev === 'agents' || p === 'log' || p === 'loops' || prev === 'loops'
+            i === 0 || p === 'agents' || prev === 'agents' || p === 'loops' || prev === 'loops'
               ? null
               : rail(`link-${p}`, p === 'architect' ? advising : m.isRunning, p === 'architect' ? C.arch : C.main, w)
           return (
@@ -1653,7 +1520,7 @@ export const register: Register = (on, options) => {
     const conAsesor = cfg.panels.includes('architect')
     const { aw, rw } = anchosDiagrama(W, conAsesor)
     const conTarjetas = panels.includes('agents')
-    const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents', 'log'].includes(p))
+    const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents'].includes(p))
     const diagramaBody = enDiagrama ? disposicionDiagrama(els, C, {
       ancho: W,
       asesor: conAsesor ? architectPanel(aw) : null,
@@ -1665,7 +1532,6 @@ export const register: Register = (on, options) => {
       expandido: conTarjetas ? expandedPanel(W) : null,
       vuelta: conTarjetas && running.length === 0,
       resto: restoPaneles.length > 0 ? column(restoPaneles, W) : null,
-      registro: panels.includes('log') ? logPanel(W) : null,
       barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}] · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : 'de guardia'}]${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
       motion: cfg.motion,
       activo: running.length > 0,
@@ -1675,9 +1541,8 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}
-          {column(panels.filter(p => p === 'agents' || p === 'loops' || p === 'receipt' || p === 'sesion'), colW)}
+          {column(panels.filter(p => p === 'agents' || p === 'loops' || p === 'receipt'), colW)}
         </Box>
-        {panels.includes('log') ? logPanel(W) : null}
       </Box>
     ) : (
       column(panels, W)
