@@ -524,5 +524,65 @@ class TopePorLimites(unittest.TestCase):
         self.assertIn("xhigh", json.dumps(servidor.peticiones))
 
 
+    # --- el texto del allow dice quién ajustó ---
+
+    def razon(self, salida):
+        return json.loads(salida)["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_razon_solo_jev(self):
+        self.servir({"modelo": (200, respuesta("modelo", "sonnet", 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.95))})
+        salida = self.ejecutar(model="haiku", effort="medium")
+        self.assertEqual(self.razon(salida), "Jev ajustó el modelo o el esfuerzo del agente.")
+
+    def test_razon_solo_tope(self):
+        self.limites(h5=90)
+        salida = self.salida(model="opus", effort="high")
+        self.assertEqual(self.razon(salida), "Tope de uso ajustó el modelo o el esfuerzo del agente.")
+
+    def test_razon_jev_y_tope(self):
+        self.limites(h5=78)  # tope sonnet/medium
+        self.servir({"modelo": (200, respuesta("modelo", "opus", 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.95))})
+        salida = self.ejecutar(model="haiku", effort="medium")
+        self.assertEqual(self.reescrito(salida)["model"], "sonnet")
+        self.assertEqual(self.razon(salida),
+                         "Jev y el tope de uso ajustaron el modelo o el esfuerzo del agente.")
+
+    # --- si fallan los topes, xhigh baja a high ---
+
+    def correr_con_limites_roto(self, codigo, effort="xhigh"):
+        """Copia el guardián a una carpeta con un jev_limites.py roto y lo corre."""
+        carpeta = tempfile.mkdtemp(prefix="hooks-rotos-")
+        self.addCleanup(shutil.rmtree, carpeta, True)
+        hooks = RAIZ / "claude" / "hooks"
+        for nombre in ("guard-subagentes.py", "jev_cliente.py"):
+            shutil.copy(str(hooks / nombre), carpeta)
+        Path(carpeta, "jev_limites.py").write_text(codigo, encoding="utf-8")
+        entorno = {k: v for k, v in os.environ.items()
+                   if k not in ("OPENROUTER_API_KEY", "JEV_URL", "HOME")}
+        entorno["HOME"] = self.home
+        entrada = agente("opus", effort)
+        r = subprocess.run([sys.executable, str(Path(carpeta, "guard-subagentes.py"))],
+                           input=json.dumps(entrada).encode("utf-8"),
+                           capture_output=True, timeout=30, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.decode("utf-8").strip()
+
+    def test_xhigh_baja_a_high_si_el_modulo_de_topes_no_importa(self):
+        salida = self.correr_con_limites_roto("raise ImportError('roto')\n")
+        upd = self.reescrito(salida)
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
+        self.assertNotEqual(json.loads(salida)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_xhigh_baja_a_high_si_el_calculo_del_tope_falla(self):
+        codigo = "def leer_limites(home, ahora):\n    raise RuntimeError('roto')\n"
+        upd = self.reescrito(self.correr_con_limites_roto(codigo))
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
+
+    def test_high_sigue_igual_si_el_modulo_de_topes_no_importa(self):
+        self.assertEqual(self.correr_con_limites_roto("raise ImportError('roto')\n", "high"), "")
+
+
 if __name__ == "__main__":
     unittest.main()

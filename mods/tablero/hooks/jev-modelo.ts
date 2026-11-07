@@ -161,7 +161,7 @@ export const marcaTarjeta = (d: DecisionJev | undefined): string | null => {
 export type VentanaLimite = { usado: number; reinicio: number }
 /** Lo que escribe la statusline en limites.json: `actualizado` y los reinicios, en segundos epoch. */
 export type LimitesJev = { actualizado: number; five_hour?: VentanaLimite; seven_day?: VentanaLimite }
-export type RitmoSemana = { usado: number; ritmo: number; exceso: number }
+export type RitmoSemana = { usado: number; ritmo: number; exceso: number; despuesDelCorte: boolean }
 export type CfgRitmo = { metaCorte: number; corteDia: number; corteHora: number; maxAntiguedadH: number }
 export const CFG_RITMO: CfgRitmo = { metaCorte: 90, corteDia: 3, corteHora: 23, maxAntiguedadH: 6 }
 /** Desfase de la zona local respecto a UTC, en minutos, en el instante dado (epoch en segundos). */
@@ -219,19 +219,41 @@ export const ritmoSemana = (limites: LimitesJev | null, ahora: number, cfg: Part
   const corte = corteDe(semana.reinicio, c, zona)
   const bruto = corte > inicio ? (c.metaCorte * (ahora - inicio)) / (corte - inicio) : c.metaCorte
   const ritmo = Math.max(0, Math.min(c.metaCorte, bruto))
-  return { usado: semana.usado, ritmo, exceso: semana.usado - ritmo }
+  return { usado: semana.usado, ritmo, exceso: semana.usado - ritmo, despuesDelCorte: ahora >= corte }
 }
 
 export type NivelRitmo = 'verde' | 'ambar' | 'rojo'
-/** Con este margen bajo el ritmo, el tope deja pasar xhigh. */
+/** Con este margen bajo el ritmo (antes del corte), el tope deja pasar xhigh. */
 const MARGEN_XHIGH = -10
+/** Después del corte, desde este uso de la semana el tope baja a haiku. */
+const FINAL_SEMANA = 97
+/** Con la ventana de 5 h por debajo de este uso, el tope deja pasar xhigh. */
+const H5_XHIGH = 60
+/** Si la ventana de 5 h se reinicia en menos de estos minutos, no pone tope. */
+const H5_GRACIA_MIN = 15
 
-/** La fila de la caja JEV: `semana 52% · ritmo 40% · +12`, con su nivel de color; null si no hay ritmo. */
-export const filaRitmo = (r: RitmoSemana | null): { texto: string; nivel: NivelRitmo } | null => {
+/**
+ * ¿El tope de jev_limites.py devolvería xhigh? Con los valores por defecto (no lee config.json):
+ * hay dato de la ventana de 5 h y sigue vigente (reinicio futuro); va bajo 60 % o está en gracia
+ * (reinicia en menos de 15 min); y la semana va 10 puntos o más bajo el ritmo (antes del corte)
+ * o bajo 97 % (después del corte).
+ */
+const xhighOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): boolean => {
+  if (!cinco || cinco.reinicio <= ahora) return false
+  const cincoOk = cinco.usado < H5_XHIGH || cinco.reinicio - ahora < H5_GRACIA_MIN * 60
+  const semanaOk = r.despuesDelCorte ? r.usado < FINAL_SEMANA : r.exceso <= MARGEN_XHIGH
+  return cincoOk && semanaOk
+}
+
+/**
+ * La fila de la caja JEV: `semana 52% · ritmo 40% · +12`, con su nivel de color; null si no hay ritmo.
+ * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok`.
+ */
+export const filaRitmo = (r: RitmoSemana | null, cinco?: VentanaLimite, ahora = 0): { texto: string; nivel: NivelRitmo } | null => {
   if (!r) return null
   const exceso = Math.round(r.exceso)
   const signo = exceso < 0 ? `−${-exceso}` : `+${exceso}`
-  const margen = r.exceso <= MARGEN_XHIGH ? ' · xhigh ok' : ''
+  const margen = xhighOk(r, cinco, ahora) ? ' · xhigh ok' : ''
   const nivel: NivelRitmo = r.exceso <= 5 ? 'verde' : r.exceso <= 15 ? 'ambar' : 'rojo'
   return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel }
 }
