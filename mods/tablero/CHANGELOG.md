@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.4 (tablero)
+
+- Latido en el panel SESIÓN: el punto de «en espera» de la tarjeta principal alterna entre ● y ○ con la animación encendida; con `animacion` apagada queda ○ fijo. Antes el latido de 0.3.3 se dibujaba en la banda sobre el prompt, que se quitó el 31-oct (commit 7f8b310), así que no se veía nada en reposo.
+- Corrige la entrada 0.3.3: la banda sobre el prompt no se dibuja desde 7f8b310; el latido real es el de esta versión.
+
 ## 0.3.3 (tablero)
 
 - Latido en la banda: con `animacion` encendida, el punto ● de la fila 1 pulsa también en reposo, sin subagentes ni permisos. Antes el pulso solo salía con actividad, así que en reposo la banda no se movía. Con `animacion` apagada no sale.
