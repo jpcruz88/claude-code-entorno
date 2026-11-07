@@ -27,7 +27,8 @@ def cargar_hook():
     return modulo
 
 CLAVE = "clave-falsa-solo-para-pruebas"
-SECRETO_ERROR = "SECRETO-ERROR-XYZ"
+RUTA_SECRETA = "/opt/secreto/archivo.txt"
+NUMERO_LARGO = "9876543210"
 
 
 def correr(entrada, home, jev=None, clave=CLAVE, crudo=None):
@@ -161,15 +162,18 @@ class ReintentoConJev(unittest.TestCase):
 
     def test_segundo_igual_pregunta_y_da_nota(self):
         servidor = self.servir({"reintento": (200, respuesta("reintento", "parar_y_preguntar", 0.88))})
-        error = "Error: " + "relleno de texto " * 5 + SECRETO_ERROR + " /ruta/de/prueba/a.txt"
+        error = "Error: no se pudo leer " + RUTA_SECRETA + " codigo " + NUMERO_LARGO
         self.correr(fallo(error=error))
         salida = self.correr(fallo(error=error))
         self.assertEqual(self.nota(salida),
-                         "Jev (p=0,88): parar y preguntar al usuario. Mismo error dos veces en Bash.")
+                         "Jev (p=0.88): parar y preguntar al usuario. Mismo error dos veces en Bash.")
         self.assertEqual(len(servidor.peticiones), 1)
         self.assertEqual(next(iter(servidor.peticiones[0]["questions"])), "reintento")
-        self.assertIn("Bash", servidor.peticiones[0]["state"]["encargo"])
-        self.assertIn(SECRETO_ERROR, servidor.peticiones[0]["state"]["encargo"])
+        encargo = servidor.peticiones[0]["state"]["encargo"]
+        self.assertIn("Bash", encargo)
+        self.assertIn("Error: no se pudo leer", encargo)
+        self.assertNotIn(RUTA_SECRETA, encargo)
+        self.assertNotIn(NUMERO_LARGO, encargo)
         lineas = self.registro()
         self.assertEqual(len(lineas), 1)
         linea = lineas[0]
@@ -177,7 +181,9 @@ class ReintentoConJev(unittest.TestCase):
         self.assertEqual(linea["session_id"], "sesion-1")
         self.assertEqual(linea["descripcion"], "Bash")
         self.assertTrue(linea["sharp"])
-        self.assertNotIn(SECRETO_ERROR, Path(self.home, ".claude", "jev", "decisiones.jsonl").read_text(encoding="utf-8"))
+        registro_crudo = Path(self.home, ".claude", "jev", "decisiones.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn("secreto", registro_crudo)
+        self.assertNotIn(NUMERO_LARGO, registro_crudo)
         self.assertLessEqual(len(linea["error"]), 60)
 
     def test_split_da_nota_suave(self):
@@ -185,7 +191,7 @@ class ReintentoConJev(unittest.TestCase):
         self.correr(fallo())
         salida = self.correr(fallo())
         self.assertEqual(self.nota(salida),
-                         "Jev sugiere (p=0,61): cambiar de enfoque. Mismo error dos veces en Bash.")
+                         "Jev sugiere (p=0.61): cambiar de enfoque. Mismo error dos veces en Bash.")
         self.assertFalse(self.registro()[0]["sharp"])
 
     def test_exito_reinicia(self):
@@ -228,6 +234,19 @@ class ReintentoConJev(unittest.TestCase):
                 salida = self.correr(fallo(session="s-" + nombre), jev=url, clave=clave)
                 self.assertEqual(salida, "")
                 self.assertEqual(self.registro()[-1]["motivo"], "sin respuesta")
+
+    def test_error_crudo_no_llega_a_jev(self):
+        servidor = self.servir({"reintento": (200, respuesta("reintento", "parar_y_preguntar", 0.99))})
+        error = "Error: no existe " + RUTA_SECRETA + " intento " + NUMERO_LARGO + " " + "x " * 300
+        self.correr(fallo(error=error))
+        self.correr(fallo(error=error))
+        self.assertEqual(len(servidor.peticiones), 1)
+        encargo = servidor.peticiones[0]["state"]["encargo"]
+        self.assertNotIn(RUTA_SECRETA, encargo)
+        self.assertNotIn("secreto", encargo)
+        self.assertNotIn(NUMERO_LARGO, encargo)
+        self.assertNotIn(error, encargo)
+        self.assertIn(cargar_hook().normalizar_error(error), encargo)
 
     def test_comando_de_la_herramienta_no_sale_a_jev(self):
         servidor = self.servir({"reintento": (200, respuesta("reintento", "parar_y_preguntar", 0.99))})

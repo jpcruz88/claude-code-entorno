@@ -134,8 +134,9 @@ def reiniciar(home, sesion, herramienta):
 def consultar_jev(home, herramienta, error):
     """Devuelve (decision, config). decision es None si Jev no responde. Nunca lanza.
 
-    Jev recibe solo el nombre de la herramienta y el error: la entrada (en Bash, el comando
-    completo) puede llevar tokens y no sale del equipo.
+    Jev recibe solo el nombre de la herramienta y el error normalizado (sin rutas, números ni
+    marcas de tiempo, recortado a 200 caracteres). La entrada (en Bash, el comando completo)
+    no sale del equipo.
     """
     if jev_cliente is None:
         return None, None
@@ -148,7 +149,7 @@ def consultar_jev(home, herramienta, error):
 
 
 def nota_para_claude(decision, sharp, herramienta):
-    p = ("%.2f" % float(decision["confianza"])).replace(".", ",")
+    p = "%.2f" % float(decision["confianza"])
     cabecera = "Jev (p=%s): " if sharp else "Jev sugiere (p=%s): "
     frase = FRASES.get(decision["opcion"], decision["opcion"])
     return (cabecera % p) + frase + ". Mismo error dos veces en %s." % herramienta
@@ -178,7 +179,7 @@ def evaluar(entrada):
     if cuenta != 2:
         return None
 
-    decision, config = consultar_jev(home, herramienta, error)
+    decision, config = consultar_jev(home, herramienta, error_normal)
     sharp = decision is not None and jev_cliente.es_sharp(decision, config)
     linea = {
         "hora": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
