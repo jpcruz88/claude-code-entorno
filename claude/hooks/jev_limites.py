@@ -58,9 +58,10 @@ def _es_numero(valor):
     return isinstance(valor, (int, float)) and not isinstance(valor, bool)
 
 
-def _ventana_valida(ventana):
+def _ventana_valida(ventana, ahora):
+    """Con números y sin reinicio vencido: una ventana que ya se reinició es «sin dato»."""
     return (isinstance(ventana, dict) and _es_numero(ventana.get("usado"))
-            and _es_numero(ventana.get("reinicio")))
+            and _es_numero(ventana.get("reinicio")) and ventana["reinicio"] > ahora)
 
 
 def leer_limites(home, ahora):
@@ -135,7 +136,7 @@ def _tope_semana(ventana, ahora, cfg, tz):
 def _tope_5h(ventana, ahora, cfg):
     usado = float(ventana["usado"])
     if float(ventana["reinicio"]) - ahora < float(cfg["h5_gracia_min"]) * 60:
-        return "opus", "high", None  # sin tope, pero sin conceder xhigh
+        return "opus", "xhigh", None  # la gracia no pone ningún tope
     modelo, esfuerzo = "haiku", "medium"
     for umbral, m, e in cfg["h5_escalones"]:
         if usado < float(umbral):
@@ -158,12 +159,12 @@ def calcular_tope(limites, ahora, config, tz=None):
         cfg = _config_limites(config)
         candidatos = []
         semana = None
-        completo = (_ventana_valida(limites.get("seven_day"))
-                    and _ventana_valida(limites.get("five_hour")))
-        if _ventana_valida(limites.get("seven_day")):
+        completo = (_ventana_valida(limites.get("seven_day"), ahora)
+                    and _ventana_valida(limites.get("five_hour"), ahora))
+        if _ventana_valida(limites.get("seven_day"), ahora):
             modelo, esfuerzo, motivo, semana = _tope_semana(limites["seven_day"], ahora, cfg, tz)
             candidatos.append((modelo, esfuerzo, motivo))
-        if _ventana_valida(limites.get("five_hour")):
+        if _ventana_valida(limites.get("five_hour"), ahora):
             candidatos.append(_tope_5h(limites["five_hour"], ahora, cfg))
         if not candidatos:
             return libre

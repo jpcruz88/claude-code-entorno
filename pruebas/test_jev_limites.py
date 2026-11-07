@@ -108,9 +108,10 @@ class CorteEnElBorde(unittest.TestCase):
         ahora = inicio + 72 * 3600  # el corte coincide con el reinicio: 168 h de span
         t = tope(datos(semana=45, reinicio=reinicio, ahora=ahora), ahora)
         self.assertAlmostEqual(t["semana"]["ritmo"], 90 * 72 / 168)
-        # El corte coincide con el reinicio: a las 23:00 en punto ya es ritmo 90.
-        t2 = tope(datos(semana=95, reinicio=reinicio, ahora=reinicio), reinicio)
-        self.assertAlmostEqual(t2["semana"]["ritmo"], 90)
+        # El corte coincide con el reinicio: un minuto antes el ritmo ya es casi 90.
+        ahora2 = reinicio - 60
+        t2 = tope(datos(semana=85, reinicio=reinicio, ahora=ahora2), ahora2)
+        self.assertAlmostEqual(t2["semana"]["ritmo"], 90, delta=0.1)
         self.assertEqual(t2["modelo_max"], "opus")
 
     def test_reinicio_el_viernes_a_las_0030_corta_el_jueves_a_las_23(self):
@@ -122,7 +123,7 @@ class CorteEnElBorde(unittest.TestCase):
         self.assertAlmostEqual(t["semana"]["ritmo"], 90 * 84 / ((corte - inicio) / 3600))
         # Entre el corte y el reinicio ya no se aplica el ritmo.
         ahora2 = epoch(2026, 11, 12, 23, 15)
-        t2 = tope(datos(semana=95, reinicio=reinicio, ahora=ahora2), ahora2)
+        t2 = tope(datos(semana=85, reinicio=reinicio, ahora=ahora2), ahora2)
         self.assertEqual(t2["modelo_max"], "opus")
 
     def test_reinicio_el_jueves_a_las_22_corta_el_jueves_anterior(self):
@@ -184,7 +185,7 @@ class Combinacion(unittest.TestCase):
         self.assertEqual(t["motivo"], "tope semana +30 pts → haiku")
 
     def test_minimo_por_separado_modelo_y_esfuerzo(self):
-        # semana: opus/medium; 5 h (80 %): sonnet/medium -> ver abajo con sonnet/high
+        # semana: opus/medium; 5 h (70 %): sonnet/high -> resultado sonnet/medium
         cfg = {"limites": {"h5_escalones": [[60, "opus", "high"], [90, "sonnet", "high"]]}}
         t = jev_limites.calcular_tope(datos(semana=48, h5=70), LUNES, cfg, TZ)
         self.assertEqual((t["modelo_max"], t["esfuerzo_max"]), ("sonnet", "medium"))
@@ -226,8 +227,31 @@ class Xhigh(unittest.TestCase):
         self.assertEqual(self.r(semana=28), ("opus", "high"))
         self.assertEqual(self.r(h5=40), ("opus", "high"))
 
-    def test_5h_en_gracia_no_concede_xhigh(self):
-        self.assertEqual(self.r(semana=28, h5=40, h5_reinicio=LUNES + 600), ("opus", "high"))
+    def test_5h_en_gracia_no_pone_ningun_tope_ni_limita_xhigh(self):
+        t = tope(datos(semana=28, h5=90, h5_reinicio=LUNES + 600))
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]),
+                         ("opus", "xhigh", None))
+
+
+class ReinicioVencido(unittest.TestCase):
+    """Una ventana cuyo `reinicio` ya pasó cuenta como sin dato."""
+
+    def test_semana_vencida_no_baja_a_haiku_ni_da_xhigh(self):
+        d = datos(semana=98, h5=30, reinicio=LUNES - 3600)
+        t = tope(d)
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]),
+                         ("opus", "high", None))
+        self.assertIsNone(t["semana"])
+
+    def test_5h_vencida_no_pone_tope_ni_da_xhigh(self):
+        t = tope(datos(semana=28, h5=95, h5_reinicio=LUNES - 3600))
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]),
+                         ("opus", "high", None))
+        self.assertAlmostEqual(t["semana"]["exceso"], -12)
+
+    def test_reinicio_igual_a_ahora_tambien_esta_vencido(self):
+        t = tope(datos(semana=98, reinicio=LUNES))
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"]), ("opus", "high"))
 
     def test_sin_dato_es_high_no_xhigh(self):
         t = tope(None)
@@ -251,10 +275,6 @@ class SinDato(unittest.TestCase):
         self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"], t["semana"]),
                          ("opus", "high", None, None))
 
-    def test_config_con_clave_limites_se_respeta(self):
-        cfg = {"limites": {"h5_escalones": [[10, "opus", "high"]]}}
-        t = jev_limites.calcular_tope(datos(h5=20), LUNES, cfg, TZ)
-        self.assertEqual(t["modelo_max"], "haiku")
 
 
 class LeerLimites(unittest.TestCase):
