@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (tablero)
+
+- Caja JEV: una fila de ritmo semanal cuando hay dato de uso en `~/.claude/jev/limites.json`, por ejemplo `semana 52% · ritmo 40% · +12`. Muestra el uso de la semana, el ritmo ideal (90 % hacia el jueves a las 23:00) y la diferencia en puntos. Es verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Si el ritmo va 10 puntos o más por debajo, añade `xhigh ok`, que indica que el tope deja pasar `xhigh`. Sin dato, o con un dato de más de 6 horas, la fila no aparece.
+- El mod calcula el ritmo con la misma regla que el guardián (`claude/hooks/jev_limites.py`). Solo lee `limites.json`; sigue sin usar red.
+- El log muestra cada tope como `tope → sonnet · semana +12 pts`, o `tope → opus · semana +6 pts · esfuerzo medium` si solo bajó el esfuerzo.
+- Los topes no cuentan en el total de decisiones de Jev: ni en la caja JEV ni en la barra. Son límites que ya se aplicaron, no elecciones de Jev.
+
 ## 0.3.0 (tablero)
 
 - Vista en diagrama (`layout: diagrama`): el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas de los subagentes. Los paneles que el diagrama no tiene sitio (permisos, bucles, turno y sesión) siguen en columna debajo, sin perderse.

@@ -19,7 +19,7 @@ Jev responde tres preguntas, desde dos hooks de Python del repo:
 
 Las decisiones las toman esos hooks, no el mod. Cada decisión queda en `~/.claude/jev/decisiones.jsonl`, sin el encargo, y el archivo se recorta a sus últimas 2000 líneas.
 
-**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en el log (líneas `jev`), en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo.
+**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en el log (líneas `jev`), en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
 
 ### Dónde poner la clave
 
@@ -48,6 +48,84 @@ Si no hay clave, Jev no se consulta y la decisión queda como «sin respuesta» 
 ### Tiempo
 
 Cada subagente puede tardar hasta unos 2 segundos más, porque el guardián espera la respuesta de Jev antes de lanzarlo. El tiempo máximo por consulta es de 2 segundos y es configurable en `~/.claude/jev/config.json`.
+
+### Tope por uso de la cuenta
+
+Antes de lanzar un subagente, el guardián calcula un **tope** de modelo y de esfuerzo con el uso actual de tu cuenta, y lo aplica a la elección final, sea de Jev o de Claude. El tope solo baja el modelo o el esfuerzo; nunca bloquea un subagente.
+
+El uso es **de la cuenta**, no de la sesión. Si tienes varios proyectos abiertos, todos usan el mismo dato, y el tope se recalcula en cada subagente.
+
+**El archivo `~/.claude/jev/limites.json`.** La statusline lo escribe en cada redibujo, de forma atómica, con el uso y la hora de reinicio de la ventana de 5 horas y de la semana. Su forma es:
+
+```text
+{"actualizado": <epoch s>, "five_hour": {"usado": n, "reinicio": <epoch s>}, "seven_day": {"usado": n, "reinicio": <epoch s>}}
+```
+
+Sin el archivo, con JSON roto (por ejemplo, a medio escribir), o con un dato de más de 6 horas, no hay tope. Tampoco lo hay si la statusline no recibe datos de suscripción, como con clave de API. El tope nunca inventa un dato.
+
+**Ritmo semanal.** Con la ventana de la semana:
+
+- El ritmo ideal sube en línea recta desde 0 % al inicio de la semana hasta 90 % en el corte, que es el jueves a las 23:00 (hora local). Un reinicio que cae justo en ese momento hace coincidir el corte con él.
+- El exceso es el uso de la semana menos el ritmo ideal, en puntos. Negativo significa que vas por debajo.
+
+Antes del corte, el exceso marca el escalón:
+
+| Exceso | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| ≤ −10 | opus | xhigh |
+| ≤ 5 | opus | high |
+| ≤ 10 | opus | medium |
+| ≤ 15 | sonnet | high |
+| ≤ 25 | sonnet | medium |
+| > 25, o uso ≥ 90 % | haiku | medium |
+
+Después del corte, la semana no baja nada hasta llegar a 97 % de uso: queda opus con xhigh y decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
+
+**Ventana de 5 horas.** El uso de la ventana marca el escalón:
+
+| Uso | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| < 60 % | opus | xhigh |
+| 60 % a 75 % | opus | medium |
+| 75 % a 85 % | sonnet | medium |
+| ≥ 85 % | haiku | medium |
+
+Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su reinicio ya pasó, cuenta como sin dato.
+
+**Combinación.** Se toma el menor modelo y el menor esfuerzo de las dos ventanas. El motivo que se anota es el de la ventana que baja el modelo, por ejemplo `tope semana +12 pts → sonnet` o `tope 5h 78% → sonnet`.
+
+**`xhigh` con margen.** `xhigh` solo pasa en dos casos:
+
+- Antes del corte, cuando la semana va al menos 10 puntos por debajo del ritmo y la ventana de 5 horas está bajo 60 %.
+- Después del corte, mientras la semana esté bajo 97 % y la ventana de 5 horas bajo 60 %.
+
+En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas, `xhigh` baja a `high`, porque `xhigh` exige conocer las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado siempre. Un Workflow con `xhigh` se bloquea, porque un Workflow no se puede bajar; el tope no lo toca.
+
+**Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. El log la muestra como `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de Jev.
+
+**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Con 10 puntos o más por debajo del ritmo añade `xhigh ok`. Sin dato, la fila no aparece.
+
+**Configuración.** La clave `limites` de `~/.claude/jev/config.json` cambia los valores. Es opcional: sin ella, se usan los de `DEFAULTS_LIMITES` en `claude/hooks/jev_limites.py`. Si cambias una lista, reemplaza la lista entera. Ejemplo:
+
+```json
+{
+  "limites": {
+    "meta_corte": 90,
+    "final": 97
+  }
+}
+```
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
+| `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
+| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. Por encima del último, haiku con medium. |
+| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. Desde el último, haiku con medium. |
+| `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana ya no pone tope. |
+| `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
+| `corte_hora` | `23` | Hora local del corte. |
+| `max_antiguedad_h` | `6` | Horas máximas de antigüedad de `limites.json`. Con más, no hay tope. |
 
 ## La barra de vida
 
