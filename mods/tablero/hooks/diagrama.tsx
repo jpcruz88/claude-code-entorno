@@ -35,6 +35,10 @@ export type PiezasDiagrama = {
   resto: RenderChildren | null
   registro: RenderChildren | null
   barra: string
+  /** Movimiento activo en la configuración: los conectores verticales se animan. */
+  motion: boolean
+  /** Hay trabajo en curso: el paquete solo baja mientras es verdad. */
+  activo: boolean
 }
 
 export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDiagrama) => {
@@ -42,9 +46,14 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
   const { rw } = anchosDiagrama(p.ancho, p.asesor !== null)
   // El conector baja desde el centro de la columna derecha; su sangría es un margen, no espacios en el texto.
   const centro = Math.floor(rw / 2)
-  const conector = (simbolo: string) => (
+  // Con movimiento, el conector es un módulo animado (el paquete baja por la columna mientras hay trabajo).
+  const conector = (simbolo: string, id: string) => (
     <Box marginLeft={centro}>
-      <Text color={colores.faint}>{simbolo}</Text>
+      {p.motion ? (
+        <els.Client key={id} module="./conector-v.tsx" width={1} height={1} props={{ active: p.activo, alto: 1, color: colores.arch, dim: colores.faint }} />
+      ) : (
+        <Text color={colores.faint}>{simbolo}</Text>
+      )}
     </Box>
   )
   return (
@@ -58,10 +67,10 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
         ) : null}
         <Box flexDirection="column" width={rw}>
           {p.lead}
-          {p.lead !== null && p.jev !== null ? conector('▼') : null}
+          {p.lead !== null && p.jev !== null ? conector('▼', 'lead-jev') : null}
           {p.jev}
-          {p.delegar ? conector('│') : null}
-          {p.delegar ? conector('▼') : null}
+          {p.delegar ? conector('│', 'delegar-1') : null}
+          {p.delegar ? conector('▼', 'delegar-2') : null}
           {p.delegar ? <Text dimColor>delegar a subagentes</Text> : null}
         </Box>
       </Box>

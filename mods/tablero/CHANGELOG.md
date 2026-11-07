@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 (tablero)
+
+- Vista en diagrama: los conectores verticales (lead → caja JEV y la bajada a «delegar a subagentes») son módulos animados. Con `motion: while-active` un paquete ● con su cola • baja por la columna mientras hay subagentes en curso; en reposo queda una línea tenue. Con `motion: off` siguen siendo texto `│` y `▼`, como antes.
+- El conector sale de `hooks/conector-v.ts` (función pura, con pruebas) y `hooks/conector-v.tsx` (módulo que dibuja cada cuadro).
+
 ## 0.3.1 (tablero)
 
 - Caja JEV: una fila de ritmo semanal cuando hay dato de uso en `~/.claude/jev/limites.json`, por ejemplo `semana 52% · ritmo 40% · +12`. Muestra el uso de la semana, el ritmo ideal (90 % hacia el jueves a las 23:00) y la diferencia en puntos. Es verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`: hay datos de las dos ventanas y la de 5 horas está vigente; la de 5 horas va bajo 60 % o está en gracia (reinicia en menos de 15 minutos); y, antes del corte, la semana va a −10 o menos del ritmo, o, después del corte, está bajo 97 %. Sin dato de la semana, o con un dato de más de 6 horas, la fila no aparece.
