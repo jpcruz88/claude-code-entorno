@@ -1,6 +1,6 @@
 # Tablero
 
-Mod de Claude Code que dibuja sobre el prompt una banda en español con la carpeta actual, el modelo, el costo, el contexto, los subagentes, los permisos y el uso con su hora de reseteo, y deja una línea resumen en el footer.
+Mod de Claude Code que dibuja un panel en español con la carpeta actual, el modelo, el costo, el contexto, los subagentes, los permisos y el uso con su hora de reseteo. En modo inline deja además una franja compacta sobre el prompt. Es de observación: no bloquea nada.
 
 Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»), y la instrucción de reportar pasos que recibe cada subagente `savvy-*` (ver «Progreso y agentes»).
 
