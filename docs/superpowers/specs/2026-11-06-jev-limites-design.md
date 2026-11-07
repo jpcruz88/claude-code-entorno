@@ -27,7 +27,17 @@ El usuario trabaja en varios proyectos a la vez. El uso es **de la cuenta**, no 
 
 ## Reglas (decididas con el usuario)
 
-**Orden de modelos:** haiku < sonnet < opus. **Orden de esfuerzos:** low < medium < high.
+**Orden de modelos:** haiku < sonnet < opus. **Orden de esfuerzos:** low < medium < high < xhigh. `max` sigue bloqueado siempre.
+
+**xhigh (aprobado por el usuario, para aprovechar la suscripción al máximo):**
+- Jev tiene `xhigh` como cuarta opción de esfuerzo, con esta definición: «tareas muy difíciles: causa raíz poco clara, diseño delicado o razonamiento largo».
+- El tope solo deja pasar `xhigh` en dos casos:
+  - antes del corte, cuando `exceso ≤ −10` y la ventana de 5 h está bajo el 60 %;
+  - después del corte, mientras `uso_semana < 97` y la ventana de 5 h está bajo el 60 %.
+- En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón.
+- Si no hay dato de uso, el esfuerzo máximo es `high`.
+- El guardián acepta `xhigh` solo si el tope de ese momento lo permite. Si no lo permite, no bloquea: baja el esfuerzo con `updatedInput`.
+- Referencia del usuario: su semana se reinicia el viernes a las 6:00, y el corte del jueves a las 23:00 deja unas 7 h de margen. El cálculo siempre usa `seven_day.resets_at`.
 
 **Ritmo semanal.**
 - `reinicio` = `seven_day.resets_at`.
@@ -40,13 +50,14 @@ Tope antes del corte. Se recorta primero el esfuerzo, que es lo más barato, y d
 
 | Condición | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
+| exceso ≤ −10 (y 5 h < 60) | opus | xhigh |
 | exceso ≤ 5 | opus | high |
 | 5 < exceso ≤ 10 | opus | medium |
 | 10 < exceso ≤ 15 | sonnet | high |
 | 15 < exceso ≤ 25 | sonnet | medium |
 | exceso > 25, o uso_semana ≥ 90 | haiku | medium |
 
-Después del corte: libre mientras uso_semana < 97; desde 97, haiku con esfuerzo medium.
+Después del corte: libre (opus/xhigh si la ventana de 5 h está bajo el 60 %; si no, opus/high) mientras uso_semana < 97. Desde 97: haiku con esfuerzo medium.
 
 **Ventana de 5 horas:**
 
