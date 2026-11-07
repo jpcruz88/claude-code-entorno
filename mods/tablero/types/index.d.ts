@@ -1,4 +1,17 @@
-import type { DecisionJev } from '../hooks/jev-modelo'
+/** Tipos de Jev. El contrato es autocontenido (no importa de hooks/): copia de hooks/jev-modelo.ts. */
+export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento'
+
+export type DecisionJev = {
+  hora: number
+  sessionId: string
+  tipo: TipoDecision
+  opcion: string | null
+  confianza: number | null
+  sharp: boolean
+  claude: string | null
+  aplicada: boolean
+  descripcion: string
+}
 
 export type Moment = 'before a plan' | 'error repeats' | 'before done'
 
@@ -149,6 +162,8 @@ declare module 'claude-code' {
       view: View
       roster: Roster
       sesion: Sesion
+      /** Las decisiones de Jev de la sesión y el cursor del log (ver JevEstado). */
+      jev: JevEstado
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
         title: string

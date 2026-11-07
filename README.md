@@ -401,10 +401,12 @@ Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto
 usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
 Fable no se usa por omisión: solo si lo pides de forma explícita.
 
-**Agentes y subagentes:** siempre `claude-haiku-5-5` con esfuerzo **medio**, sin
-excepción; ningún otro modelo y ningún esfuerzo más alto (se acepta «low»). Lo
-bloquea el hook `claude/hooks/guard-subagentes.py`, que revisa las llamadas a Agent,
-Task y Workflow. La configuración base también fija el esfuerzo de Haiku en medio.
+**Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
+`low`, `medium` o `high`. Nunca Fable, ni `xhigh` ni `max`. Lo revisa el hook
+`claude/hooks/guard-subagentes.py` en las llamadas a Agent, Task y Workflow. Si
+Jev está seguro (confianza de al menos 0,80), elige el modelo y el esfuerzo de cada
+subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base sigue fijando
+Haiku con esfuerzo medio como valor por defecto de la sesión.
 
 Para cambiar el modelo por defecto en todas tus computadoras, edita
 `claude/settings.base.json`, haz commit y corre el instalador en cada una. En la

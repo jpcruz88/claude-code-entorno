@@ -367,13 +367,13 @@ test('the server-side advisor is read from assistant rows: consulting, then on c
       .catch(() => undefined) // the test has no transcript to store rows in
   await row([{ type: 'server_tool_use', id: 'srv1', name: 'advisor', input: {} }])
   const mid = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await mid.find({ text: /ARQUITECTO · asesorando/ })).toBeDefined()
+  expect(await mid.find({ text: /ASESOR · asesorando/ })).toBeDefined()
   expect(await mid.find({ text: /◆ antes de un plan/ })).toBeDefined()
   await mid.unmount()
 
   await row([{ type: 'advisor_tool_result', tool_use_id: 'srv1', content: { type: 'advisor_redacted_result' } }])
   const after = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await after.find({ text: /ARQUITECTO · de guardia/ })).toBeDefined()
+  expect(await after.find({ text: /ASESOR · de guardia/ })).toBeDefined()
   expect(await after.find({ text: /^1$/ })).toBeDefined()
   await after.unmount()
 })
@@ -427,7 +427,7 @@ test('a consult whose start and result share one row closes, and its review flag
     })
     .catch(() => undefined)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /ARQUITECTO · de guardia/ })).toBeDefined()
+  expect(await ui.find({ text: /ASESOR · de guardia/ })).toBeDefined()
   expect(await ui.find({ text: /◆ antes de terminar/ })).toBeDefined()
   expect(await ui.find({ text: /revisando antes de terminar/ })).toBeUndefined()
   await ui.unmount()
@@ -436,7 +436,7 @@ test('a consult whose start and result share one row closes, and its review flag
 test('with no architect anywhere, the panel, legend entry and status field stay hidden', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /ARQUITECTO/ })).toBeUndefined()
+  expect(await ui.find({ text: /ASESOR/ })).toBeUndefined()
   expect(await ui.find({ text: /^ architect$/ })).toBeUndefined()
   await ui.unmount()
 })
