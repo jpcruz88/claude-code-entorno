@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -20,12 +21,105 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]  # time.gmtime: lunes = 0
 
 
-def correr(datos, **entorno):
-    env = dict(os.environ, TZ="UTC", **entorno)
+def correr(datos, home=None, **entorno):
+    """Corre la statusline. HOME apunta a una carpeta temporal para no tocar ~/.claude."""
+    propio = None
+    if home is None:
+        propio = tempfile.TemporaryDirectory()
+        home = propio.name
+    env = dict(os.environ, TZ="UTC", HOME=str(home), **entorno)
     entrada = datos if isinstance(datos, str) else json.dumps(datos)
     r = subprocess.run([BASH, str(SCRIPT)], input=entrada.encode("utf-8"),
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=30)
+    if propio:
+        propio.cleanup()
     return r.returncode, ANSI.sub("", r.stdout.decode("utf-8"))
+
+
+@unittest.skipUnless(BASH and shutil.which("jq"), "hace falta bash y jq")
+class GuardaUso(unittest.TestCase):
+    """La statusline escribe ~/.claude/jev/limites.json con el uso de la cuenta."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.archivo = self.home / ".claude" / "jev" / "limites.json"
+
+    def ejemplo(self):
+        return json.loads(EJEMPLO.read_text(encoding="utf-8"))
+
+    def test_escribe_el_uso(self):
+        antes = int(time.time())
+        codigo, salida = correr(self.ejemplo(), home=self.home)
+        self.assertEqual(codigo, 0)
+        datos = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(datos), ["actualizado", "five_hour", "seven_day"])
+        self.assertGreaterEqual(datos["actualizado"], antes)
+        self.assertLessEqual(datos["actualizado"], int(time.time()))
+        self.assertEqual(datos["five_hour"], {"usado": 23.5, "reinicio": 1738425600})
+        self.assertEqual(datos["seven_day"], {"usado": 41.2, "reinicio": 1738857600})
+        self.assertEqual(oct(self.archivo.parent.stat().st_mode & 0o777), "0o700")
+
+    def test_reinicio_en_iso_se_guarda_como_epoch(self):
+        datos = self.ejemplo()
+        datos["rate_limits"]["five_hour"]["resets_at"] = "2025-02-01T16:00:00.123Z"
+        correr(datos, home=self.home)
+        escrito = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertEqual(escrito["five_hour"]["reinicio"], 1738425600)
+        self.assertIsInstance(escrito["five_hour"]["reinicio"], int)
+
+    def test_sin_rate_limits_no_escribe_y_salida_igual(self):
+        datos = self.ejemplo()
+        con = correr(datos, home=self.home)[1]
+        shutil.rmtree(self.archivo.parent, ignore_errors=True)
+        del datos["rate_limits"]
+        codigo, salida = correr(datos, home=self.home)
+        self.assertEqual(codigo, 0)
+        self.assertFalse(self.archivo.exists())
+        self.assertIn("Opus", salida)
+        self.assertNotIn("sesión", salida)
+        self.assertIn("sesión 24%", con)
+
+    def test_carpeta_no_escribible_dibuja_igual(self):
+        (self.home / ".claude").write_text("soy un archivo", encoding="utf-8")
+        codigo, salida = correr(self.ejemplo(), home=self.home)
+        self.assertEqual(codigo, 0)
+        self.assertIn("sesión 24%", salida)
+        self.assertFalse(self.archivo.exists())
+
+    def test_cinco_en_paralelo_dejan_json_valido(self):
+        procesos = []
+        for i in range(5):
+            datos = self.ejemplo()
+            datos["rate_limits"]["five_hour"]["used_percentage"] = 10 + i
+            env = dict(os.environ, TZ="UTC", HOME=str(self.home))
+            p = subprocess.Popen([BASH, str(SCRIPT)], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+            p.stdin.write(json.dumps(datos).encode("utf-8"))
+            p.stdin.close()
+            procesos.append(p)
+        for p in procesos:
+            p.wait(timeout=30)
+            p.stdout.close()
+            p.stderr.close()
+        datos = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertIn(datos["five_hour"]["usado"], [10, 11, 12, 13, 14])
+        sobras = [f.name for f in self.archivo.parent.iterdir() if f.name != "limites.json"]
+        self.assertEqual(sobras, [])
+
+    def test_leer_limites_acepta_lo_escrito(self):
+        sys.path.insert(0, str(RAIZ / "claude" / "hooks"))
+        try:
+            import jev_limites
+        finally:
+            sys.path.pop(0)
+        correr(self.ejemplo(), home=self.home)
+        ahora = time.time()
+        datos = jev_limites.leer_limites(str(self.home), ahora)
+        self.assertIsNotNone(datos)
+        self.assertEqual(datos["seven_day"]["usado"], 41.2)
+        self.assertEqual(datos["five_hour"]["reinicio"], 1738425600)
 
 
 @unittest.skipUnless(BASH and shutil.which("jq"), "hace falta bash y jq")
