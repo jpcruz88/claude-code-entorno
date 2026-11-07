@@ -66,10 +66,8 @@ class AgentesYSubagentes(unittest.TestCase):
             with self.subTest(modelo=modelo):
                 self.assertTrue(negado(correr(agente(modelo, "medium"))))
 
-    def test_esfuerzo_mas_alto_que_medio_se_bloquea(self):
-        for esfuerzo in ("xhigh", "max"):
-            with self.subTest(esfuerzo=esfuerzo):
-                self.assertTrue(negado(correr(agente("haiku", esfuerzo))))
+    def test_max_se_bloquea(self):
+        self.assertTrue(negado(correr(agente("haiku", "max"))))
 
     def test_sonnet_alto_pasa(self):
         self.assertEqual(correr(agente("sonnet", "high")), "")
@@ -81,8 +79,11 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertTrue(negado(correr(agente("claude-opusxyz", "medium"))))
         self.assertTrue(negado(correr(agente("claude-haikuo", "medium"))))
 
-    def test_xhigh_se_bloquea(self):
-        self.assertTrue(negado(correr(agente("opus", "xhigh"))))
+    def test_xhigh_ya_no_se_bloquea(self):
+        # sin limites.json no hay dato: el tope libre es opus/high, así que xhigh baja a high
+        salida = json.loads(correr(agente("opus", "xhigh")))["hookSpecificOutput"]
+        self.assertEqual(salida["permissionDecision"], "allow")
+        self.assertEqual(salida["updatedInput"]["effort"], "high")
 
     def test_fable_se_bloquea(self):
         self.assertTrue(negado(correr(agente("fable", "low"))))
@@ -383,6 +384,204 @@ class RuteoConJev(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertEqual(r.stdout.decode("utf-8").strip(), "")
         self.assertFalse(Path(self.home, ".claude", "jev", "decisiones.jsonl").exists())
+
+
+class TopePorLimites(unittest.TestCase):
+    """El guardián baja modelo y esfuerzo según ~/.claude/jev/limites.json."""
+    ejecutar = RuteoConJev.ejecutar
+    servir = RuteoConJev.servir
+    registro = RuteoConJev.registro
+    reescrito = RuteoConJev.reescrito
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="tope-home-")
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.servidor = None
+
+    def escribir(self, nombre, datos):
+        carpeta = Path(self.home, ".claude", "jev")
+        carpeta.mkdir(parents=True, exist_ok=True)
+        carpeta.joinpath(nombre).write_text(
+            datos if isinstance(datos, str) else json.dumps(datos), encoding="utf-8")
+
+    def limites(self, h5=None, semana=None, reinicio_semana=None):
+        ahora = time.time()
+        datos = {"actualizado": ahora}
+        if h5 is not None:
+            datos["five_hour"] = {"usado": h5, "reinicio": ahora + 3 * 3600}
+        if semana is not None:
+            datos["seven_day"] = {"usado": semana, "reinicio": reinicio_semana}
+        self.escribir("limites.json", datos)
+
+    def semana_a_mitad(self):
+        """Reinicio a 3,5 días y corte 1-2 h antes: el ritmo es ~45 y el corte sigue en el futuro.
+
+        Fija el día y la hora de corte en config.json para no depender del día real.
+        """
+        import datetime
+        reinicio = time.time() + 3.5 * 86400
+        corte = datetime.datetime.fromtimestamp(reinicio) - datetime.timedelta(hours=1)
+        propios = {"corte_dia": corte.weekday(), "corte_hora": corte.hour}
+        self.escribir("config.json", {"limites": propios})
+        sys.path.insert(0, str(RAIZ / "claude" / "hooks"))
+        import jev_limites
+        ahora = time.time()
+        ritmo = jev_limites.calcular_tope(
+            {"actualizado": ahora, "seven_day": {"usado": 1, "reinicio": reinicio}},
+            ahora, {"limites": propios})["semana"]["ritmo"]
+        return reinicio, ritmo
+
+    def lineas_tope(self):
+        return [r for r in self.registro() if r["tipo"] == "tope"]
+
+    def salida(self, **kw):
+        return self.ejecutar(clave=None, url="http://127.0.0.1:1/x", **kw)
+
+    def test_jev_elige_opus_y_la_semana_a_mas_12_lo_baja_a_sonnet(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(semana=ritmo + 12, reinicio_semana=reinicio)
+        self.servir({"modelo": (200, respuesta("modelo", "opus", 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.95))})
+        upd = self.reescrito(self.ejecutar(model="haiku", effort="medium"))
+        self.assertEqual(upd["model"], "sonnet")
+        lineas = self.lineas_tope()
+        self.assertEqual(len(lineas), 1)
+        self.assertEqual(lineas[0]["opcion"], "sonnet")
+        self.assertEqual(lineas[0]["claude"], "opus")
+        self.assertTrue(lineas[0]["aplicada"])
+        self.assertIn("tope semana", lineas[0]["motivo"])
+        self.assertEqual(lineas[0]["session_id"], "sesion-1")
+
+    def test_claude_pide_opus_a_mano_con_5h_al_90_baja_a_haiku_medium(self):
+        self.limites(h5=90)
+        upd = self.reescrito(self.salida(model="opus", effort="high"))
+        self.assertEqual((upd["model"], upd["effort"]), ("haiku", "medium"))
+        linea = self.lineas_tope()[0]
+        self.assertEqual((linea["opcion"], linea["claude"]), ("haiku", "opus"))
+        self.assertIn("tope 5h", linea["motivo"])
+
+    def test_5h_al_78_baja_opus_alto_a_sonnet_medium(self):
+        self.limites(h5=78)
+        upd = self.reescrito(self.salida(model="opus", effort="high"))
+        self.assertEqual((upd["model"], upd["effort"]), ("sonnet", "medium"))
+
+    def test_claude_ya_eligio_menos_que_el_tope_no_toca_ni_registra(self):
+        self.limites(h5=78)  # tope sonnet/medium
+        self.assertEqual(self.salida(model="haiku", effort="medium"), "")
+        self.assertEqual(self.lineas_tope(), [])
+
+    def test_sin_limites_json_es_igual_que_antes(self):
+        self.assertEqual(self.salida(model="opus", effort="high"), "")
+        self.assertEqual(self.lineas_tope(), [])
+
+    def test_limites_roto_es_sin_tope(self):
+        self.escribir("limites.json", '{"actualizado": ')
+        self.assertEqual(self.salida(model="opus", effort="high"), "")
+
+    def test_modelo_prohibido_sigue_bloqueado_con_tope(self):
+        self.limites(h5=10)
+        prohibido = "fab" + "le"
+        self.assertTrue(negado(self.salida(model=prohibido, effort="low")))
+        self.assertEqual(self.lineas_tope(), [])
+
+    def test_max_sigue_bloqueado(self):
+        self.limites(h5=10)
+        self.assertTrue(negado(self.salida(model="opus", effort="max")))
+
+    def test_xhigh_con_5h_al_70_baja_a_medium(self):
+        self.limites(h5=70)
+        upd = self.reescrito(self.salida(model="opus", effort="xhigh"))
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "medium"))
+        self.assertEqual(len(self.lineas_tope()), 1)
+
+    def test_xhigh_con_limites_vacio_baja_a_high(self):
+        self.escribir("limites.json", {})
+        upd = self.reescrito(self.salida(model="opus", effort="xhigh"))
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
+
+    def test_xhigh_sin_limites_json_baja_a_high(self):
+        upd = self.reescrito(self.salida(model="opus", effort="xhigh"))
+        self.assertEqual(upd["effort"], "high")
+
+    def test_xhigh_pasa_si_las_dos_ventanas_lo_permiten(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(h5=10, semana=max(0.0, ritmo - 15), reinicio_semana=reinicio)
+        self.assertEqual(self.salida(model="opus", effort="xhigh"), "")
+        self.assertEqual(self.lineas_tope(), [])
+
+    def test_semana_al_99_antes_del_corte_baja_a_haiku(self):
+        reinicio, _ = self.semana_a_mitad()
+        self.limites(semana=99, reinicio_semana=reinicio)
+        upd = self.reescrito(self.salida(model="sonnet", effort="high"))
+        self.assertEqual((upd["model"], upd["effort"]), ("haiku", "medium"))
+
+    def test_jev_puede_elegir_xhigh_y_el_tope_lo_baja(self):
+        servidor = self.servir({"modelo": (200, respuesta("modelo", "opus", 0.95)),
+                                "esfuerzo": (200, respuesta("esfuerzo", "xhigh", 0.95))})
+        self.limites(h5=70)
+        upd = self.reescrito(self.ejecutar(model="opus", effort="high"))
+        self.assertEqual(upd["effort"], "medium")
+        self.assertIn("xhigh", json.dumps(servidor.peticiones))
+
+
+    # --- el texto del allow dice quién ajustó ---
+
+    def razon(self, salida):
+        return json.loads(salida)["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_razon_solo_jev(self):
+        self.servir({"modelo": (200, respuesta("modelo", "sonnet", 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.95))})
+        salida = self.ejecutar(model="haiku", effort="medium")
+        self.assertEqual(self.razon(salida), "Jev ajustó el modelo o el esfuerzo del agente.")
+
+    def test_razon_solo_tope(self):
+        self.limites(h5=90)
+        salida = self.salida(model="opus", effort="high")
+        self.assertEqual(self.razon(salida), "Tope de uso ajustó el modelo o el esfuerzo del agente.")
+
+    def test_razon_jev_y_tope(self):
+        self.limites(h5=78)  # tope sonnet/medium
+        self.servir({"modelo": (200, respuesta("modelo", "opus", 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.95))})
+        salida = self.ejecutar(model="haiku", effort="medium")
+        self.assertEqual(self.reescrito(salida)["model"], "sonnet")
+        self.assertEqual(self.razon(salida),
+                         "Jev y el tope de uso ajustaron el modelo o el esfuerzo del agente.")
+
+    # --- si fallan los topes, xhigh baja a high ---
+
+    def correr_con_limites_roto(self, codigo, effort="xhigh"):
+        """Copia el guardián a una carpeta con un jev_limites.py roto y lo corre."""
+        carpeta = tempfile.mkdtemp(prefix="hooks-rotos-")
+        self.addCleanup(shutil.rmtree, carpeta, True)
+        hooks = RAIZ / "claude" / "hooks"
+        for nombre in ("guard-subagentes.py", "jev_cliente.py"):
+            shutil.copy(str(hooks / nombre), carpeta)
+        Path(carpeta, "jev_limites.py").write_text(codigo, encoding="utf-8")
+        entorno = {k: v for k, v in os.environ.items()
+                   if k not in ("OPENROUTER_API_KEY", "JEV_URL", "HOME")}
+        entorno["HOME"] = self.home
+        entrada = agente("opus", effort)
+        r = subprocess.run([sys.executable, str(Path(carpeta, "guard-subagentes.py"))],
+                           input=json.dumps(entrada).encode("utf-8"),
+                           capture_output=True, timeout=30, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.decode("utf-8").strip()
+
+    def test_xhigh_baja_a_high_si_el_modulo_de_topes_no_importa(self):
+        salida = self.correr_con_limites_roto("raise ImportError('roto')\n")
+        upd = self.reescrito(salida)
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
+        self.assertNotEqual(json.loads(salida)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_xhigh_baja_a_high_si_el_calculo_del_tope_falla(self):
+        codigo = "def leer_limites(home, ahora):\n    raise RuntimeError('roto')\n"
+        upd = self.reescrito(self.correr_con_limites_roto(codigo))
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
+
+    def test_high_sigue_igual_si_el_modulo_de_topes_no_importa(self):
+        self.assertEqual(self.correr_con_limites_roto("raise ImportError('roto')\n", "high"), "")
 
 
 if __name__ == "__main__":

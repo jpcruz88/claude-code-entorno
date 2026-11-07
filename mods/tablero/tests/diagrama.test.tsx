@@ -28,17 +28,18 @@ const decision = (i: number, tipo: string, opcion: string, confianza: number, sh
     descripcion: 'buscar',
   })
 
-const motor = (on: On, decisiones: string | null) => {
-  mock.clock(on)
+const motor = (on: On, decisiones: string | null, limites: string | null = null, ahoraMs: number = BASE) => {
+  const reloj = mock.clock(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.status', () => ({ value: undefined }))
   on('session.cwd', () => ({ value: '/work' }))
   on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
   on('session.id', () => ({ value: SESION }))
   on('env.get', () => ({ value: '/casa' }))
-  on('fs.read', () => {
-    if (decisiones === null) throw new Error('ENOENT')
-    return { value: decisiones }
+  on('fs.read', (_$, e) => {
+    const texto = String((e as { path?: string }).path ?? '').endsWith('limites.json') ? limites : decisiones
+    if (texto === null) throw new Error('ENOENT')
+    return { value: texto }
   })
   on('command.register', () => ({ value: { command: 'tablero' } }))
   on('tool.register', () => ({ value: undefined }))
@@ -46,6 +47,7 @@ const motor = (on: On, decisiones: string | null) => {
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('agent.spawn', (_$, e) => ({ model: 'claude-sonnet-5-5', agentId: e.tool_use_id ?? 'a' }))
+  return () => reloj.set(ahoraMs)
 }
 
 const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }, descripcion: string, id: string) =>
@@ -197,6 +199,90 @@ test('caja JEV con tres filas y total 1,382', async ($, on) => {
   expect(await ui.find({ text: /^split$/ })).toBeDefined()
   expect(await ui.find({ text: /sharp → se aplica en código · split → decide Claude/ })).toBeDefined()
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------- fila de ritmo en la caja JEV
+// El reinicio cae el próximo jueves a las 23:00 (hora local del sistema) y ahora es justo a mitad de la semana: el corte
+// coincide con el reinicio, así que el ritmo es 45 % en cualquier zona horaria y los colores no dependen de dónde corra.
+const seg = (ms: number) => Math.floor(ms / 1000)
+const reinicioSemana = () => {
+  const d = new Date(BASE)
+  d.setHours(23, 0, 0, 0)
+  d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7))
+  return seg(d.getTime())
+}
+const MITAD_SEMANA_S = 3.5 * 86400
+const AHORA_RITMO = reinicioSemana() * 1000 - MITAD_SEMANA_S * 1000
+const limitesJson = (usado: number, extra: Record<string, unknown> = {}) =>
+  JSON.stringify({ actualizado: seg(AHORA_RITMO) - 60, five_hour: { usado: 10, reinicio: seg(AHORA_RITMO) + 3600 }, seven_day: { usado, reinicio: reinicioSemana() }, ...extra })
+const unaDecision = () => decision(0, 'modelo', 'sonnet', 0.94, true)
+
+test('la caja JEV muestra la fila de ritmo con el exceso', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(52), AHORA_RITMO)
+  await fijar()
+  await lanzar($, 'revisar auth', 'r1')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /^semana 52% · ritmo 45% · \+7$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+const colorDeFila = async ($: Parameters<Parameters<typeof test>[1]>[0], usado: number) => {
+  await lanzar($, 'revisar auth', `c${usado}`)
+  const ui = await $.ui.mount(pane(100) as never)
+  const nodo = (await ui.find({ text: new RegExp(`^semana ${usado}% `) })) as { props?: { color?: string } } | undefined
+  await ui.unmount()
+  return nodo?.props?.color
+}
+
+// Ritmo 45 %: 1 % queda 44 puntos por debajo, 55 % está 10 por encima y 70 % está 25 por encima.
+test('la fila de ritmo va en verde con el uso por debajo del ritmo', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(1), AHORA_RITMO)
+  await fijar()
+  expect(await colorDeFila($, 1)).toBe('success')
+})
+
+test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(55), AHORA_RITMO)
+  await fijar()
+  expect(await colorDeFila($, 55)).toBe('warning')
+})
+
+test('la fila de ritmo va en rojo con más de 15 puntos por encima', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(70), AHORA_RITMO)
+  await fijar()
+  expect(await colorDeFila($, 70)).toBe('error')
+})
+
+const sinFila = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
+  await lanzar($, 'revisar auth', 'n1')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /^semana \d+%/ })).toBeUndefined()
+  expect(await ui.find({ text: /^JEV/ })).toBeDefined()
+  await ui.unmount()
+}
+
+test('sin limites.json no hay fila de ritmo', async ($, on) => {
+  const fijar = motor(on, unaDecision(), null, AHORA_RITMO)
+  await fijar()
+  await sinFila($)
+})
+
+test('con limites.json roto no hay fila de ritmo', async ($, on) => {
+  const fijar = motor(on, unaDecision(), '{"actualizado": 17', AHORA_RITMO)
+  await fijar()
+  await sinFila($)
+})
+
+test('con un dato de más de 6 h no hay fila de ritmo', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(52, { actualizado: seg(AHORA_RITMO) - 6 * 3600 - 5 }), AHORA_RITMO)
+  await fijar()
+  await sinFila($)
+})
+
+test('con el reinicio de la semana vencido no hay fila de ritmo', async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(52, { seven_day: { usado: 52, reinicio: seg(AHORA_RITMO) } }), AHORA_RITMO)
+  await fijar()
+  await sinFila($)
 })
 
 test('sin decisiones aún', async ($, on) => {
