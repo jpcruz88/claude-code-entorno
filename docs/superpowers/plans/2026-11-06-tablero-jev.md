@@ -31,7 +31,7 @@
 2. **Jev elige el mismo modelo y esfuerzo que Claude:** no se reescribe nada, se registra como `aplicada: false`, y no aparece la marca `jev ↑` en la tarjeta. → `test_misma_eleccion_no_reescribe` en la Tarea 3.
 3. **Archivo de decisiones corrupto o a medio escribir** (una línea truncada por dos sesiones escribiendo a la vez): el tablero ignora esa línea y sigue. → `ignora líneas rotas` en la Tarea 5.
 4. **Workflow con `agent()` en Sonnet u Opus:** el guardián lo deja pasar igual que un `Agent`, y sigue bloqueando Fable, `xhigh` y `max`. Jev no rutea workflows. → `test_workflow_sonnet_pasa` en la Tarea 1.
-5. **Encargo enorme** (cientos de KB): se envía igual, porque el usuario eligió el encargo completo, pero se corta a 200.000 caracteres para no pasarse del contexto de Jev, y nunca se registra. → `test_encargo_enorme_se_recorta_y_no_se_registra` en la Tarea 2.
+5. **Encargo enorme** (cientos de KB): se envía igual, porque el usuario eligió el encargo completo, pero se corta a 32.000 caracteres para no pasarse del contexto de Jev (ruling: por encima Jev entra en modo lento), y nunca se registra. → `test_encargo_enorme_se_recorta_y_no_se_registra` en la Tarea 2.
 
 ---
 
@@ -49,7 +49,7 @@ Resuelve las cuatro incógnitas que la spec dejó abiertas antes de escribir có
 - [ ] **Paso 5: `jev-router` contra `jev-1.14`.** Con la clave del usuario (puesta por el usuario en su terminal, nunca por chat), corre 10 encargos de prueba inventados (5 mecánicos, 3 de funcionalidad, 2 de causa raíz poco clara) contra los dos modelos. Anota precisión frente a la etiqueta esperada, latencia y costo reportado. Elige el modelo por defecto.
 - [ ] **Paso 6: Commit** del documento de hallazgos: `docs(tablero): hallazgos del prototipo de Jev`.
 
-**Si el Paso 2 da «no»:** en la Tarea 3, sharp devuelve `deny` con el motivo `Jev (p=0,91): relanza con model="sonnet" effort="high".` en lugar de `updatedInput`.
+**Si el Paso 2 da «no»:** en la Tarea 3, sharp devuelve `deny` con el motivo `Jev (p=0.91): relanza con model="sonnet" effort="high".` en lugar de `updatedInput`.
 
 ---
 
@@ -111,7 +111,7 @@ Cambia las pruebas existentes que esperaban bloqueo para `sonnet`/`opus` o para 
   - `test_timeout_es_sin_respuesta` (el servidor duerme 3 s con `timeout` de 0,5 → `None` en menos de 1 s)
   - `test_sharp_desde_080` (0,80 → `True`, 0,79 → `False`)
   - `test_registrar_recorta_a_2000`
-  - `test_encargo_enorme_se_recorta_y_no_se_registra` (el servidor falso recibe como máximo 200.000 caracteres)
+  - `test_encargo_enorme_se_recorta_y_no_se_registra` (el servidor falso recibe como máximo 32.000 caracteres)
   - `test_la_clave_no_sale_en_errores` (forzar un error y revisar que la clave no aparezca en ninguna salida)
 - [ ] **Paso 2:** Correrlas → FALLAN.
 - [ ] **Paso 3:** Implementa `jev_cliente.py` con el cuerpo de petición de la Tarea 0.
@@ -160,8 +160,8 @@ Flujo de `revisar_agente`: primero Jev, luego la validación. El texto que recib
 - `normalizar_error(texto: str) -> str`: quita rutas (`/…` y `C:\…`), números y marcas de tiempo, colapsa espacios y se queda con los primeros 200 caracteres.
 
 Si es el mismo fallo por segunda vez seguida, se le pregunta a Jev `reintento` con el texto del error y el nombre de la herramienta. La salida es `{"hookSpecificOutput":{"hookEventName":<evento>,"additionalContext":…}}`:
-- sharp: `Jev (p=0,88): parar y preguntar al usuario. Mismo error dos veces en Bash.`
-- split: `Jev sugiere (p=0,61): cambiar de enfoque. Mismo error dos veces en Bash.`
+- sharp: `Jev (p=0.88): parar y preguntar al usuario. Mismo error dos veces en Bash.`
+- split: `Jev sugiere (p=0.61): cambiar de enfoque. Mismo error dos veces en Bash.`
 
 Un éxito de la misma herramienta pone la cuenta en 0. El hook también se registra en `PostToolUse` para ver los éxitos; si la Tarea 0 dice que `PostToolUse` ya trae los errores, basta con un solo registro.
 

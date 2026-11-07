@@ -17,4 +17,4 @@ petición vale solo para esa tarea; la siguiente vuelve a Haiku.
 - Nunca uses Fable, ni en la sesión ni en subagentes ni en workflows, salvo que el
   usuario lo pida de forma explícita y lo confirme (`claude/hooks/guard-fable.py`).
 - No cambies de modelo por tu cuenta para «hacerlo mejor». Si una tarea parece
-  demasiado para Haiku con esfuerzo medio, dilo y pregunta antes de cambiar.
+  demasiado para el modelo elegido, dilo y pregunta antes de cambiar.
