@@ -30,16 +30,13 @@ import {
   lanes,
   limitLabel,
   limitOf,
-  logRows,
   marksIn,
   momentOf,
   normalizeCard,
   normalizeGate,
-  normalizeLog,
   titleLines,
   parseConfig,
   prettyModel,
-  promptLine,
   handbackOf,
   adviceLine,
   receiptOf,
@@ -163,24 +160,27 @@ test('consults open, close by id, and draw on a shared timeline', () => {
 
 test('config is read leniently: bad values fall back to defaults', () => {
   const d = parseConfig({})
-  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 9])
+  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 7])
   expect(d.architect.test('fable-advisor:fable-advisor')).toBe(true)
-  const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'log, gate ,nope,gate', motion: 'off' })
+  const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'gate ,nope,gate', motion: 'off' })
   expect(c.architect.test('advisor')).toBe(true) // invalid regex → default
   expect([c.maxCards, c.layout, c.motion]).toEqual([6, 'auto', false])
   expect([46.4, 12, Number.NaN, '90'].map(n => parseConfig({ paneColumns: n }).paneColumns)).toEqual([46, 40, 66, 66])
-  expect(c.panels).toEqual(['log', 'gate'])
+  expect(c.panels).toEqual(['gate'])
+})
+
+test('the default panels show the work: no session panel, no session log', () => {
+  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt'])
 })
 
 test('state saved under an older shape still reads', () => {
-  expect(normalizeLog([{ at: '08:00:00', who: 'jev', text: 'x' }])[0]).toEqual({ at: 0, who: 'jev', text: 'x', agentId: null, kind: 'info' })
   const g = normalizeGate({ file: { allow: 1 } }) // v1 gate shape
   expect(g.recent).toEqual([])
   expect(g.totals.shell.rule).toBe(0)
   expect(normalizeCard({ id: 'a', status: 'done' }).tools).toEqual([])
 })
 
-test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never wraps', () => {
+test('layout math: lanes share one axis, the legend never wraps', () => {
   const cards = [
     { ...normalizeCard({}), id: 'a', spawnedAt: 1000, endedAt: 1050 },
     { ...normalizeCard({}), id: 'b', spawnedAt: 1050, endedAt: null },
@@ -189,7 +189,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(a).toEqual({ id: 'a', before: 0, bar: 10, after: 10 })
   expect(b?.before).toBe(10)
   expect((b?.before ?? 0) + (b?.bar ?? 0) + (b?.after ?? 0)).toBe(20)
-  expect([logRows(10, 40), logRows(50, 40), logRows(200, 40)]).toEqual([4, 7, 8])
   expect(fitLegend([{ label: 'main' }, { label: 'agents' }, { label: 'architect' }], 20).map(x => x.label)).toEqual(['main', 'agents'])
   expect([marksIn(64, true), marksIn(64, false), marksIn(6, false)]).toEqual([64, 42, 4])
   expect(limitLabel('five_hour')).toBe('5h')
@@ -200,7 +199,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(prettyModel('claude-3-opus-20240229')).toBe('Opus 3')
   expect(prettyModel('z-ai/glm-5.3-flash-with-a-long-name')).toBe('z-ai/glm-5.3-flash-wi…')
   expect(prettyModel('')).toBe('—')
-  expect(promptLine('fix the parser')).toEqual({ who: 'you', text: 'fix the parser' })
   const hb = '<agent-message from="a1940a83d593229d5">\n[Subagent hand-back] The text below is the final report. The report follows:\n  Add gate tests: redaction edge cases.\n  - more\n</agent-message>'
   expect(handbackOf(hb)).toEqual({ from: 'a1940a83d593229d5', body: 'Add gate tests: redaction edge cases.' })
   expect(handbackOf('<agent-message from="x">\nPlain report line\n</agent-message>')).toEqual({ from: 'x', body: 'Plain report line' })
@@ -208,7 +206,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(adviceLine('## Ship it after one more gate test.\n- details')).toBe('Ship it after one more gate test.')
   expect(adviceLine('[Subagent hand-back] header\n\n**Fix card overflow first**')).toBe('Fix card overflow first')
   expect(adviceLine('')).toBe('')
-  expect(promptLine('<agent-message from="a1492260715f3be7b"> [Subagent hand-back]')).toEqual({ who: 'engine', text: 'mensaje de agente de a1492260' })
   expect(receiptOf({ ...DEFAULT_TURN, costAtStart: 5 }, { durationMs: 1, agentsSince: 0, costNow: 5, reason: 'answer' }).costDelta).toBe(null)
   expect(titleLines('Write tinyqueue test suite', 13, 16)).toEqual(['Write', 'tinyqueue test…'])
   expect(titleLines('Short', 13, 16)).toEqual(['Short', ''])
@@ -273,7 +270,8 @@ test('a fresh session draws on every surface and width, empty panels hidden', as
     for (const cols of [40, 60, 86, 120]) {
       const ui = await $.ui.mount({ ...pane(cols), surface })
       expect(await ui.find({ text: /· principal$/ })).toBeDefined()
-      expect(await ui.find({ text: /registro de sesión/ })).toBeDefined()
+      expect(await ui.find({ text: /registro/ })).toBeUndefined() // no session log panel
+      expect(await ui.find({ text: /^sesión$/ })).toBeUndefined() // no session panel
       expect(await ui.find({ text: /agentes ·/ })).toBeUndefined() // no subagents: no agents panel
       expect(await ui.find({ text: /revisión/ })).toBeUndefined() // no checks yet: no gate panel
       await ui.unmount()
@@ -620,7 +618,6 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect(await ui.find({ text: /◐ en curso/ })).toBeDefined()
   expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
-  expect(await ui.find({ text: /^reanudado$/ })).toBeDefined()
   expect(await ui.find({ text: /ctx 10 · sal 10 · 2 pas\./ })).toBeDefined()
   await ui.unmount()
 })
@@ -856,57 +853,7 @@ test('switching to another model with the same window reads its compaction windo
   await ui.unmount()
 })
 
-test('a resume through agent.spawn logs once, whether its spawn or its first step lands first; "done" times the run', async ($, on) => {
-  const clock = mock.clock(on)
-  on('ui.status', () => ({ value: undefined }))
-  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
-  on('turn.complete', () => ({ text: '' }))
-  const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' }
-  on('turn.step', async function* () {
-    return { turnId: 'R1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage }
-  })
-  const step = async () => {
-    const s = $.turn.step({ turnId: 'R1', index: 0, model: 'claude-sonnet-5-5', messageCount: 1, agentId: 'r1' })
-    for await (const _ of s) void _
-    await s.result
-  }
-  // A resumed agent may take its first step before its spawn's own hooks have finished.
-  let isStepFirst = false
-  on('agent.spawn', async (_$, e) => {
-    if (e.resume && isStepFirst) await step()
-    return { model: 'claude-sonnet-5-5', agentId: e.resume?.agentId ?? 'r1' }
-  })
-  const complete = (durationMs: number) =>
-    $.turn.complete({ answer: 'ok', durationMs, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
-  const lines = async (re: RegExp) => {
-    const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-    const n = (await ui.findAll({ text: re })).length
-    await ui.unmount()
-    return n
-  }
-  await $.turn.start({ text: 'go', turnId: 'T1' })
-  await $.agent.spawn(spawn('general-purpose', 'Audit the parser'))
-  await step()
-  await clock.advance(60_000)
-  await complete(60_000)
-  // Idle half an hour, then resumed: the spawn first, then its step.
-  await clock.advance(30 * 60_000)
-  await $.agent.spawn({ ...spawn('general-purpose', 'Audit it again'), resume: { agentId: 'r1' } })
-  await step()
-  expect(await lines(/^reanudado$/)).toBe(1)
-  await clock.advance(90_000)
-  await complete(90_000)
-  // Resumed again, its first step landing inside the spawn.
-  isStepFirst = true
-  await $.agent.spawn({ ...spawn('general-purpose', 'And once more'), resume: { agentId: 'r1' } })
-  expect(await lines(/^reanudado$/)).toBe(2)
-  expect(await lines(/^Audit the parser$/)).toBe(0) // one card, the latest task
-  // Each run timed on its own, not from the first spawn.
-  expect(await lines(/^listo · 1m00s$/)).toBe(1)
-  expect(await lines(/^listo · 1m30s$/)).toBe(1)
-})
-
-test("a subagent's turn start is its own: no prompt line, and the main turn keeps its count", async ($, on) => {
+test("a subagent's turn start does not reset the main turn's count", async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'refactor it', turnId: 'T1' })
@@ -914,8 +861,6 @@ test("a subagent's turn start is its own: no prompt line, and the main turn keep
   await $.turn.start({ text: 'Look at the parser again', turnId: 'A1', agentId: 'sub1' })
   await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 'T1', reason: 'answer' })
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /Look at the parser again/ })).toBeUndefined()
-  expect(await ui.find({ text: /refactor it/ })).toBeDefined()
   expect(await ui.find({ text: /· 1 edición ·/ })).toBeDefined()
   await ui.unmount()
 })

@@ -8,7 +8,6 @@ import type {
   Check,
   Gate,
   Layout,
-  LogLine,
   Loop,
   Main,
   Moment,
@@ -87,19 +86,10 @@ export const normalizeCard = (stored: unknown): AgentCard =>
     stored,
   )
 
-export const normalizeLog = (stored: unknown): LogLine[] =>
-  listOf<Record<string, unknown>>(stored).map(l => ({
-    at: typeof l.at === 'number' ? l.at : 0,
-    who: String(l.who ?? ''),
-    text: String(l.text ?? ''),
-    agentId: typeof l.agentId === 'string' ? l.agentId : null,
-    kind: l.kind === 'error' || l.kind === 'consult' || l.kind === 'done' ? l.kind : 'info',
-  }))
-
 // ---------------------------------------------------------------- config
 
-export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
-const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
+export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt'
+const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt']
 
 export type Config = {
   architect: RegExp
@@ -548,9 +538,6 @@ export const lanes = (cards: AgentCard[], now: number, width: number) => {
 
 // ---------------------------------------------------------------- layout
 
-/** How many log lines fit: what the other panels leave, never fewer than 4 nor more than 8. */
-export const logRows = (bodyRows: number, used: number) => Math.max(4, Math.min(8, bodyRows - used - 3))
-
 /** Legend items that fit on one row of `width` cells, in order; the rest are dropped. */
 export const fitLegend = <T extends { label: string }>(items: T[], width: number) => {
   const out: T[] = []
@@ -599,18 +586,6 @@ export const titleLines = (title: string, first: number, rest: number): [string,
   const cut = t.lastIndexOf(' ', first)
   const at = cut > 0 ? cut : first
   return [t.slice(0, at).trim(), shorten(t.slice(at), rest)]
-}
-
-/**
- * What a turn's opening text was, for the log: the person's words, or for a turn the engine
- * opened with a tagged message (a subagent's hand-back, a task notification), that message's kind.
- */
-export const promptLine = (text: string): { who: string; text: string } => {
-  const tag = /^\s*<([a-z][\w-]*)/i.exec(text)?.[1]
-  if (!tag) return { who: 'you', text: shorten(text, 70) }
-  const from = /\bfrom="([^"]+)"/.exec(text)?.[1]
-  const kind = tag === 'agent-message' ? 'mensaje de agente' : tag.replace(/[-_]/g, ' ')
-  return { who: 'engine', text: shorten(`${kind}${from ? ` de ${from.slice(0, 8)}` : ''}`, 70) }
 }
 
 /**

@@ -106,14 +106,6 @@ export type AgentCard = {
 /** A model loop whose id matches no card: a workflow agent, a compaction or a memory fork. */
 export type Loop = { id: string; steps: number; firstAt: number; lastAt: number; isDone: boolean }
 
-export type LogLine = {
-  at: number
-  who: string
-  text: string
-  agentId: string | null
-  kind: 'info' | 'error' | 'consult' | 'done'
-}
-
 export type Turn = {
   edits: number
   errorStreak: number
@@ -138,22 +130,6 @@ export type View = { expanded: string | null; gateOpen: Bucket | null; layout: L
 
 export type Roster = { architectTypes: string[] }
 
-/** What the session has done, counted for the SESIÓN panel. Every map is keyed by name; counts are the values. */
-export type Sesion = {
-  /** Tool calls by tool (MCP tools and the Skill tool are not here). */
-  tools: Record<string, number>
-  /** The last files an edit touched, the most recent last. */
-  files: string[]
-  /** MCP servers the session has called, with their calls and errors. */
-  mcp: Record<string, { calls: number; errors: number }>
-  /** Skills used (`skill.prompt`), by name. */
-  skills: Record<string, number>
-  /** The task list as TodoWrite / TaskCreate / TaskUpdate left it: an approximation for the Task tools. */
-  todos: { total: number; done: number; current: string | null }
-  /** The git branch (or short commit) read from `.git/HEAD`; null outside a repository. */
-  branch: string | null
-}
-
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -164,12 +140,12 @@ declare module 'claude-code' {
       gate: Gate
       agents: AgentCard[]
       loops: Loop[]
-      log: LogLine[]
       turn: Turn
       receipt: Receipt | null
       view: View
       roster: Roster
-      sesion: Sesion
+      /** The git branch (or short commit) of the working folder; null outside a repository. */
+      branch: string | null
       /** Las decisiones de Jev de la sesión y el cursor del log (ver JevEstado). */
       jev: JevEstado
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */

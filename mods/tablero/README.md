@@ -19,7 +19,7 @@ Jev responde tres preguntas, desde dos hooks de Python del repo:
 
 Las decisiones las toman esos hooks, no el mod. Cada decisión queda en `~/.claude/jev/decisiones.jsonl`, sin el encargo, y el archivo se recorta a sus últimas 2000 líneas.
 
-**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en el log (líneas `jev`), en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
+**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
 
 ### Dónde poner la clave
 
@@ -43,7 +43,7 @@ La consulta cuesta 0,042 USD por millón de tokens de entrada. Con el encargo co
 
 ### Sin clave, todo sigue igual
 
-Si no hay clave, Jev no se consulta y la decisión queda como «sin respuesta» en el log. Pasa lo que eligió Claude. Lo mismo ocurre si Jev no responde, responde algo que no entiende, o si OpenRouter devuelve error por falta de saldo (402) o por límite de peticiones (429). Ningún fallo de Jev frena un subagente ni una herramienta.
+Si no hay clave, Jev no se consulta y la decisión queda como «sin respuesta». Pasa lo que eligió Claude. Lo mismo ocurre si Jev no responde, responde algo que no entiende, o si OpenRouter devuelve error por falta de saldo (402) o por límite de peticiones (429). Ningún fallo de Jev frena un subagente ni una herramienta.
 
 ### Tiempo
 
@@ -102,7 +102,7 @@ Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su re
 
 En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas, `xhigh` baja a `high`, porque `xhigh` exige conocer las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado siempre. Un Workflow con `xhigh` se bloquea, porque un Workflow no se puede bajar; el tope no lo toca.
 
-**Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. El log la muestra como `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de Jev.
+**Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. Los topes no cuentan en el total de decisiones de Jev.
 
 **Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
 
@@ -134,7 +134,7 @@ En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si 
 
 ## La barra de vida
 
-En el panel SESIÓN, una barra muestra la vida que te queda de contexto (`vida 50% ████████░░░░`).
+En la tarjeta principal, una barra muestra la vida que te queda de contexto (`vida 50% ████████░░░░`).
 
 - **Vida** = el contexto que te queda. La barra se vacía al usar contexto.
 - **Color**: verde con vida alta (60 % o más), ámbar a media (de 30 a 59 %) y rojo cuando queda poca (menos de 30 %). En la terminal son tres tonos; en la app de escritorio la barra es un SVG con degradado continuo de rojo a verde.
