@@ -10,10 +10,13 @@ type Elementos = ReturnType<EngineInterface['ui']['resolve']>
 /** Desde este ancho del panel acoplado, `auto` dibuja el diagrama. */
 export const DIAGRAMA_MIN = 66
 
-/** Columnas de la columna del asesor (`aw`) y de la derecha (`rw`); entre ambas, un conector de 2 columnas. */
+/**
+ * Columnas de la columna del asesor (`aw`) y de la derecha (`rw`); entre ambas, una columna para la flecha.
+ * El asesor tiene 23 como mínimo: su fila de momentos («◇ errores repetidos», 19) cabe dentro del borde.
+ */
 export const anchosDiagrama = (ancho: number, conAsesor: boolean) => {
-  const aw = conAsesor ? Math.min(30, Math.max(21, Math.floor(ancho * 0.3))) : 0
-  return { aw, rw: ancho - (conAsesor ? aw + 2 : 0) }
+  const aw = conAsesor ? Math.min(30, Math.max(23, Math.floor(ancho * 0.3))) : 0
+  return { aw, rw: ancho - (conAsesor ? aw + 1 : 0) }
 }
 
 export type PiezasDiagrama = {
@@ -49,8 +52,8 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
       <Box>
         {p.asesor !== null ? p.asesor : null}
         {p.asesor !== null ? (
-          <Box width={2} flexShrink={0}>
-            <Text color={colores.arch}>·▶</Text>
+          <Box width={1} flexShrink={0}>
+            <Text color={colores.arch}>▶</Text>
           </Box>
         ) : null}
         <Box flexDirection="column" width={rw}>
@@ -65,7 +68,7 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
       {p.tarjetas}
       {p.expandido}
       {p.vuelta ? (
-        <Box marginLeft={p.asesor !== null ? p.aw + 2 : 0} width={rw} borderStyle="round" borderColor={colores.main} paddingX={1}>
+        <Box marginLeft={p.asesor !== null ? p.aw + 1 : 0} width={rw} borderStyle="round" borderColor={colores.main} paddingX={1}>
           <Text color={colores.main} wrap="truncate">
             de vuelta al lead · revisar y verificar
           </Text>
