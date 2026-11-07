@@ -13,7 +13,7 @@ export const avanzar = (mostrado: number, objetivo: number, pasos = 4): number =
 /** El indicador pulsa: encendido cinco fases, apagado cinco. */
 export const pulso = (fase: number): 'encendido' | 'apagado' => (Math.floor(fase / 5) % 2 === 0 ? 'encendido' : 'apagado')
 
-/** El punto de «en espera» del panel SESIÓN: pulsa entre ● y ○ con el latido; sin animación (sin pulso), ○ fijo. */
+/** El punto de «en espera» de la tarjeta principal: pulsa entre ● y ○ con el latido; sin animación (sin pulso), ○ fijo. */
 export const puntoEspera = (latido: 'encendido' | 'apagado' | undefined): '●' | '○' => (latido === 'encendido' ? '●' : '○')
 
 /** Redibujar solo si lo que se vería cambió. */

@@ -16,7 +16,7 @@ test('avanzar también baja y no se rompe con un objetivo inválido', () => {
   expect(avanzar(0, NaN)).toBe(0)
 })
 
-test('el punto de en espera del panel SESIÓN pulsa entre ● y ○; sin animación, ○ fijo', () => {
+test('el punto de en espera de la tarjeta principal pulsa entre ● y ○; sin animación, ○ fijo', () => {
   expect(puntoEspera('encendido')).toBe('●')
   expect(puntoEspera('apagado')).toBe('○')
   expect(puntoEspera(undefined)).toBe('○')

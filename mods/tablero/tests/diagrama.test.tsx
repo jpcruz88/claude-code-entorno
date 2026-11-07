@@ -146,17 +146,6 @@ const spillsOf = (tree: unknown, columns: number) => {
   return out
 }
 
-/** La caja del registro de sesión: su título y, debajo, una fila por línea mostrada. */
-const registroDe = (n: unknown): Drawn | null => {
-  if (!isDrawn(n)) return null
-  const kids = kidsOf(n)
-  if (kids.length > 0 && textOf(kids[0]) === 'registro de sesión') return n
-  for (const c of kids) {
-    const hallada = registroDe(c)
-    if (hallada) return hallada
-  }
-  return null
-}
 
 // ---------------------------------------------------------------- pruebas
 
@@ -352,25 +341,6 @@ test('con 66 y 90 columnas ninguna línea pasa del ancho, con títulos largos y 
     await ui.unmount()
   }
   expect(failures).toEqual([])
-})
-
-test('el diagrama cabe en la altura del panel: conectores y vuelta cuentan en el presupuesto del registro', async ($, on) => {
-  motor(on, decisionesLlenas)
-  await $.turn.start({ text: 'go', turnId: 'H1' })
-  for (const [i, t] of TITULOS.entries()) await lanzar($, t, `h${i + 1}`)
-  for (const i of [1, 2, 3]) await terminar($, `h${i}`)
-  const fallos: string[] = []
-  for (let filas = 24; filas <= 60; filas += 1) {
-    const ui = await $.ui.mount(paneCon(66, filas) as never)
-    const arbol = await ui.drawn()
-    const registro = registroDe(arbol)
-    const lineas = registro ? kidsOf(registro).length - 1 : 0
-    const alto = heightOf(arbol, 66)
-    // Si el registro ya está en su mínimo (4 líneas) no hay presupuesto que recortar.
-    if (alto > filas && lineas > 4) fallos.push(`${filas} filas: alto ${alto} con ${lineas} líneas de registro`)
-    await ui.unmount()
-  }
-  expect(fallos).toEqual([])
 })
 
 test('con motion off el conector de la columna es texto │, sin módulo animado', { options: { motion: 'off' } }, async ($, on) => {
