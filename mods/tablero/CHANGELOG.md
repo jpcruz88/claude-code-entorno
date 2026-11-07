@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.3 (tablero)
+
+- Latido en la banda: con `animacion` encendida, el punto ● de la fila 1 pulsa también en reposo, sin subagentes ni permisos. Antes el pulso solo salía con actividad, así que en reposo la banda no se movía. Con `animacion` apagada no sale.
+- El reloj de la banda redibuja al ritmo del pulso (unas 8 veces en 5 s en reposo), no en cada cuadro de 120 ms.
+
 ## 0.3.2 (tablero)
 
 - Vista en diagrama: los conectores verticales (lead → caja JEV y la bajada a «delegar a subagentes») son módulos animados. Con `motion: while-active` un paquete ● con su cola • baja por la columna mientras hay subagentes en curso; en reposo queda una línea tenue. Con `motion: off` siguen siendo texto `│` y `▼`, como antes.

@@ -106,3 +106,11 @@ test('el indicador de la fila 3 pulsa solo si hay subagentes activos o permisos 
   expect(marca({ ...base, permisosPendientes: 0, pulso: 'encendido' })?.tono).toBe('acento')
   expect(marca({ ...base, agentesActivos: 0, permisosPendientes: 0, pulso: 'encendido' })).toBeUndefined()
 })
+
+test('con animación, el latido de la fila 1 pulsa también en reposo, sin agentes ni permisos', () => {
+  const reposo = { ...base, agentesActivos: 0, permisosPendientes: 0 }
+  const latido = (e: BandaEntrada) => bandaFilas(e)[0].tramos.find(t => t.texto === '● ')
+  expect(latido({ ...reposo, pulso: 'encendido' })?.tono).toBe('acento')
+  expect(latido({ ...reposo, pulso: 'apagado' })?.tono).toBe('tenue')
+  expect(latido(reposo)).toBeUndefined()
+})

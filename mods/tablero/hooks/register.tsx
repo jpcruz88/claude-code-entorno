@@ -376,12 +376,11 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
     actual === undefined || !cfg.animacion ? objetivo : avanzar(actual, objetivo)
   if (e.contextoPct !== null) mostrado.contexto = paso(mostrado.contexto ?? undefined, e.contextoPct)
   for (const l of e.limites) mostrado.usos.set(l.kind, paso(mostrado.usos.get(l.kind), l.pct))
-  const hayActividad = e.agentesActivos > 0 || e.permisosPendientes > 0
   return {
     ...e,
     contextoPct: e.contextoPct === null ? null : redondeo(mostrado.contexto ?? e.contextoPct),
     limites: e.limites.map(l => ({ ...l, pct: redondeo(mostrado.usos.get(l.kind) ?? l.pct) })),
-    ...(cfg.animacion && hayActividad ? { pulso: pulso(fase) } : {}),
+    ...(cfg.animacion ? { pulso: pulso(fase) } : {}),
   }
 }
 

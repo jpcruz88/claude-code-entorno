@@ -124,8 +124,8 @@ test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada ca
   expect(invalidaciones).toBeGreaterThan(quieto)
   const tras = invalidaciones
   await reloj.advance(5_000)
-  // La barra de vida no se mueve sola: solo redibuja cuando cambia su clave (el minuto o el contexto), no en cada cuadro de 120 ms.
-  expect(invalidaciones - tras).toBeLessThanOrEqual(1)
+  // En reposo el latido cambia cada 5 cuadros de 120 ms: unos 8 redibujos en 5 s, no 41 (uno por cuadro).
+  expect(invalidaciones - tras).toBeLessThanOrEqual(10)
 })
 
 test('al terminar la sesión, el reloj de la banda deja de pedir redibujos', { options: { banda: true } }, async ($, on) => {
