@@ -98,8 +98,8 @@ export const normalizeLog = (stored: unknown): LogLine[] =>
 
 // ---------------------------------------------------------------- config
 
-export type Panel = 'main' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
-const PANELS: readonly Panel[] = ['main', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
+export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
+const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
 
 export type Config = {
   architect: RegExp
@@ -151,7 +151,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     maxCards: Math.min(6, Math.max(1, max)),
     // The body clamps its drawing at 40 columns, so a narrower dock would only clip it.
     paneColumns: Math.max(40, cols),
-    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' ? layout : 'auto',
+    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
     palette: str('palette', 'theme') === 'pastel' ? 'pastel' : 'theme',
     openOnStart: bool('openOnStart', true),
     statusLine: bool('statusLine', false),
