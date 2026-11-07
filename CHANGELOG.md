@@ -7,7 +7,10 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 - Memoria maestra privada: hook `memoria-maestra.py` (SessionStart y Stop) que pregunta si crear el repo privado, lo clona, enlaza la memoria y la sincroniza.
 - Regla `git.md` (commit y push siempre), regla y hook `nunca-fable` al repo maestro.
-- Agentes y subagentes: siempre Haiku con esfuerzo medio («llow» permitido). Hook `guard-subagentes.py` en Agent, Task y Workflow; esfuerzo de Opus `xhigh` retirado de la configuración base.
+- Agentes y subagentes: Haiku, Sonnet u Opus, con esfuerzo low, medium o high; nunca `xhigh` ni `max`, y Fable sigue prohibido. Hook `guard-subagentes.py` en Agent, Task y Workflow; esfuerzo de Opus `xhigh` retirado de la configuración base.
+- Jev elige el modelo y el esfuerzo de los subagentes que lanza Claude (`guard-subagentes.py`). Solo cambia lo elegido con confianza suficiente; en los demás casos decide Claude y la decisión queda registrada.
+- Jev sugiere qué hacer cuando la misma herramienta falla dos veces seguidas con el mismo error: reintentar, cambiar de enfoque o parar y preguntar (hook `jev-reintento.py`). La sugerencia llega a Claude como nota; el error va a Jev normalizado y recortado.
+- Tablero 0.3.0 con vista en diagrama (`layout: diagrama`), y las decisiones de Jev en el log, la barra y las tarjetas.
 - CI en GitHub Actions: pruebas, privacidad y gitleaks en Linux; PSScriptAnalyzer y
   pruebas en Windows.
 - Hooks de git en `.githooks/` (`pre-commit` y `pre-push`).

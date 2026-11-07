@@ -82,6 +82,7 @@ export const normalizeCard = (stored: unknown): AgentCard =>
       lastStop: null,
       tools: [],
       answer: '',
+      jev: null,
     },
     stored,
   )
@@ -97,8 +98,8 @@ export const normalizeLog = (stored: unknown): LogLine[] =>
 
 // ---------------------------------------------------------------- config
 
-export type Panel = 'main' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
-const PANELS: readonly Panel[] = ['main', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
+export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
+const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
 
 export type Config = {
   architect: RegExp
@@ -141,7 +142,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
   const cols = typeof o.paneColumns === 'number' && Number.isFinite(o.paneColumns) ? Math.round(o.paneColumns) : 66
   return {
     architect: safeRegExp(str('architectPattern', ''), 'advisor|architect'),
-    architectLabel: str('architectLabel', 'ARQUITECTO'),
+    architectLabel: str('architectLabel', 'ASESOR'),
     gateLabel: str('gateLabel', 'PERMISOS'),
     panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS],
     motion: str('motion', 'while-active') !== 'off',
@@ -150,7 +151,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     maxCards: Math.min(6, Math.max(1, max)),
     // The body clamps its drawing at 40 columns, so a narrower dock would only clip it.
     paneColumns: Math.max(40, cols),
-    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' ? layout : 'auto',
+    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
     palette: str('palette', 'theme') === 'pastel' ? 'pastel' : 'theme',
     openOnStart: bool('openOnStart', true),
     statusLine: bool('statusLine', false),

@@ -1,3 +1,18 @@
+/** Tipos de Jev. El contrato es autocontenido (no importa de hooks/): copia de hooks/jev-modelo.ts. */
+export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento'
+
+export type DecisionJev = {
+  hora: number
+  sessionId: string
+  tipo: TipoDecision
+  opcion: string | null
+  confianza: number | null
+  sharp: boolean
+  claude: string | null
+  aplicada: boolean
+  descripcion: string
+}
+
 export type Moment = 'before a plan' | 'error repeats' | 'before done'
 
 export type Bucket = 'file' | 'shell' | 'other'
@@ -76,6 +91,8 @@ export type AgentCard = {
   lastStop: string | null
   tools: ToolNote[]
   answer: string
+  /** La marca de Jev de este subagente (`jev ↑ sonnet`), o null si Jev no cambió lo que eligió Claude. */
+  jev: string | null
 }
 
 /** A model loop whose id matches no card: a workflow agent, a compaction or a memory fork. */
@@ -107,7 +124,7 @@ export type Receipt = {
   reason: string
 }
 
-export type Layout = 'auto' | 'compact' | 'wide' | 'mini'
+export type Layout = 'auto' | 'compact' | 'wide' | 'mini' | 'diagrama'
 
 export type View = { expanded: string | null; gateOpen: Bucket | null; layout: Layout | null }
 
@@ -145,6 +162,8 @@ declare module 'claude-code' {
       view: View
       roster: Roster
       sesion: Sesion
+      /** Las decisiones de Jev de la sesión y el cursor del log (ver JevEstado). */
+      jev: JevEstado
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
         title: string
@@ -180,3 +199,9 @@ declare module 'claude-code' {
     }
   }
 }
+
+/**
+ * Las decisiones de Jev de la sesión y el cursor del log: la hora de la última logueada y las claves (hora, tipo,
+ * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora.
+ */
+export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[] }
