@@ -52,6 +52,7 @@ DEFECTOS = {
             "low": "Tarea trivial o de respuesta directa.",
             "medium": "Tarea habitual de código o de análisis.",
             "high": "Razonamiento difícil con muchas dependencias.",
+            "xhigh": "Tareas muy difíciles: causa raíz poco clara, diseño delicado o razonamiento largo.",
         },
         "reintento": {
             "reintentar": "Fallo transitorio o de entorno; volver a intentar tal cual.",
@@ -63,7 +64,7 @@ DEFECTOS = {
 
 PREGUNTAS_FIJAS = {
     "modelo": ["haiku", "sonnet", "opus"],
-    "esfuerzo": ["low", "medium", "high"],
+    "esfuerzo": ["low", "medium", "high", "xhigh"],
     "reintento": ["reintentar", "cambiar_enfoque", "parar_y_preguntar"],
 }
 
