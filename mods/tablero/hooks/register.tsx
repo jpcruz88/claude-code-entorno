@@ -782,7 +782,7 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs] = await Promise.all([
+    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs, branchNow] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
@@ -796,6 +796,7 @@ export const register: Register = (on, options) => {
       $.session.cwd().catch(() => ''),
       pasosDeAgentes($),
       getJev($),
+      read($, gitBranch),
     ])
     const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
     const jevN = resumenJevs.total
@@ -946,6 +947,7 @@ export const register: Register = (on, options) => {
           w - 4,
           3,
         )}
+        {branchNow ? <Text dimColor wrap="truncate">{`⎇ ${branchNow}`}</Text> : null}
         {ctxGauge
           ? line(
               [
