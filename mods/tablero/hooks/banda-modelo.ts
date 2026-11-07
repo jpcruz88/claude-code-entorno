@@ -75,7 +75,9 @@ export const bandaFilas = (e: BandaEntrada): FilaBanda[] => {
 
   const modelo = [t(SEP, 'tenue'), t('Modelo ', 'tenue'), t(e.modelo || '—')]
   const fijo = cellWidth('Carpeta ') + modelo.reduce((n, x) => n + cellWidth(x.texto), 0)
-  const fila1 = [t('Carpeta ', 'tenue'), t(carpetaCorta(e.cwd, Math.max(4, max - fijo)), 'acento'), ...modelo]
+  // Latido de la animación: pulsa en reposo también; sin animación no hay pulso y no sale.
+  const latido: Tramo[] = e.pulso === undefined ? [] : [t('● ', e.pulso === 'encendido' ? 'acento' : 'tenue')]
+  const fila1 = [...latido, t('Carpeta ', 'tenue'), t(carpetaCorta(e.cwd, Math.max(4, max - fijo)), 'acento'), ...modelo]
 
   const fila2: Tramo[] = []
   if (e.costoUsd !== null && Number.isFinite(e.costoUsd)) fila2.push(t('Costo ', 'tenue'), t(fmtUsd(e.costoUsd)), t(SEP, 'tenue'))
