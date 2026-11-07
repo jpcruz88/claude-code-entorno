@@ -102,7 +102,7 @@ const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
-const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [], limites: null } as JevEstado)
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null } as JevEstado)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
@@ -127,12 +127,12 @@ async function getCards($: EngineInterface): Promise<AgentCard[]> {
 async function getLoops($: EngineInterface): Promise<Loop[]> {
   return listOf<Loop>(await read($, loops))
 }
-/** Un valor guardado de cualquier forma: el de antes (`vistas`) se lee como cursor vacío, sin romperse. */
+/** Un valor guardado de cualquier forma: lo que no se entiende queda en su valor vacío, sin romperse. */
 function normalizeJev(stored: unknown): JevEstado {
-  const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [], limites: null }, stored)
+  const j = normalize<JevEstado>({ decisiones: [], limites: null }, stored)
   // `limites` pasa por leerLimites: un valor guardado con otra forma (o sin la clave) queda en null.
   const limites = j.limites ? leerLimites(JSON.stringify(j.limites)) : null
-  return { decisiones: listOf<DecisionJev>(j.decisiones), ultima: typeof j.ultima === 'number' ? j.ultima : null, claves: listOf<string>(j.claves), limites }
+  return { decisiones: listOf<DecisionJev>(j.decisiones), limites }
 }
 
 async function getJev($: EngineInterface): Promise<JevEstado> {
@@ -150,19 +150,8 @@ async function getRoster($: EngineInterface): Promise<Roster> {
   return { architectTypes: listOf(r.architectTypes) }
 }
 
-/** Cuántas claves recientes se guardan para no repetir decisiones con la misma hora. */
-const CLAVES_JEV = 50
-
-const claveDeDecision = (d: DecisionJev) => `${d.hora}|${d.tipo}|${d.opcion}|${d.descripcion}`
-
-/** Las decisiones nuevas para el estado de Jev: no más viejas que la última vista y con clave no vista. */
-const sinLoguear = (ds: DecisionJev[], estado: JevEstado): DecisionJev[] => {
-  const vistas = new Set(estado.claves)
-  return ds.filter(d => !vistas.has(claveDeDecision(d)) && (estado.ultima === null || d.hora >= estado.ultima))
-}
-
 /**
- * Relee las decisiones de Jev de esta sesión y guarda en su estado solo las nuevas. Sin id de sesión, sin carpeta
+ * Relee las decisiones de Jev de esta sesión y las guarda en su estado. Sin id de sesión, sin carpeta
  * personal o sin archivo, no hay ninguna: el tablero no muestra nada de Jev.
  */
 async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
@@ -174,20 +163,7 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
   const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  // Las nuevas se calculan dentro de la escritura, sobre el cursor que ya dejó la lectura anterior: dos lecturas
-  // a la vez no logean la misma decisión dos veces.
-  let nuevas: DecisionJev[] = []
-  await update($, jev, x => {
-    const previo = normalizeJev(x)
-    nuevas = sinLoguear(ds, previo)
-    const ultima = nuevas.reduce((m, d) => Math.max(m, d.hora), previo.ultima ?? -Infinity)
-    return {
-      decisiones: ds,
-      ultima: Number.isFinite(ultima) ? ultima : null,
-      claves: [...previo.claves, ...nuevas.map(claveDeDecision)].slice(-CLAVES_JEV),
-      limites,
-    }
-  })
+  await update($, jev, () => ({ decisiones: ds, limites }))
   return ds
 }
 

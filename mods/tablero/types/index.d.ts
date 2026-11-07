@@ -189,4 +189,4 @@ declare module 'claude-code' {
  * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora. `limites` es el último
  * limites.json válido (null sin archivo o roto); un valor guardado antes de existir se lee como null.
  */
-export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[]; limites: LimitesJev | null }
+export type JevEstado = { decisiones: DecisionJev[]; limites: LimitesJev | null }
