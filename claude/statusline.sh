@@ -33,6 +33,9 @@ datos=$(jq -r '
   def dia_hora: localtime as $t
     | (["dom","lun","mar","mié","jue","vie","sáb"][$t[6]]) + " \($t[3] | dos):\($t[4] | dos)";
   def num(f): if f == null then "" else f end;
+  def ep: if type == "number" then floor
+          elif type == "string" then (try (sub("\\.[0-9]+"; "") | fromdateiso8601) catch null)
+          else null end;
 
   (.workspace.current_dir // .cwd // "") as $dir
   | {
@@ -58,10 +61,10 @@ datos=$(jq -r '
             | if $h > 0 then "\($h)h\($m | dos)m" else "\($m)m" end
           end),
       s5_pct: num(.rate_limits.five_hour.used_percentage | if . == null then null else r end),
-      s5_falta: num(.rate_limits.five_hour.resets_at | if . == null then null else falta end),
+      s5_falta: num(.rate_limits.five_hour.resets_at | ep | if . == null then null else falta end),
       s7_pct: num(.rate_limits.seven_day.used_percentage | if . == null then null else r end),
-      s7_falta: num(.rate_limits.seven_day.resets_at | if . == null then null else falta end),
-      s7_dia: num(.rate_limits.seven_day.resets_at | if . == null then null else dia_hora end),
+      s7_falta: num(.rate_limits.seven_day.resets_at | ep | if . == null then null else falta end),
+      s7_dia: num(.rate_limits.seven_day.resets_at | ep | if . == null then null else dia_hora end),
       hora: (now | localtime | "\(.[3] | dos):\(.[4] | dos)")
     }
   | to_entries[] | "\(.key)=\(.value | tostring | @sh)"
@@ -72,6 +75,37 @@ if [ -z "$datos" ]; then
   exit 0
 fi
 eval "$datos"
+
+# Guarda el uso de la cuenta (5 h y semana) en ~/.claude/jev/limites.json para que el
+# guardián de subagentes lo lea. Escritura atómica (temporal en la misma carpeta y
+# mv -f); solo si llegan rate_limits; cualquier fallo se ignora en silencio.
+guardar_uso() {
+  local json carpeta tmp
+  json=$(jq -c '
+    def ep: if type == "number" then floor
+            elif type == "string" then (sub("\\.[0-9]+"; "") | fromdateiso8601)
+            else empty end;
+    def ventana(v): (try ({usado: (v.used_percentage | select(type == "number")),
+                           reinicio: (v.resets_at | ep)}) catch null);
+    {actualizado: (now | floor),
+     five_hour: ventana(.rate_limits.five_hour),
+     seven_day: ventana(.rate_limits.seven_day)}
+    | with_entries(select(.value != null))
+    | select(has("five_hour") or has("seven_day"))
+  ' <<<"$entrada" 2>/dev/null | tr -d '\r') || return 0
+  [ -n "$json" ] || return 0
+  carpeta="${HOME:-}/.claude/jev"
+  [ -n "${HOME:-}" ] || return 0
+  mkdir -p "$carpeta" 2>/dev/null && chmod 700 "$carpeta" 2>/dev/null
+  tmp=$(mktemp "$carpeta/.limites.XXXXXX" 2>/dev/null) || return 0
+  if printf '%s\n' "$json" >"$tmp" 2>/dev/null && mv -f "$tmp" "$carpeta/limites.json" 2>/dev/null; then
+    :
+  else
+    rm -f "$tmp" 2>/dev/null
+  fi
+  return 0
+}
+guardar_uso 2>/dev/null || true
 
 # Colores
 R=$'\e[0m'; DIM=$'\e[2m'; B=$'\e[1m'
