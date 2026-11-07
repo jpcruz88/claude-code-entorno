@@ -25,6 +25,13 @@ def git(cwd, *args):
     return subprocess.run(["git", "-C", str(cwd)] + list(args), capture_output=True, text=True)
 
 
+def _archivos_en_remoto(remoto):
+    """Los archivos que llegaron a cualquier rama del remoto. No depende de cuál es su HEAD: en un runner
+    el clon y el remoto de prueba pueden nombrar la rama por defecto de forma distinta."""
+    return subprocess.run(["git", "--git-dir", str(remoto), "log", "--all", "--name-only", "--format="],
+                          capture_output=True, text=True).stdout
+
+
 class ConFondo(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -51,8 +58,7 @@ class Configurar(ConFondo):
 
     def test_sube_al_remoto_privado(self):
         mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
-        ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
-                            capture_output=True, text=True).stdout
+        ls = _archivos_en_remoto(self.remoto)
         self.assertIn("memoria/principal/MEMORY.md", ls)
 
     def test_guarda_la_configuracion(self):
@@ -93,8 +99,7 @@ class Sincronizar(ConFondo):
         (self.memoria / "nuevo.md").write_text("dato nuevo\n", encoding="utf-8")
         mm.sincronizar(self.clon)
         self.assertEqual(git(self.clon, "status", "--porcelain").stdout.strip(), "")
-        ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
-                            capture_output=True, text=True).stdout
+        ls = _archivos_en_remoto(self.remoto)
         self.assertIn("memoria/principal/nuevo.md", ls)
 
 
@@ -155,8 +160,7 @@ class OtrosProyectos(ConFondo):
         self.assertTrue(carpeta.is_symlink())
         self.assertEqual((self.clon / "memoria" / slug / "dato.md").read_text(encoding="utf-8"),
                          "de otro proyecto\n")
-        ls = subprocess.run(["git", "--git-dir", str(self.remoto), "ls-tree", "-r", "--name-only", "HEAD"],
-                            capture_output=True, text=True).stdout
+        ls = _archivos_en_remoto(self.remoto)
         self.assertIn("memoria/" + slug + "/dato.md", ls)
 
     def test_abrir_proyecto_sin_memoria_crea_su_carpeta(self):
