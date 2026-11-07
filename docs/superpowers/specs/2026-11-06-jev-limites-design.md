@@ -36,35 +36,36 @@ El usuario trabaja en varios proyectos a la vez. El uso es **de la cuenta**, no 
 - `ritmo_ideal` = 90 × (ahora − inicio) / (corte − inicio), limitado entre 0 y 90.
 - `exceso` = uso_semana − ritmo_ideal, en puntos porcentuales.
 
-Tope antes del corte:
+Tope antes del corte. Se recorta primero el esfuerzo, que es lo más barato, y después el modelo. El esfuerzo según la complejidad lo sigue eligiendo Jev; el tope solo lo limita.
 
-| Condición | Tope |
-|---|---|
-| exceso ≤ 5 | libre |
-| 5 < exceso ≤ 15 | sonnet |
-| exceso > 15, o uso_semana ≥ 90 | haiku, esfuerzo como máximo medium |
+| Condición | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| exceso ≤ 5 | opus | high |
+| 5 < exceso ≤ 10 | opus | medium |
+| 10 < exceso ≤ 15 | sonnet | high |
+| 15 < exceso ≤ 25 | sonnet | medium |
+| exceso > 25, o uso_semana ≥ 90 | haiku | medium |
 
 Después del corte: libre mientras uso_semana < 97; desde 97, haiku con esfuerzo medium.
 
 **Ventana de 5 horas:**
 
-| Condición | Tope |
-|---|---|
-| uso < 60 | libre |
-| 60 ≤ uso < 85 | sonnet |
-| uso ≥ 85 | haiku, esfuerzo como máximo medium |
+| Condición | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| uso < 60 | opus | high |
+| 60 ≤ uso < 75 | opus | medium |
+| 75 ≤ uso < 85 | sonnet | medium |
+| uso ≥ 85 | haiku | medium |
 
 Si `five_hour.resets_at` llega en menos de 15 minutos, esta ventana no pone tope.
 
-**Combinación:** gana el tope más estricto de los dos. Se anota el motivo del que manda: `tope semana +12 pts → sonnet` o `tope 5h 72% → sonnet`.
+**Combinación:** se toma el mínimo de los dos, por separado para el modelo y para el esfuerzo. Se anota el motivo del que manda: `tope semana +12 pts → sonnet` o `tope 5h 72% → sonnet`.
 
 **Configurables** en `~/.claude/jev/config.json`, clave `limites`:
 - `meta_corte`: 90
 - `final`: 97
-- `holgura`: 5
-- `margen_sonnet`: 15
-- `h5_sonnet`: 60
-- `h5_haiku`: 85
+- `semana_escalones`: [[5, "opus", "high"], [10, "opus", "medium"], [15, "sonnet", "high"], [25, "sonnet", "medium"]] (por encima del último: haiku/medium)
+- `h5_escalones`: [[60, "opus", "high"], [75, "opus", "medium"], [85, "sonnet", "medium"]] (desde 85: haiku/medium)
 - `h5_gracia_min`: 15
 - `corte_dia`: 3 (jueves, con lunes = 0)
 - `corte_hora`: 23
