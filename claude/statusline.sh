@@ -18,6 +18,21 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
+# Fecha de reinicio a epoch en segundos: acepta número, o texto ISO 8601 con Z o con
+# offset (+01:00, -0600). Lo usan los dos jq de abajo.
+JQ_EP=$(cat <<'FIN'
+  def ep: if type == "number" then floor
+          elif type == "string" then
+            (try (capture("^(?<f>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.[0-9]+)?(?<z>Z|[+-][0-9]{2}:?[0-9]{2})?$")
+                  | (.f + "Z" | fromdateiso8601)
+                    - (if (.z // "Z") == "Z" then 0
+                       else (.z | capture("(?<s>[+-])(?<h>[0-9]{2}):?(?<m>[0-9]{2})")
+                             | (if .s == "-" then -1 else 1 end) * ((.h | tonumber) * 3600 + (.m | tonumber) * 60))
+                       end)) catch null)
+          else null end;
+FIN
+)
+
 # Un solo jq calcula todo (en Windows cada programa que se lanza cuesta tiempo).
 # Devuelve líneas `variable='valor'` listas para eval; @sh pone las comillas.
 datos=$(jq -r '
@@ -33,10 +48,7 @@ datos=$(jq -r '
   def dia_hora: localtime as $t
     | (["dom","lun","mar","mié","jue","vie","sáb"][$t[6]]) + " \($t[3] | dos):\($t[4] | dos)";
   def num(f): if f == null then "" else f end;
-  def ep: if type == "number" then floor
-          elif type == "string" then (try (sub("\\.[0-9]+"; "") | fromdateiso8601) catch null)
-          else null end;
-
+  '"$JQ_EP"'
   (.workspace.current_dir // .cwd // "") as $dir
   | {
       modelo: (.model.display_name // "?"),
@@ -82,11 +94,9 @@ eval "$datos"
 guardar_uso() {
   local json carpeta tmp
   json=$(jq -c '
-    def ep: if type == "number" then floor
-            elif type == "string" then (sub("\\.[0-9]+"; "") | fromdateiso8601)
-            else empty end;
+    '"$JQ_EP"'
     def ventana(v): (try ({usado: (v.used_percentage | select(type == "number")),
-                           reinicio: (v.resets_at | ep)}) catch null);
+                           reinicio: (v.resets_at | ep | select(. != null))}) catch null) // null;
     {actualizado: (now | floor),
      five_hour: ventana(.rate_limits.five_hour),
      seven_day: ventana(.rate_limits.seven_day)}
