@@ -82,8 +82,10 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
-import { leerDecisiones, lineaLog, marcaTarjeta } from './jev-modelo'
+import { leerDecisiones, lineaLog, marcaTarjeta, resumenJev } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
+import { panelJev } from './panel-jev'
+import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
 import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
@@ -413,7 +415,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'tablero',
       description: 'Tablero: abre, cierra, reinicia o cambia la distribución del panel completo',
-      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini]',
+      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama]',
     })
     await migrate($)
     // A host without usage (headless, an SDK host, a session not yet bound) just starts without it.
@@ -468,8 +470,8 @@ export const register: Register = (on, options) => {
       return { text: 'Tablero reiniciado.' }
     }
     if (verb === 'layout') {
-      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' ? arg : null
-      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini' }
+      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' || arg === 'diagrama' ? arg : null
+      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini|diagrama' }
       await update($, view, v => ({ ...normalize(DEFAULT_VIEW, v), layout }))
       const opened = await openPane($, cfg)
       return { text: opened.isPlaced ? `Distribución de Tablero: ${layout}.` : `Distribución ${layout} guardada; el panel aún no se muestra: ${opened.reason}` }
@@ -853,12 +855,16 @@ export const register: Register = (on, options) => {
       getJev($),
     ])
     const jevN = jevs.decisiones.length
+    const resumenJevs = resumenJev(jevs.decisiones)
     const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
     const layout = v.layout ?? cfg.layout
-    const isWide = layout === 'wide' || (layout === 'auto' && W >= 110)
+    // El diagrama: `auto` y `diagrama` desde 66 columnas; por debajo, la columna de siempre.
+    const enDiagrama = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
+    const isWide = layout === 'wide'
     const colW = isWide ? Math.floor((W - 2) / 2) : W
+    const jevVisible = cfg.panels.includes('jev') && (jevN > 0 || enDiagrama)
     const modelName = prettyModel(m.model)
     const viewed = e.props.view?.agentId ?? null
     const advising = isAdvising(a)
@@ -871,6 +877,7 @@ export const register: Register = (on, options) => {
     const vidaVisible = vidaDe(contextFill(u).pct) !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
+      jev: jevN === 0,
       architect: !showArchitect,
       gate: g.recent.length === 0 && gateSummary(g).total === 0,
       agents: cards.length === 0,
@@ -1448,7 +1455,7 @@ export const register: Register = (on, options) => {
 
     // ---- log: whatever rows the other panels leave, 4 to 8
     // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
+    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
     const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
     const nLog = logRows(bodyRows, used)
     const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)
@@ -1480,22 +1487,27 @@ export const register: Register = (on, options) => {
       </Box>
     )
 
+    // La caja JEV sale en la columna solo con decisiones; en el diagrama, siempre que el panel esté en `panels`.
+    const jevPanel = (w: number) => panelJev(els, C, w, resumenJevs)
+
     const draw = (p: Panel, w: number) =>
       p === 'main'
         ? mainPanel(w)
-        : p === 'architect'
-          ? architectPanel(w)
-          : p === 'gate'
-            ? gatePanel(w)
-            : p === 'agents'
-              ? agentsPanel(w)
-              : p === 'loops'
-                ? loopsPanel(w)
-                : p === 'receipt'
-                  ? receiptPanel(w)
-                  : p === 'sesion'
-                    ? sesionPanel(w)
-                    : logPanel(w)
+        : p === 'jev'
+          ? jevPanel(w)
+          : p === 'architect'
+            ? architectPanel(w)
+            : p === 'gate'
+              ? gatePanel(w)
+              : p === 'agents'
+                ? agentsPanel(w)
+                : p === 'loops'
+                  ? loopsPanel(w)
+                  : p === 'receipt'
+                    ? receiptPanel(w)
+                    : p === 'sesion'
+                      ? sesionPanel(w)
+                      : logPanel(w)
 
     // Panels with the flow between them; the agents panel draws its own rails.
     const column = (ps: Panel[], w: number) => (
@@ -1622,11 +1634,33 @@ export const register: Register = (on, options) => {
         { label: 'agentes', color: C.agent },
         { label: cfg.gateLabel.toLowerCase(), color: C.gate },
         ...(showArchitect ? [{ label: cfg.architectLabel.toLowerCase(), color: C.arch }] : []),
+        ...(jevVisible ? [{ label: 'jev', color: C.cleared }] : []),
       ],
       W,
     )
 
-    const body = isWide ? (
+    // El diagrama: el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas. Los paneles
+    // que el diagrama no tiene sitio (permisos, bucles, turno, sesión) siguen en columna debajo, sin perderse.
+    const conAsesor = panels.includes('architect')
+    const { aw, rw } = anchosDiagrama(W, conAsesor)
+    const conTarjetas = panels.includes('agents')
+    const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents', 'log'].includes(p))
+    const diagramaBody = enDiagrama ? disposicionDiagrama(els, C, {
+      ancho: W,
+      asesor: conAsesor ? architectPanel(aw) : null,
+      aw,
+      lead: panels.includes('main') ? mainPanel(rw) : null,
+      jev: cfg.panels.includes('jev') ? jevPanel(rw) : null,
+      delegar: conTarjetas,
+      tarjetas: conTarjetas ? agentsPanel(W) : null,
+      expandido: conTarjetas ? expandedPanel(W) : null,
+      vuelta: conTarjetas && running.length === 0,
+      resto: restoPaneles.length > 0 ? column(restoPaneles, W) : null,
+      registro: panels.includes('log') ? logPanel(W) : null,
+      barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}] · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : 'de guardia'}]${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
+    }) : null
+
+    const body = enDiagrama ? diagramaBody : isWide ? (
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}

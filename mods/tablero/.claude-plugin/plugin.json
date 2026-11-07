@@ -39,9 +39,9 @@
     },
     "panels": {
       "title": "Paneles",
-      "description": "Paneles separados por comas en orden de aparición: main, architect, gate, agents, loops, receipt, sesion, log. Omite uno para ocultarlo.",
+      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, receipt, sesion, log. Omite uno para ocultarlo.",
       "type": "string",
-      "default": "main,architect,gate,agents,loops,receipt,sesion,log"
+      "default": "main,jev,architect,gate,agents,loops,receipt,sesion,log"
     },
     "motion": {
       "title": "Movimiento",
@@ -79,13 +79,14 @@
     },
     "layout": {
       "title": "Distribución",
-      "description": "auto: resumen de máximo 8 filas con el panel en línea sobre el prompt, dos columnas desde 110 columnas acoplado, una columna en otro caso",
+      "description": "auto: resumen de máximo 8 filas con el panel en línea sobre el prompt, diagrama desde 66 columnas acoplado, una columna en otro caso. diagrama: lead, asesor, JEV y tarjetas en diagrama (con menos de 66 columnas, una columna)",
       "type": "string",
       "options": [
         "auto",
         "compact",
         "wide",
-        "mini"
+        "mini",
+        "diagrama"
       ],
       "default": "auto"
     },

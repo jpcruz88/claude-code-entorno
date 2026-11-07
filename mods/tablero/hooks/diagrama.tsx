@@ -1,0 +1,81 @@
+// La vista en diagrama: el asesor a la izquierda; a la derecha, el lead, la caja JEV, la línea «delegar a
+// subagentes», y debajo las tarjetas, la vuelta al lead, el resto de paneles, el registro y la barra.
+// Recibe los paneles ya dibujados (los de siempre) y solo los coloca. Solo dibujo.
+import type { EngineInterface, RenderChildren } from 'claude-code'
+
+import type { Colors } from './core'
+
+type Elementos = ReturnType<EngineInterface['ui']['resolve']>
+
+/** Desde este ancho del panel acoplado, `auto` dibuja el diagrama. */
+export const DIAGRAMA_MIN = 66
+
+/** Columnas de la columna del asesor (`aw`) y de la derecha (`rw`); entre ambas, un conector de 2 columnas. */
+export const anchosDiagrama = (ancho: number, conAsesor: boolean) => {
+  const aw = conAsesor ? Math.min(30, Math.max(21, Math.floor(ancho * 0.3))) : 0
+  return { aw, rw: ancho - (conAsesor ? aw + 2 : 0) }
+}
+
+export type PiezasDiagrama = {
+  ancho: number
+  /** El asesor ya dibujado con `aw` columnas; null si no hay asesor de guardia. */
+  asesor: RenderChildren | null
+  aw: number
+  lead: RenderChildren | null
+  jev: RenderChildren | null
+  /** Hay tarjetas: se dibuja la línea «delegar a subagentes» con su conector. */
+  delegar: boolean
+  tarjetas: RenderChildren | null
+  expandido: RenderChildren | null
+  /** Todas las tarjetas terminaron: la caja «de vuelta al lead». */
+  vuelta: boolean
+  resto: RenderChildren | null
+  registro: RenderChildren | null
+  barra: string
+}
+
+export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDiagrama) => {
+  const { Box, Text } = els
+  const { rw } = anchosDiagrama(p.ancho, p.asesor !== null)
+  // El conector baja desde el centro de la columna derecha; su sangría es un margen, no espacios en el texto.
+  const centro = Math.floor(rw / 2)
+  const conector = (simbolo: string) => (
+    <Box marginLeft={centro}>
+      <Text color={colores.faint}>{simbolo}</Text>
+    </Box>
+  )
+  return (
+    <Box flexDirection="column" width={p.ancho}>
+      <Box>
+        {p.asesor !== null ? p.asesor : null}
+        {p.asesor !== null ? (
+          <Box width={2} flexShrink={0}>
+            <Text color={colores.arch}>·▶</Text>
+          </Box>
+        ) : null}
+        <Box flexDirection="column" width={rw}>
+          {p.lead}
+          {p.lead !== null && p.jev !== null ? conector('▼') : null}
+          {p.jev}
+          {p.delegar ? conector('│') : null}
+          {p.delegar ? conector('▼') : null}
+          {p.delegar ? <Text dimColor>delegar a subagentes</Text> : null}
+        </Box>
+      </Box>
+      {p.tarjetas}
+      {p.expandido}
+      {p.vuelta ? (
+        <Box marginLeft={p.asesor !== null ? p.aw + 2 : 0} width={rw} borderStyle="round" borderColor={colores.main} paddingX={1}>
+          <Text color={colores.main} wrap="truncate">
+            de vuelta al lead · revisar y verificar
+          </Text>
+        </Box>
+      ) : null}
+      {p.resto}
+      {p.registro}
+      <Text dimColor wrap="truncate">
+        {p.barra}
+      </Text>
+    </Box>
+  )
+}
