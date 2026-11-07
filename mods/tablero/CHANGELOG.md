@@ -5,9 +5,9 @@
 - Vista en diagrama (`layout: diagrama`): el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas de los subagentes. Los paneles que el diagrama no tiene sitio (permisos, bucles, turno y sesión) siguen en columna debajo, sin perderse.
 - `auto` elige el diagrama desde 66 columnas acopladas y lo usa en lugar de las dos columnas que tenía desde 110. Por debajo de 66, sigue la columna de siempre.
 - Caja JEV y panel `jev`: muestran las decisiones que tomaron los hooks de Jev (`~/.claude/jev/decisiones.jsonl`). El mod solo lee ese archivo; no usa red.
-- El log muestra una línea `jev` por cada decisión: qué eligió Claude, qué confianza dio Jev y si la decisión se aplicó o quedó como `sin respuesta`.
+- El log muestra una línea `jev` por cada decisión: qué eligió Jev, con qué confianza, y si se aplicó (`sharp → código`) o quedó para Claude (`split → claude`). Sin respuesta, dice `sin respuesta`.
 - La barra sobre el prompt muestra `jev [N decisiones]` cuando hay decisiones registradas.
-- Las tarjetas de subagente muestran la marca `jev ↑ sonnet` (o `jev ↓ haiku`) cuando Jev cambió el modelo o el esfuerzo que había elegido Claude. Si Jev coincidió con Claude, no hay marca.
+- Las tarjetas de subagente muestran la marca `jev ↑ sonnet` (o `jev ↓ haiku`) solo cuando Jev cambió el **modelo** que había elegido Claude. Un cambio de esfuerzo no pone marca, y si Jev coincidió con Claude, tampoco.
 - El asesor de guardia siempre aparece en el diagrama, también sin consultas («de guardia», «aún sin consultas»); solo lo quita `panels` si no incluye `architect`.
 - La etiqueta por defecto del asesor pasa de `ARQUITECTO` a `ASESOR`, que cabe en la columna del diagrama y coincide con la spec. Si la tenías configurada, no cambia; si usabas la de por defecto, verás `ASESOR`.
 

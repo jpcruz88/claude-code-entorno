@@ -39,7 +39,7 @@ El primero crea la carpeta de Jev con permisos privados. El segundo pide la clav
 
 ### Costo
 
-La consulta cuesta 0,042 USD por millón de tokens de entrada. Con el encargo completo, eso son unos 8 centavos por cada mil decisiones. Cada subagente hace dos consultas, una de modelo y otra de esfuerzo.
+La consulta cuesta 0,042 USD por millón de tokens de entrada. Con el encargo completo, eso son unos 8 centavos por cada mil decisiones, si cada encargo ronda los 2000 tokens. Un encargo largo (hasta 32 000 caracteres) cuesta hasta unas cuatro veces más. Cada subagente hace dos consultas, una de modelo y otra de esfuerzo.
 
 ### Sin clave, todo sigue igual
 
