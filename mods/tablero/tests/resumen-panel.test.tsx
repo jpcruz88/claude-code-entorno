@@ -58,12 +58,13 @@ const sesionStart = (on: On) => {
   on('fs.read', () => ({ value: 'ref: refs/heads/main\n' }))
 }
 
-test('al iniciar, leer la rama no rompe el panel, que no muestra hooks', async ($, on) => {
+test('al iniciar, la rama se lee de .git/HEAD y se muestra bajo la carpeta, sin hooks', async ($, on) => {
   motor(on)
   sesionStart(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await medir($)
   const ui = await $.ui.mount(pane(120))
+  expect(await ui.find({ text: /⎇ main/ })).toBeDefined()
   expect(await ui.find({ text: /disparados|SessionStart ×/ })).toBeUndefined()
   await ui.unmount()
 })
