@@ -146,7 +146,7 @@ declare module 'claude-code' {
       roster: Roster
       /** The git branch (or short commit) of the working folder; null outside a repository. */
       branch: string | null
-      /** Las decisiones de Jev de la sesión y el cursor del log (ver JevEstado). */
+      /** Las decisiones de Jev de la sesión y el último limites.json (ver JevEstado). */
       jev: JevEstado
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
@@ -185,8 +185,7 @@ declare module 'claude-code' {
 }
 
 /**
- * Las decisiones de Jev de la sesión y el cursor del log: la hora de la última logueada y las claves (hora, tipo,
- * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora. `limites` es el último
- * limites.json válido (null sin archivo o roto); un valor guardado antes de existir se lee como null.
+ * Las decisiones de Jev de la sesión y el último limites.json. `limites` es el último limites.json válido (null sin
+ * archivo o roto); un valor guardado antes de existir se lee como null.
  */
 export type JevEstado = { decisiones: DecisionJev[]; limites: LimitesJev | null }
