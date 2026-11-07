@@ -24,15 +24,17 @@ DIAS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]  # time.gmtime: lunes
 def correr(datos, home=None, **entorno):
     """Corre la statusline. HOME apunta a una carpeta temporal para no tocar ~/.claude."""
     propio = None
-    if home is None:
-        propio = tempfile.TemporaryDirectory()
-        home = propio.name
-    env = dict(os.environ, TZ="UTC", HOME=str(home), **entorno)
-    entrada = datos if isinstance(datos, str) else json.dumps(datos)
-    r = subprocess.run([BASH, str(SCRIPT)], input=entrada.encode("utf-8"),
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=30)
-    if propio:
-        propio.cleanup()
+    try:
+        if home is None:
+            propio = tempfile.TemporaryDirectory()
+            home = propio.name
+        env = dict(os.environ, TZ="UTC", HOME=str(home), **entorno)
+        entrada = datos if isinstance(datos, str) else json.dumps(datos)
+        r = subprocess.run([BASH, str(SCRIPT)], input=entrada.encode("utf-8"),
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=30)
+    finally:
+        if propio:
+            propio.cleanup()
     return r.returncode, ANSI.sub("", r.stdout.decode("utf-8"))
 
 
@@ -68,6 +70,47 @@ class GuardaUso(unittest.TestCase):
         escrito = json.loads(self.archivo.read_text(encoding="utf-8"))
         self.assertEqual(escrito["five_hour"]["reinicio"], 1738425600)
         self.assertIsInstance(escrito["five_hour"]["reinicio"], int)
+
+    def _leer(self):
+        sys.path.insert(0, str(RAIZ / "claude" / "hooks"))
+        try:
+            import jev_limites
+        finally:
+            sys.path.pop(0)
+        return jev_limites.leer_limites(str(self.home), time.time())
+
+    def test_solo_five_hour_valida(self):
+        datos = self.ejemplo()
+        del datos["rate_limits"]["seven_day"]
+        correr(datos, home=self.home)
+        escrito = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(escrito), ["actualizado", "five_hour"])
+        self.assertEqual(escrito["five_hour"], {"usado": 23.5, "reinicio": 1738425600})
+        self.assertIsNotNone(self._leer())
+
+    def test_seven_day_sin_resets_at(self):
+        datos = self.ejemplo()
+        del datos["rate_limits"]["seven_day"]["resets_at"]
+        correr(datos, home=self.home)
+        escrito = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(escrito), ["actualizado", "five_hour"])
+        self.assertIsNotNone(self._leer())
+
+    def test_ninguna_ventana_valida_no_escribe(self):
+        datos = self.ejemplo()
+        datos["rate_limits"] = {"five_hour": {"used_percentage": 5}, "seven_day": {}}
+        correr(datos, home=self.home)
+        self.assertFalse(self.archivo.exists())
+
+    def test_reinicio_iso_con_offset(self):
+        datos = self.ejemplo()
+        datos["rate_limits"]["five_hour"]["resets_at"] = "2026-11-07T06:00:00+01:00"
+        datos["rate_limits"]["seven_day"]["resets_at"] = "2026-11-07T06:00:00.5-06:00"
+        codigo, _ = correr(datos, home=self.home)
+        self.assertEqual(codigo, 0)
+        escrito = json.loads(self.archivo.read_text(encoding="utf-8"))
+        self.assertEqual(escrito["five_hour"]["reinicio"], 1794027600)  # 05:00 UTC
+        self.assertEqual(escrito["seven_day"]["reinicio"], 1794052800)  # 12:00 UTC
 
     def test_sin_rate_limits_no_escribe_y_salida_igual(self):
         datos = self.ejemplo()
