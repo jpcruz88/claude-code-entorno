@@ -105,7 +105,7 @@ const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
 const sesion = atom({ plugin: 'tablero', key: 'sesion' } as const, DEFAULT_SESION)
-const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], vistas: 0 } as JevEstado)
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [] } as JevEstado)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
 
@@ -152,9 +152,25 @@ async function cambiarSesion($: EngineInterface, cambio: (s: Sesion) => Sesion) 
   await update($, sesion, s => cambio(normalize(DEFAULT_SESION, s)))
 }
 
+/** Un valor guardado de cualquier forma: el de antes (`vistas`) se lee como cursor vacío, sin romperse. */
+function normalizeJev(stored: unknown): JevEstado {
+  const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [] }, stored)
+  return { decisiones: listOf<DecisionJev>(j.decisiones), ultima: typeof j.ultima === 'number' ? j.ultima : null, claves: listOf<string>(j.claves) }
+}
+
 async function getJev($: EngineInterface): Promise<JevEstado> {
-  const j = normalize<JevEstado>({ decisiones: [], vistas: 0 }, await read($, jev))
-  return { decisiones: listOf<DecisionJev>(j.decisiones), vistas: j.vistas }
+  return normalizeJev(await read($, jev))
+}
+
+/** Cuántas claves recientes se guardan para no repetir decisiones con la misma hora. */
+const CLAVES_JEV = 50
+
+const claveDeDecision = (d: DecisionJev) => `${d.hora}|${d.tipo}|${d.opcion}|${d.descripcion}`
+
+/** Las decisiones que aún no están en el log: no más viejas que la última logueada y con clave no vista. */
+const sinLoguear = (ds: DecisionJev[], estado: JevEstado): DecisionJev[] => {
+  const vistas = new Set(estado.claves)
+  return ds.filter(d => !vistas.has(claveDeDecision(d)) && (estado.ultima === null || d.hora >= estado.ultima))
 }
 
 /**
@@ -166,9 +182,20 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const home = await $.env.get('HOME').catch(() => undefined)
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  const previo = await getJev($)
-  await update($, jev, () => ({ decisiones: ds, vistas: ds.length }))
-  for (const d of ds.slice(previo.vistas)) await say($, 'jev', lineaLog(d), 'info')
+  // Las nuevas se calculan dentro de la escritura, sobre el cursor que ya dejó la lectura anterior: dos lecturas
+  // a la vez no logean la misma decisión dos veces.
+  let nuevas: DecisionJev[] = []
+  await update($, jev, x => {
+    const previo = normalizeJev(x)
+    nuevas = sinLoguear(ds, previo)
+    const ultima = nuevas.reduce((m, d) => Math.max(m, d.hora), previo.ultima ?? -Infinity)
+    return {
+      decisiones: ds,
+      ultima: Number.isFinite(ultima) ? ultima : null,
+      claves: [...previo.claves, ...nuevas.map(claveDeDecision)].slice(-CLAVES_JEV),
+    }
+  })
+  for (const d of nuevas) await say($, 'jev', lineaLog(d), 'info')
   return ds
 }
 
