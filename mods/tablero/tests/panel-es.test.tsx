@@ -125,7 +125,7 @@ test('las etiquetas del panel principal están en español', async ($, on) => {
   motor(on)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /esfuerzo/ })).toBeDefined()
-  expect(await ui.find({ text: /○ en espera/ })).toBeDefined()
+  expect(await ui.find({ text: /[○●] en espera/ })).toBeDefined()
   expect(await ui.find({ text: /0 respuestas/ })).toBeDefined()
   expect(await ui.find({ text: /\bsol\./ })).toBeUndefined()
   expect(await ui.find({ text: /\beffort\b/ })).toBeUndefined()

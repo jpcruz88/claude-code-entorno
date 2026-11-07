@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { avanzar, necesitaRedibujo, pulso } from '../hooks/animacion'
+import { avanzar, necesitaRedibujo, puntoEspera, pulso } from '../hooks/animacion'
 
 test('avanzar acerca el valor mostrado al objetivo en pasos', () => {
   expect(avanzar(0, 100)).toBe(25)
@@ -14,6 +14,12 @@ test('avanzar acerca el valor mostrado al objetivo en pasos', () => {
 test('avanzar también baja y no se rompe con un objetivo inválido', () => {
   expect(avanzar(80, 20)).toBeLessThan(80)
   expect(avanzar(0, NaN)).toBe(0)
+})
+
+test('el punto de en espera del panel SESIÓN pulsa entre ● y ○; sin animación, ○ fijo', () => {
+  expect(puntoEspera('encendido')).toBe('●')
+  expect(puntoEspera('apagado')).toBe('○')
+  expect(puntoEspera(undefined)).toBe('○')
 })
 
 test('pulso alterna cada 5 fases', () => {

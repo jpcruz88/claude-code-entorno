@@ -73,7 +73,7 @@ import {
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
-import { avanzar, necesitaRedibujo, pulso } from './animacion'
+import { avanzar, necesitaRedibujo, puntoEspera, pulso } from './animacion'
 import { barraAvance, barraIndeterminada, emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
 import { nombreDeTipo } from './savvy-core'
@@ -980,7 +980,9 @@ export const register: Register = (on, options) => {
             {modelName} · principal
           </Text>
           <Box flexShrink={0}>
-            <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? '● trabajando' : '○ en espera'}</Text>
+            <Text color={m.isRunning ? C.main : C.dim}>
+              {m.isRunning ? '● trabajando' : `${puntoEspera(cfg.animacion ? pulso(fase) : undefined)} en espera`}
+            </Text>
           </Box>
         </Box>
         {line(
