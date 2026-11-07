@@ -372,3 +372,12 @@ test('el diagrama cabe en la altura del panel: conectores y vuelta cuentan en el
   }
   expect(fallos).toEqual([])
 })
+
+test('con motion off el conector de la columna es texto │, sin módulo animado', { options: { motion: 'off' } }, async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'D3' })
+  await lanzar($, 'revisar auth', 'd3')
+  const ui = await $.ui.mount(pane(66) as never)
+  expect(await ui.find({ text: /^│$/ })).toBeDefined()
+  await ui.unmount()
+})

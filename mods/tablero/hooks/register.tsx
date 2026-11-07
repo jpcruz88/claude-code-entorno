@@ -1666,6 +1666,8 @@ export const register: Register = (on, options) => {
       resto: restoPaneles.length > 0 ? column(restoPaneles, W) : null,
       registro: panels.includes('log') ? logPanel(W) : null,
       barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}] · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : 'de guardia'}]${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
+      motion: cfg.motion,
+      activo: running.length > 0,
     }) : null
 
     const body = enDiagrama ? diagramaBody : isWide ? (
