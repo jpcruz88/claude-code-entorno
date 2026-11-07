@@ -91,21 +91,39 @@ eval "$datos"
 # Guarda el uso de la cuenta (5 h y semana) en ~/.claude/jev/limites.json para que el
 # guardián de subagentes lo lea. Escritura atómica (temporal en la misma carpeta y
 # mv -f); solo si llegan rate_limits; cualquier fallo se ignora en silencio.
+# Varias sesiones escriben el mismo archivo y una inactiva trae datos viejos, así que
+# el jq mezcla con lo que ya hay (sin lanzar otro proceso): con el mismo reinicio
+# (±60 s) se queda el `usado` mayor; si el reinicio nuevo es posterior, gana el nuevo;
+# si es anterior (dato de una ventana vieja), se conserva la ventana actual. Un archivo
+# previo roto o ausente se ignora.
 guardar_uso() {
-  local json carpeta tmp
-  json=$(jq -c '
+  local json carpeta tmp previo
+  carpeta="${HOME:-}/.claude/jev"
+  [ -n "${HOME:-}" ] || return 0
+  previo="$carpeta/limites.json"
+  [ -r "$previo" ] || previo=/dev/null
+  json=$(jq -c --rawfile previo "$previo" '
     '"$JQ_EP"'
     def ventana(v): (try ({usado: (v.used_percentage | select(type == "number")),
                            reinicio: (v.resets_at | ep | select(. != null))}) catch null) // null;
-    {actualizado: (now | floor),
-     five_hour: ventana(.rate_limits.five_hour),
-     seven_day: ventana(.rate_limits.seven_day)}
+    def numero: type == "number";
+    def mezcla(actual; nueva):
+      if nueva == null then null
+      elif (actual | type) != "object" or (actual.usado | numero | not)
+           or (actual.reinicio | numero | not) then nueva
+      elif nueva.reinicio - actual.reinicio > 60 then nueva
+      elif actual.reinicio - nueva.reinicio > 60 then actual
+      else {usado: ([nueva.usado, actual.usado] | max),
+            reinicio: ([nueva.reinicio, actual.reinicio] | max)} end;
+    (try ($previo | fromjson) catch null) as $p
+    | (if ($p | type) == "object" then $p else {} end) as $p
+    | {actualizado: (now | floor),
+       five_hour: mezcla($p.five_hour; ventana(.rate_limits.five_hour)),
+       seven_day: mezcla($p.seven_day; ventana(.rate_limits.seven_day))}
     | with_entries(select(.value != null))
     | select(has("five_hour") or has("seven_day"))
   ' <<<"$entrada" 2>/dev/null | tr -d '\r') || return 0
   [ -n "$json" ] || return 0
-  carpeta="${HOME:-}/.claude/jev"
-  [ -n "${HOME:-}" ] || return 0
   mkdir -p "$carpeta" 2>/dev/null && chmod 700 "$carpeta" 2>/dev/null
   tmp=$(mktemp "$carpeta/.limites.XXXXXX" 2>/dev/null) || return 0
   if printf '%s\n' "$json" >"$tmp" 2>/dev/null && mv -f "$tmp" "$carpeta/limites.json" 2>/dev/null; then

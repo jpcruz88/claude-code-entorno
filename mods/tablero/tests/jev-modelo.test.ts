@@ -227,14 +227,55 @@ test('ritmo: sin dato, dato viejo, reinicio vencido o JSON roto no dan nada', ()
   expect(leerLimites(JSON.stringify(l))?.seven_day?.usado).toBe(52)
 })
 
+// Los literales son RitmoSemana; `h5` es la ventana de 5 h con 3 h para reiniciar (salvo que se diga otra cosa).
+const rs = (usado: number, ritmo: number, despuesDelCorte = false) => ({ usado, ritmo, exceso: usado - ritmo, despuesDelCorte })
+const h5 = (usado: number, falta = 3 * 3600) => ({ usado, reinicio: AHORA + falta })
+
 test('fila de ritmo: texto y color por exceso (verde ≤ 5, ámbar 5 a 15, rojo > 15)', () => {
-  expect(filaRitmo({ usado: 52, ritmo: 40, exceso: 12 })).toEqual({ texto: 'semana 52% · ritmo 40% · +12', nivel: 'ambar' })
-  expect(filaRitmo({ usado: 45, ritmo: 40, exceso: 5 })).toEqual({ texto: 'semana 45% · ritmo 40% · +5', nivel: 'verde' })
-  expect(filaRitmo({ usado: 60, ritmo: 40, exceso: 15 })).toEqual({ texto: 'semana 60% · ritmo 40% · +15', nivel: 'ambar' })
-  expect(filaRitmo({ usado: 60, ritmo: 40, exceso: 15.4 })?.nivel).toBe('rojo')
-  expect(filaRitmo({ usado: 70, ritmo: 40, exceso: 30 })).toEqual({ texto: 'semana 70% · ritmo 40% · +30', nivel: 'rojo' })
-  expect(filaRitmo({ usado: 25, ritmo: 40, exceso: -15 })).toEqual({ texto: 'semana 25% · ritmo 40% · −15 · xhigh ok', nivel: 'verde' })
-  expect(filaRitmo({ usado: 30, ritmo: 40, exceso: -10 })?.texto).toBe('semana 30% · ritmo 40% · −10 · xhigh ok')
-  expect(filaRitmo({ usado: 31, ritmo: 40, exceso: -9 })?.texto).toBe('semana 31% · ritmo 40% · −9')
-  expect(filaRitmo(null)).toBe(null)
+  expect(filaRitmo(rs(52, 40), h5(40), AHORA)).toEqual({ texto: 'semana 52% · ritmo 40% · +12', nivel: 'ambar' })
+  expect(filaRitmo(rs(45, 40), h5(40), AHORA)).toEqual({ texto: 'semana 45% · ritmo 40% · +5', nivel: 'verde' })
+  expect(filaRitmo(rs(55, 40), h5(40), AHORA)).toEqual({ texto: 'semana 55% · ritmo 40% · +15', nivel: 'ambar' })
+  expect(filaRitmo(rs(55.4, 40), h5(40), AHORA)?.nivel).toBe('rojo')
+  expect(filaRitmo(rs(70, 40), h5(40), AHORA)).toEqual({ texto: 'semana 70% · ritmo 40% · +30', nivel: 'rojo' })
+  expect(filaRitmo(rs(25, 40), h5(40), AHORA)).toEqual({ texto: 'semana 25% · ritmo 40% · −15 · xhigh ok', nivel: 'verde' })
+  expect(filaRitmo(null, h5(40), AHORA)).toBe(null)
+})
+
+test('xhigh ok: antes del corte pide exceso ≤ −10 (borde −10 sí, −9 no)', () => {
+  expect(filaRitmo(rs(30, 40), h5(40), AHORA)?.texto).toBe('semana 30% · ritmo 40% · −10 · xhigh ok')
+  expect(filaRitmo(rs(31, 40), h5(40), AHORA)?.texto).toBe('semana 31% · ritmo 40% · −9')
+})
+
+test('xhigh ok: semana −12 con 5 h al 70 % no lo muestra (manda la regla de 5 h)', () => {
+  expect(filaRitmo(rs(28, 40), h5(70), AHORA)?.texto).toBe('semana 28% · ritmo 40% · −12')
+  expect(filaRitmo(rs(28, 40), h5(60), AHORA)?.texto).toBe('semana 28% · ritmo 40% · −12')
+  expect(filaRitmo(rs(28, 40), h5(59), AHORA)?.texto).toBe('semana 28% · ritmo 40% · −12 · xhigh ok')
+})
+
+test('xhigh ok: después del corte con 85 % y 5 h al 30 % sí lo muestra', () => {
+  expect(filaRitmo(rs(85, 90, true), h5(30), AHORA)?.texto).toBe('semana 85% · ritmo 90% · −5 · xhigh ok')
+})
+
+test('xhigh ok: después del corte se apaga desde 97 % y con la 5 h alta', () => {
+  expect(filaRitmo(rs(96, 90, true), h5(30), AHORA)?.texto).toContain('xhigh ok')
+  expect(filaRitmo(rs(97, 90, true), h5(30), AHORA)?.texto).not.toContain('xhigh ok')
+  expect(filaRitmo(rs(85, 90, true), h5(70), AHORA)?.texto).not.toContain('xhigh ok')
+})
+
+test('xhigh ok: sin la ventana de 5 h o con la 5 h vencida no lo muestra', () => {
+  expect(filaRitmo(rs(25, 40), undefined, AHORA)?.texto).toBe('semana 25% · ritmo 40% · −15')
+  expect(filaRitmo(rs(85, 90, true), undefined, AHORA)?.texto).not.toContain('xhigh ok')
+  expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA }, AHORA)?.texto).not.toContain('xhigh ok')
+  expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA - 60 }, AHORA)?.texto).not.toContain('xhigh ok')
+})
+
+test('xhigh ok: la 5 h alta en gracia (reinicio en menos de 15 min) no lo impide', () => {
+  expect(filaRitmo(rs(25, 40), h5(90, 14 * 60), AHORA)?.texto).toContain('xhigh ok')
+  expect(filaRitmo(rs(25, 40), h5(90, 15 * 60), AHORA)?.texto).not.toContain('xhigh ok')
+})
+
+test('ritmo: despuesDelCorte marca si ya pasó el corte del jueves', () => {
+  expect(ritmoSemana(semana(52, '2026-11-12T23:00:00+01:00'), AHORA, undefined, UTC1)?.despuesDelCorte).toBe(false)
+  const l = { actualizado: ep('2026-11-13T00:00:00+01:00'), seven_day: { usado: 52, reinicio: ep('2026-11-13T00:30:00+01:00') } }
+  expect(ritmoSemana(l, ep('2026-11-13T00:00:00+01:00'), undefined, UTC1)?.despuesDelCorte).toBe(true)
 })

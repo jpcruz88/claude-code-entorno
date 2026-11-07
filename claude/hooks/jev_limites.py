@@ -130,6 +130,8 @@ def _tope_semana(ventana, ahora, cfg, tz):
                 break
     if modelo == "opus" and esfuerzo in ("high", "xhigh"):
         return modelo, esfuerzo, None, resumen
+    if usado >= meta:  # con la meta ya cumplida el exceso sobre el ritmo no explica el tope
+        return modelo, esfuerzo, "tope semana %.0f%% → %s" % (usado, _etiqueta(modelo, esfuerzo)), resumen
     return modelo, esfuerzo, "tope semana %+.0f pts → %s" % (exceso, _etiqueta(modelo, esfuerzo)), resumen
 
 

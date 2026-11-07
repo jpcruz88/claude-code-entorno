@@ -70,11 +70,20 @@ def deny(motivo):
     sys.exit(0)
 
 
-def allow(entrada_actualizada):
+def razon_del_ajuste(por_jev, por_tope):
+    """Dice quién cambió el modelo o el esfuerzo: Jev, el tope de uso o los dos."""
+    if por_jev and por_tope:
+        return "Jev y el tope de uso ajustaron el modelo o el esfuerzo del agente."
+    if por_tope:
+        return "Tope de uso ajustó el modelo o el esfuerzo del agente."
+    return "Jev ajustó el modelo o el esfuerzo del agente."
+
+
+def allow(entrada_actualizada, por_jev=True, por_tope=False):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "permissionDecisionReason": "Jev ajustó el modelo o el esfuerzo del agente.",
+        "permissionDecisionReason": razon_del_ajuste(por_jev, por_tope),
         "updatedInput": entrada_actualizada,
     }}))
 
@@ -171,10 +180,15 @@ def rutear_con_jev(entrada, modelo, esfuerzo, session_id):
         return modelo, esfuerzo
 
 
+def _sin_topes(modelo, esfuerzo):
+    """Sin poder calcular el tope, xhigh baja a high (xhigh exige conocer el uso); nunca deny."""
+    return modelo, ("high" if esfuerzo == "xhigh" else esfuerzo)
+
+
 def aplicar_tope_de_uso(entrada, modelo, esfuerzo, session_id):
     """Baja modelo y esfuerzo al tope vigente y registra la línea `tope`. Nunca lanza."""
     if jev_limites is None:
-        return modelo, esfuerzo
+        return _sin_topes(modelo, esfuerzo)
     try:
         home = os.path.expanduser("~")
         ahora = time.time()
@@ -185,7 +199,7 @@ def aplicar_tope_de_uso(entrada, modelo, esfuerzo, session_id):
         if (nuevo_modelo, nuevo_esfuerzo) == (modelo, esfuerzo):
             return modelo, esfuerzo
     except Exception:
-        return modelo, esfuerzo  # un fallo al leer o calcular equivale a sin tope
+        return _sin_topes(modelo, esfuerzo)  # un fallo al leer o calcular: sin tope, sin xhigh
     try:
         motivo = tope.get("motivo")
         if nuevo_esfuerzo != esfuerzo and "esfuerzo" not in (motivo or ""):
@@ -202,14 +216,17 @@ def aplicar_tope_de_uso(entrada, modelo, esfuerzo, session_id):
 
 
 def revisar_agente(entrada, session_id=None):
-    """Devuelve la entrada reescrita si Jev cambió algo; None si pasa tal cual."""
+    """Devuelve (entrada reescrita, por_jev, por_tope) si algo cambió; None si pasa tal cual."""
     modelo = texto(entrada.get("model")).strip()
     esfuerzo = texto(entrada.get("effort")).strip().lower()
     validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: Fable nunca llega a Jev
     final_modelo, final_esfuerzo = rutear_con_jev(entrada, modelo, esfuerzo, session_id)
     validar_agente(final_modelo, final_esfuerzo)
+    tras_jev = (final_modelo, final_esfuerzo)
     final_modelo, final_esfuerzo = aplicar_tope_de_uso(entrada, final_modelo, final_esfuerzo,
                                                        session_id)
+    por_jev = tras_jev != (modelo, esfuerzo)
+    por_tope = (final_modelo, final_esfuerzo) != tras_jev
     cambios = {}
     if final_modelo != modelo:
         cambios["model"] = final_modelo
@@ -217,7 +234,7 @@ def revisar_agente(entrada, session_id=None):
         cambios["effort"] = final_esfuerzo
     if not cambios:
         return None
-    return dict(entrada, **cambios)
+    return dict(entrada, **cambios), por_jev, por_tope
 
 
 def revisar_workflow(entrada, session_id=None):
@@ -265,7 +282,7 @@ def main():
     except Exception:
         return  # ante un fallo del guardián, no bloquear el trabajo normal
     if actualizada is not None:
-        allow(actualizada)
+        allow(*actualizada)
 
 
 if __name__ == "__main__":

@@ -71,6 +71,56 @@ class GuardaUso(unittest.TestCase):
         self.assertEqual(escrito["five_hour"]["reinicio"], 1738425600)
         self.assertIsInstance(escrito["five_hour"]["reinicio"], int)
 
+    def _escribir(self, usado, reinicio, ventana="seven_day"):
+        datos = self.ejemplo()
+        datos["rate_limits"][ventana] = {"used_percentage": usado, "resets_at": reinicio}
+        correr(datos, home=self.home)
+        return json.loads(self.archivo.read_text(encoding="utf-8"))
+
+    def test_sesion_inactiva_con_mismo_reinicio_conserva_el_uso_mayor(self):
+        self._escribir(80, 1738857600)
+        escrito = self._escribir(30, 1738857600)
+        self.assertEqual(escrito["seven_day"], {"usado": 80, "reinicio": 1738857600})
+
+    def test_mismo_reinicio_con_tolerancia_de_60_s_conserva_el_mayor(self):
+        self._escribir(80, 1738857600)
+        escrito = self._escribir(30, 1738857640)
+        self.assertEqual(escrito["seven_day"]["usado"], 80)
+
+    def test_mismo_reinicio_con_uso_mayor_sube(self):
+        self._escribir(30, 1738857600)
+        escrito = self._escribir(55, 1738857600)
+        self.assertEqual(escrito["seven_day"]["usado"], 55)
+
+    def test_reinicio_posterior_gana_el_nuevo(self):
+        self._escribir(80, 1738857600)
+        escrito = self._escribir(5, 1738857600 + 7 * 86400)
+        self.assertEqual(escrito["seven_day"], {"usado": 5, "reinicio": 1738857600 + 7 * 86400})
+
+    def test_reinicio_anterior_no_pisa_la_ventana_actual(self):
+        self._escribir(5, 1738857600 + 7 * 86400)
+        escrito = self._escribir(80, 1738857600)
+        self.assertEqual(escrito["seven_day"], {"usado": 5, "reinicio": 1738857600 + 7 * 86400})
+
+    def test_actualizado_es_el_ahora_al_fusionar(self):
+        self._escribir(80, 1738857600)
+        antes = int(time.time())
+        escrito = self._escribir(30, 1738857600)
+        self.assertGreaterEqual(escrito["actualizado"], antes)
+
+    def test_cada_ventana_se_fusiona_por_separado(self):
+        self._escribir(80, 1738857600)
+        escrito = self._escribir(60, 1738425600, ventana="five_hour")
+        # el ejemplo trae la semana en 41.2 con el mismo reinicio: gana el 80 guardado
+        self.assertEqual(escrito["seven_day"]["usado"], 80)
+        self.assertEqual(escrito["five_hour"]["usado"], 60)
+
+    def test_archivo_previo_roto_escribe_el_nuevo(self):
+        self.archivo.parent.mkdir(parents=True)
+        self.archivo.write_text('{"actualizado": ', encoding="utf-8")
+        escrito = self._escribir(30, 1738857600)
+        self.assertEqual(escrito["seven_day"], {"usado": 30, "reinicio": 1738857600})
+
     def _leer(self):
         sys.path.insert(0, str(RAIZ / "claude" / "hooks"))
         try:

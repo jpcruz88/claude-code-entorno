@@ -88,6 +88,11 @@ class TopeSemana(unittest.TestCase):
         t = tope(datos(semana=91, ahora=ahora), ahora)
         self.assertEqual((t["modelo_max"], t["esfuerzo_max"]), ("haiku", "medium"))
 
+    def test_semana_al_91_antes_del_corte_el_motivo_dice_el_porcentaje(self):
+        ahora = epoch(2026, 11, 12, 20, 0)
+        t = tope(datos(semana=91, ahora=ahora), ahora)
+        self.assertEqual(t["motivo"], "tope semana 91% → haiku")
+
     def test_viernes_despues_del_corte_95_es_libre(self):
         t = tope(datos(semana=95, ahora=VIERNES), VIERNES)
         self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]), ("opus", "high", None))
