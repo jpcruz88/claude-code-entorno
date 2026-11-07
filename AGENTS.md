@@ -297,3 +297,13 @@ Esto no es para instalar, sino para quien mantiene el repo:
   BOM, PowerShell 5.1 rompe las tildes. Lo comprueba `pruebas/test_instalar.py`.
 - Los mensajes de commit terminan solo con la línea `Co-Authored-By`, sin la
   línea `Claude-Session`.
+- **Archivos `._*` de macOS.** Son metadatos (AppleDouble) que aparecen al copiar
+  a discos exFAT o FAT. Bórralos siempre, sin preguntar, antes de correr pruebas
+  o de hacer commit: `find . -name '._*' -not -path './.git/*' -delete`. Git ya los
+  ignora (`.gitignore`), pero las pruebas y los runners de plugins los leen como
+  si fueran código y fallan.
+- **La prueba real la corre el agente, no el usuario.** Si cambias un mod, no le
+  pidas que lo pruebe: arranca Claude Code con ese mod (`claude --plugin-dir
+  mods/<nombre>` o el equivalente), haz la prueba de punta a punta y enséñale el
+  resultado con la salida real. Las pruebas unitarias no bastan para decir que un
+  mod funciona.
