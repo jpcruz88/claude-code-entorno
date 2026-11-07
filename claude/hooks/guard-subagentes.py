@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""PreToolUse(Agent|Task|Workflow): los subagentes usan Haiku, Sonnet u Opus, con esfuerzo hasta high.
+"""PreToolUse(Agent|Task|Workflow): los subagentes usan Haiku, Sonnet u Opus, con tope por uso.
 
 Regla: cualquier agente o subagente usa haiku, sonnet u opus (o su id completo, como
-claude-opus-5-5), con esfuerzo low, medium o high. Se bloquean xhigh, max y cualquier otro
-modelo, Fable incluido. Fable nunca se permite.
+claude-opus-5-5), con esfuerzo low, medium, high o xhigh. Se bloquean max y cualquier otro
+modelo, Fable incluido. Fable nunca se permite. xhigh nunca se bloquea en Agent / Task: si
+el tope de uso (jev_limites) no lo permite, se baja con `updatedInput`.
 
 Qué revisa:
 - Agent / Task: el parámetro `model` debe ser haiku, sonnet u opus (o claude-<familia>-…)
-  y el `effort`, low, medium o high. Si falta cualquiera de los dos, se bloquea: hay que
+  y el `effort`, low, medium, high o xhigh. Si falta cualquiera de los dos, se bloquea: hay que
   ponerlo explícito.
 - Jev (solo Agent / Task): si Claude pidió un modelo y un esfuerzo válidos, Jev elige
   ambos. Si Jev está seguro (confianza ≥ umbral), su elección reemplaza la de Claude y se
   devuelve con `updatedInput`. Cada decisión queda en ~/.claude/jev/decisiones.jsonl sin
   el encargo. Cualquier fallo de Jev deja pasar lo que eligió Claude.
+- Tope de uso (solo Agent / Task): tras Jev, jev_limites calcula el modelo y el esfuerzo
+  máximos según ~/.claude/jev/limites.json. Si la elección final los supera, se baja con
+  `updatedInput` y queda una línea `tope` en decisiones.jsonl. Nunca hace deny; cualquier
+  fallo equivale a sin tope.
 - Workflow: el script debe fijar un modelo permitido en cada agent() y nunca un esfuerzo
-  mayor que high. Jev no rutea workflows.
+  mayor que high (un workflow no se puede bajar con el tope, así que xhigh se bloquea). Jev no rutea workflows.
 
 Funciona con python3 (3.6 o más nuevo), sin dependencias. Si algo falla dentro del
 guardián, deja pasar la acción: un error propio nunca debe frenar el trabajo normal.
@@ -25,6 +30,7 @@ import os
 import re
 import sys
 import threading
+import time
 
 try:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -32,7 +38,13 @@ try:
 except Exception:
     jev_cliente = None  # sin Jev el guardián funciona como antes
 
-ESFUERZOS_PERMITIDOS = ("low", "medium", "high")
+try:
+    import jev_limites
+except Exception:
+    jev_limites = None  # sin el módulo de topes el guardián funciona sin topes
+
+ESFUERZOS_PERMITIDOS = ("low", "medium", "high", "xhigh")
+ESFUERZO_MAX_WORKFLOW = "high"  # un workflow no se puede bajar con updatedInput
 MODELOS_PERMITIDOS = ("haiku", "sonnet", "opus")
 OPCIONES_JEV = {"modelo": list(MODELOS_PERMITIDOS), "esfuerzo": list(ESFUERZOS_PERMITIDOS)}
 DESCRIPCION_MAX = 60
@@ -45,8 +57,8 @@ LLAMADA_AGENTE = re.compile(r"\bagent\s*\(")
 RE_ID_DE_FAMILIA = re.compile(r"claude-(?:%s)(?:-.*)?" % "|".join(MODELOS_PERMITIDOS))
 
 CONSEJO = ("Regla (~/.claude/rules/modelo.md): los agentes y subagentes usan haiku, sonnet u "
-           "opus, con esfuerzo low, medium o high; nunca Fable ni xhigh o max. Vuelve a "
-           "llamarlo con un modelo permitido y un esfuerzo permitido.")
+           "opus, con esfuerzo low, medium, high o xhigh (el tope de uso puede bajarlo); nunca "
+           "Fable ni max. Vuelve a llamarlo con un modelo permitido y un esfuerzo permitido.")
 
 
 def deny(motivo):
@@ -58,11 +70,20 @@ def deny(motivo):
     sys.exit(0)
 
 
-def allow(entrada_actualizada):
+def razon_del_ajuste(por_jev, por_tope):
+    """Dice quién cambió el modelo o el esfuerzo: Jev, el tope de uso o los dos."""
+    if por_jev and por_tope:
+        return "Jev y el tope de uso ajustaron el modelo o el esfuerzo del agente."
+    if por_tope:
+        return "Tope de uso ajustó el modelo o el esfuerzo del agente."
+    return "Jev ajustó el modelo o el esfuerzo del agente."
+
+
+def allow(entrada_actualizada, por_jev=True, por_tope=False):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "allow",
-        "permissionDecisionReason": "Jev ajustó el modelo o el esfuerzo del agente.",
+        "permissionDecisionReason": razon_del_ajuste(por_jev, por_tope),
         "updatedInput": entrada_actualizada,
     }}))
 
@@ -92,9 +113,9 @@ def validar_agente(modelo, esfuerzo):
     if not es_modelo_permitido(modelo):
         deny("El agente pide model=%r; solo se permiten haiku, sonnet y opus." % modelo)
     if not esfuerzo:
-        deny("El agente no fija effort; debe ser low, medium o high.")
+        deny("El agente no fija effort; debe ser low, medium, high o xhigh.")
     if esfuerzo not in ESFUERZOS_PERMITIDOS:
-        deny("El agente pide effort=%r; el máximo permitido es high." % esfuerzo)
+        deny("El agente pide effort=%r; el máximo permitido es xhigh." % esfuerzo)
 
 
 def _comparable(tipo, valor):
@@ -159,13 +180,53 @@ def rutear_con_jev(entrada, modelo, esfuerzo, session_id):
         return modelo, esfuerzo
 
 
+def _sin_topes(modelo, esfuerzo):
+    """Sin poder calcular el tope, xhigh baja a high (xhigh exige conocer el uso); nunca deny."""
+    return modelo, ("high" if esfuerzo == "xhigh" else esfuerzo)
+
+
+def aplicar_tope_de_uso(entrada, modelo, esfuerzo, session_id):
+    """Baja modelo y esfuerzo al tope vigente y registra la línea `tope`. Nunca lanza."""
+    if jev_limites is None:
+        return _sin_topes(modelo, esfuerzo)
+    try:
+        home = os.path.expanduser("~")
+        ahora = time.time()
+        limites = jev_limites.leer_limites(home, ahora)
+        config = jev_cliente.cargar_config(home) if jev_cliente is not None else {}
+        tope = jev_limites.calcular_tope(limites, ahora, config)
+        nuevo_modelo, nuevo_esfuerzo = jev_limites.aplicar_tope(modelo, esfuerzo, tope)
+        if (nuevo_modelo, nuevo_esfuerzo) == (modelo, esfuerzo):
+            return modelo, esfuerzo
+    except Exception:
+        return _sin_topes(modelo, esfuerzo)  # un fallo al leer o calcular: sin tope, sin xhigh
+    try:
+        motivo = tope.get("motivo")
+        if nuevo_esfuerzo != esfuerzo and "esfuerzo" not in (motivo or ""):
+            motivo = "%s; esfuerzo %s → %s" % (motivo or "tope", esfuerzo, nuevo_esfuerzo)
+        if jev_cliente is not None:
+            jev_cliente.registrar(home, {
+                "hora": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                "session_id": session_id, "tipo": "tope", "opcion": nuevo_modelo,
+                "claude": modelo, "aplicada": True, "motivo": motivo,
+                "descripcion": texto(entrada.get("description"))[:DESCRIPCION_MAX]})
+    except Exception:
+        pass
+    return nuevo_modelo, nuevo_esfuerzo
+
+
 def revisar_agente(entrada, session_id=None):
-    """Devuelve la entrada reescrita si Jev cambió algo; None si pasa tal cual."""
+    """Devuelve (entrada reescrita, por_jev, por_tope) si algo cambió; None si pasa tal cual."""
     modelo = texto(entrada.get("model")).strip()
     esfuerzo = texto(entrada.get("effort")).strip().lower()
     validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: Fable nunca llega a Jev
     final_modelo, final_esfuerzo = rutear_con_jev(entrada, modelo, esfuerzo, session_id)
     validar_agente(final_modelo, final_esfuerzo)
+    tras_jev = (final_modelo, final_esfuerzo)
+    final_modelo, final_esfuerzo = aplicar_tope_de_uso(entrada, final_modelo, final_esfuerzo,
+                                                       session_id)
+    por_jev = tras_jev != (modelo, esfuerzo)
+    por_tope = (final_modelo, final_esfuerzo) != tras_jev
     cambios = {}
     if final_modelo != modelo:
         cambios["model"] = final_modelo
@@ -173,7 +234,7 @@ def revisar_agente(entrada, session_id=None):
         cambios["effort"] = final_esfuerzo
     if not cambios:
         return None
-    return dict(entrada, **cambios)
+    return dict(entrada, **cambios), por_jev, por_tope
 
 
 def revisar_workflow(entrada, session_id=None):
@@ -188,8 +249,9 @@ def revisar_workflow(entrada, session_id=None):
     if sum(1 for m in modelos if m and es_modelo_permitido(m)) < llamadas:
         deny("Hay agent() sin model explícito (haiku, sonnet u opus) en el workflow.")
     for esfuerzo in (e.strip().lower() for e in ESFUERZO_EN_GUION.findall(guion)):
-        if esfuerzo and esfuerzo not in ESFUERZOS_PERMITIDOS:
-            deny("El script del workflow pide effort=%r; el máximo es high." % esfuerzo)
+        if esfuerzo and (esfuerzo not in ESFUERZOS_PERMITIDOS or esfuerzo == "xhigh"):
+            deny("El script del workflow pide effort=%r; el máximo es %s."
+                 % (esfuerzo, ESFUERZO_MAX_WORKFLOW))
     return None
 
 
@@ -220,7 +282,7 @@ def main():
     except Exception:
         return  # ante un fallo del guardián, no bloquear el trabajo normal
     if actualizada is not None:
-        allow(actualizada)
+        allow(*actualizada)
 
 
 if __name__ == "__main__":

@@ -82,7 +82,7 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
-import { leerDecisiones, lineaLog, marcaTarjeta, resumenJev } from './jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
@@ -107,7 +107,7 @@ const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
 const sesion = atom({ plugin: 'tablero', key: 'sesion' } as const, DEFAULT_SESION)
-const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [] } as JevEstado)
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [], limites: null } as JevEstado)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
 
@@ -156,8 +156,10 @@ async function cambiarSesion($: EngineInterface, cambio: (s: Sesion) => Sesion) 
 
 /** Un valor guardado de cualquier forma: el de antes (`vistas`) se lee como cursor vacío, sin romperse. */
 function normalizeJev(stored: unknown): JevEstado {
-  const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [] }, stored)
-  return { decisiones: listOf<DecisionJev>(j.decisiones), ultima: typeof j.ultima === 'number' ? j.ultima : null, claves: listOf<string>(j.claves) }
+  const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [], limites: null }, stored)
+  // `limites` pasa por leerLimites: un valor guardado con otra forma (o sin la clave) queda en null.
+  const limites = j.limites ? leerLimites(JSON.stringify(j.limites)) : null
+  return { decisiones: listOf<DecisionJev>(j.decisiones), ultima: typeof j.ultima === 'number' ? j.ultima : null, claves: listOf<string>(j.claves), limites }
 }
 
 async function getJev($: EngineInterface): Promise<JevEstado> {
@@ -184,6 +186,9 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
+  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Roto o ausente es «sin dato».
+  const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
+  const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
   // Las nuevas se calculan dentro de la escritura, sobre el cursor que ya dejó la lectura anterior: dos lecturas
   // a la vez no logean la misma decisión dos veces.
@@ -196,6 +201,7 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
       decisiones: ds,
       ultima: Number.isFinite(ultima) ? ultima : null,
       claves: [...previo.claves, ...nuevas.map(claveDeDecision)].slice(-CLAVES_JEV),
+      limites,
     }
   })
   for (const d of nuevas) await say($, 'jev', lineaLog(d), 'info')
@@ -855,8 +861,8 @@ export const register: Register = (on, options) => {
       pasosDeAgentes($),
       getJev($),
     ])
-    const jevN = jevs.decisiones.length
-    const resumenJevs = resumenJev(jevs.decisiones)
+    const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
+    const jevN = resumenJevs.total
     const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
@@ -1456,7 +1462,7 @@ export const register: Register = (on, options) => {
 
     // ---- log: whatever rows the other panels leave, 4 to 8
     // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 : 0) + (enDiagrama ? (jevVisible ? 1 : 0) + (panels.includes('agents') ? 3 : 0) + (panels.includes('agents') && running.length === 0 ? 3 : 0) + 1 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
+    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 + (resumenJevs.ritmo ? 1 : 0) : 0) + (enDiagrama ? (jevVisible ? 1 : 0) + (panels.includes('agents') ? 3 : 0) + (panels.includes('agents') && running.length === 0 ? 3 : 0) + 1 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
     const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
     const nLog = logRows(bodyRows, used)
     const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)

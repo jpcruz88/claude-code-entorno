@@ -25,7 +25,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
 | Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
-| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet` u `opus`, con esfuerzo `low`, `medium` o `high`. Jev puede elegir el modelo y el esfuerzo (§3). |
+| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet` u `opus`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
 | Hook `jev-reintento.py` | Después de un fallo de herramienta | Al segundo fallo seguido con el mismo error, pregunta a Jev si reintentar, cambiar de enfoque o parar. Su sugerencia llega como nota. |
 | Memoria persistente | Al empezar y al guardar un dato | Ver §5. |
 
@@ -41,10 +41,13 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
   `/model`. Vale solo para esa tarea.
 - Fable no se usa por omisión; solo si lo pides de forma explícita.
 - **Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-  `low`, `medium` o `high`. Fable, `xhigh` y `max` se bloquean. El hook
-  `guard-subagentes.py` aplica esa regla a Agent, Task y Workflow. En un workflow,
-  cada `agent()` debe fijar un `model` permitido, y ningún `effort` puede pasar de
-  `high`. Jev no elige modelos dentro de los workflows.
+  `low`, `medium`, `high` o `xhigh`. `xhigh` es para tareas muy difíciles (causa
+  raíz poco clara, diseño delicado o razonamiento largo) y solo pasa si el tope de
+  uso lo permite (ver «Tope por uso de la cuenta», más abajo). Fable y `max` se
+  bloquean siempre. El hook `guard-subagentes.py` aplica esa regla a Agent, Task y
+  Workflow. En un workflow, cada `agent()` debe fijar un `model` permitido, y ningún
+  `effort` puede pasar de `high`: un `xhigh` en un workflow se bloquea, porque el tope
+  no puede bajarlo. Jev no elige modelos dentro de los workflows.
 
 ### Jev: decisiones de modelo y de reintento
 
@@ -89,6 +92,109 @@ Ejemplo, para subir el umbral y acortar el tiempo máximo:
   "timeout": 1.5
 }
 ```
+
+### Tope por uso de la cuenta
+
+Tu suscripción tiene dos límites de uso: el de 5 horas y el semanal. Antes de lanzar
+cada subagente, el guardián `guard-subagentes.py` calcula un **tope** de modelo y de
+esfuerzo con el uso actual de la cuenta, y lo aplica a la elección final, sea de Jev
+o de Claude. Su objetivo es que gastes la suscripción casi entera sin quedarte sin
+uso antes del viernes. El tope **solo baja** el modelo o el esfuerzo con
+`updatedInput`; nunca bloquea un subagente.
+
+El uso es **de la cuenta**, no de la sesión. Si tienes varios proyectos abiertos,
+todos ven el mismo dato, y el tope se recalcula en cada subagente.
+
+**El archivo `~/.claude/jev/limites.json`.** La línea de estado lo escribe en cada
+redibujo, de forma atómica, con el uso y la hora de reinicio de la ventana de 5 horas
+y de la semana. Sin el archivo, con JSON roto, o con un dato de más de 6 horas, no
+hay tope. Tampoco lo hay si la línea de estado no recibe datos de suscripción, como
+ocurre con una clave de API. Un dato que falta nunca se inventa.
+
+**Ritmo semanal.** El ritmo ideal sube en línea recta desde 0 % al inicio de la
+semana hasta 90 % en el corte, que es el jueves a las 23:00 (hora local). El exceso
+es tu uso de la semana menos ese ritmo, en puntos. Antes del corte, el exceso marca
+el escalón:
+
+| Exceso | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| ≤ −10 | opus | xhigh |
+| ≤ 5 | opus | high |
+| ≤ 10 | opus | medium |
+| ≤ 15 | sonnet | high |
+| ≤ 25 | sonnet | medium |
+| > 25, o uso ≥ 90 % | haiku | medium |
+
+Después del corte, la semana no baja nada hasta 97 % de uso: queda opus con xhigh y
+decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
+
+**Ventana de 5 horas.** El uso de la ventana marca el escalón:
+
+| Uso | Modelo máximo | Esfuerzo máximo |
+|---|---|---|
+| < 60 % | opus | xhigh |
+| 60 % a 75 % | opus | medium |
+| 75 % a 85 % | sonnet | medium |
+| ≥ 85 % | haiku | medium |
+
+Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su reinicio
+ya pasó, cuenta como sin dato.
+
+**Combinación.** Se toman el menor modelo y el menor esfuerzo de las dos ventanas.
+El motivo que se anota es el de la ventana que baja el modelo, por ejemplo
+`tope semana +12 pts → sonnet` o `tope 5h 78% → sonnet`.
+
+**`xhigh`.** Solo pasa si se cumplen todas estas condiciones: hay datos de las dos
+ventanas y la de 5 horas sigue vigente; la ventana de 5 horas va bajo 60 % o está en
+gracia (se reinicia en menos de 15 minutos); y, antes del corte, la semana va al
+menos 10 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro
+caso baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas,
+baja a `high`, porque necesita conocer las dos. Sin ningún dato, el esfuerzo máximo
+es `high`. `max` sigue bloqueado.
+
+**Qué ves.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`,
+con lo que quedó y lo que había, y el tablero la muestra en el log como
+`tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de
+Jev. Con dato, la caja JEV del tablero muestra además la fila de ritmo, por ejemplo
+`semana 52% · ritmo 40% · +12`: verde hasta +5, ámbar de +5 a +15 y rojo por encima.
+Añade `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
+arriba (las dos ventanas con dato, la de 5 horas bajo 60 % o en gracia, y la semana a
+−10 o menos antes del corte, o bajo 97 % después). Si vas por debajo del ritmo, el
+tope solo quita límites: no sube modelos para gastar más. Eso lo decides tú.
+
+La fila del tablero usa los valores por defecto y no lee `config.json`. Si cambias
+`limites`, el tope real puede no coincidir con lo que muestra la fila.
+
+El dato lo escribe la línea de estado de este repo (`claude/statusline.sh`). Quien use
+otra línea de estado no tendrá topes.
+
+**Configuración.** La clave `limites` de `~/.claude/jev/config.json` cambia los
+valores. Es opcional: sin ella se usan los de `DEFAULTS_LIMITES` en
+`claude/hooks/jev_limites.py`. Si cambias una lista de escalones, reemplaza la lista
+entera. Ejemplo:
+
+```json
+{
+  "limites": {
+    "meta_corte": 90,
+    "final": 97
+  }
+}
+```
+
+| Clave | Por defecto | Qué hace |
+|---|---|---|
+| `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
+| `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
+| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. |
+| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. |
+| `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana no pone tope. |
+| `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
+| `corte_hora` | `23` | Hora local del corte. |
+| `max_antiguedad_h` | `6` | Horas máximas de antigüedad de `limites.json`. |
+
+`corte_dia` y `corte_hora` deben caer poco antes de tu reinicio semanal. Si el corte
+queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real.
 
 ## 4. Flujo recomendado para cambios de código
 

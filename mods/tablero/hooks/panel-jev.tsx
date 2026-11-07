@@ -1,12 +1,12 @@
-// La caja JEV: total de decisiones y una fila por tipo, con su confianza y sharp/split. Solo dibujo: los datos
+// La caja JEV: total de decisiones, una fila por tipo con su confianza y sharp/split, y la fila de ritmo semanal. Solo dibujo: los datos
 // vienen de resumenJev (jev-modelo.ts), que ya los separa por sesión.
 import type { EngineInterface } from 'claude-code'
 
 import type { Colors } from './core'
-import type { FilaJev } from './jev-modelo'
+import type { FilaJev, NivelRitmo } from './jev-modelo'
 
 type Elementos = ReturnType<EngineInterface['ui']['resolve']>
-export type ResumenJevPanel = { total: number; filas: FilaJev[] }
+export type ResumenJevPanel = { total: number; filas: FilaJev[]; ritmo?: { texto: string; nivel: NivelRitmo } | null }
 
 /** Separador de miles con coma: 1382 → 1,382. */
 export const miles = (n: number) => String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
@@ -66,6 +66,11 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
         </Box>
       </Box>
       {resumen.total === 0 ? <Text color={colores.faint}>sin decisiones aún</Text> : resumen.filas.map(f => <Box key={f.tipo}>{fila(f)}</Box>)}
+      {resumen.ritmo ? (
+        <Text color={{ verde: colores.gate, ambar: colores.amber, rojo: colores.warn }[resumen.ritmo.nivel]} wrap="truncate">
+          {resumen.ritmo.texto}
+        </Text>
+      ) : null}
       {resumen.total > 0 ? (
         <Text dimColor wrap="wrap">
           sharp → se aplica en código · split → decide Claude

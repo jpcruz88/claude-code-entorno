@@ -1,5 +1,5 @@
 /** Tipos de Jev. El contrato es autocontenido (no importa de hooks/): copia de hooks/jev-modelo.ts. */
-export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento'
+export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento' | 'tope'
 
 export type DecisionJev = {
   hora: number
@@ -11,6 +11,14 @@ export type DecisionJev = {
   claude: string | null
   aplicada: boolean
   descripcion: string
+  motivo: string
+}
+
+/** Lo que escribe la statusline en limites.json (epoch en segundos). */
+export type LimitesJev = {
+  actualizado: number
+  five_hour?: { usado: number; reinicio: number }
+  seven_day?: { usado: number; reinicio: number }
 }
 
 export type Moment = 'before a plan' | 'error repeats' | 'before done'
@@ -202,6 +210,7 @@ declare module 'claude-code' {
 
 /**
  * Las decisiones de Jev de la sesión y el cursor del log: la hora de la última logueada y las claves (hora, tipo,
- * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora.
+ * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora. `limites` es el último
+ * limites.json válido (null sin archivo o roto); un valor guardado antes de existir se lee como null.
  */
-export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[] }
+export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[]; limites: LimitesJev | null }
