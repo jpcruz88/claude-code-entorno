@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 (tablero)
+
+- Vista en diagrama (`layout: diagrama`): el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas de los subagentes. Los paneles que el diagrama no tiene sitio (permisos, bucles, turno y sesión) siguen en columna debajo, sin perderse.
+- `auto` elige el diagrama desde 66 columnas acopladas y lo usa en lugar de las dos columnas que tenía desde 110. Por debajo de 66, sigue la columna de siempre.
+- Caja JEV y panel `jev`: muestran las decisiones que tomaron los hooks de Jev (`~/.claude/jev/decisiones.jsonl`). El mod solo lee ese archivo; no usa red.
+- El log muestra una línea `jev` por cada decisión: qué eligió Claude, qué confianza dio Jev y si la decisión se aplicó o quedó como `sin respuesta`.
+- La barra sobre el prompt muestra `jev [N decisiones]` cuando hay decisiones registradas.
+- Las tarjetas de subagente muestran la marca `jev ↑ sonnet` (o `jev ↓ haiku`) cuando Jev cambió el modelo o el esfuerzo que había elegido Claude. Si Jev coincidió con Claude, no hay marca.
+- El asesor de guardia siempre aparece en el diagrama, también sin consultas («de guardia», «aún sin consultas»); solo lo quita `panels` si no incluye `architect`.
+- La etiqueta por defecto del asesor pasa de `ARQUITECTO` a `ASESOR`, que cabe en la columna del diagrama y coincide con la spec. Si la tenías configurada, no cambia; si usabas la de por defecto, verás `ASESOR`.
+
 ## 0.2.4 (tablero)
 
 - Cada tarjeta de subagente tiene una barra de avance: llena según los pasos que reporta (`██████░░ 3/4`). Sin pasos, mientras camina, un bloque va y viene por la barra; con la animación apagada queda fijo.

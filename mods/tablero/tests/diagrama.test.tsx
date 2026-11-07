@@ -242,7 +242,7 @@ const TITULOS = ['Escribir las pruebas de regresión del cargador de configuraci
 test('asesor de guardia visible en el diagrama aunque no haya consultas', async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(66) as never)
-  expect(await ui.find({ text: /^ARQUITECTO · de guardia$/ })).toBeDefined()
+  expect(await ui.find({ text: /^ASESOR · de guardia$/ })).toBeDefined()
   expect(await ui.find({ text: /aún sin consultas/ })).toBeDefined()
   await ui.unmount()
 })
@@ -250,7 +250,7 @@ test('asesor de guardia visible en el diagrama aunque no haya consultas', async 
 test('sin el panel architect en panels no hay asesor en el diagrama', { options: { panels: 'main,jev,agents,log' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(66) as never)
-  expect(await ui.find({ text: /^ARQUITECTO/ })).toBeUndefined()
+  expect(await ui.find({ text: /^ASESOR/ })).toBeUndefined()
   await ui.unmount()
 })
 

@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
@@ -26,10 +26,10 @@
       "default": "advisor|architect"
     },
     "architectLabel": {
-      "title": "Etiqueta del arquitecto",
-      "description": "Nombre que se muestra para el rol de arquitecto",
+      "title": "Etiqueta del asesor",
+      "description": "Nombre que se muestra para el rol de asesor (el asesor de guardia que consulta al modelo más capaz)",
       "type": "string",
-      "default": "ARQUITECTO"
+      "default": "ASESOR"
     },
     "gateLabel": {
       "title": "Etiqueta de permisos",
