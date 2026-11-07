@@ -1455,7 +1455,7 @@ export const register: Register = (on, options) => {
 
     // ---- log: whatever rows the other panels leave, 4 to 8
     // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
+    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 : 0) + (enDiagrama ? (jevVisible ? 1 : 0) + (panels.includes('agents') ? 3 : 0) + (panels.includes('agents') && running.length === 0 ? 3 : 0) + 1 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
     const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
     const nLog = logRows(bodyRows, used)
     const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)
@@ -1641,7 +1641,8 @@ export const register: Register = (on, options) => {
 
     // El diagrama: el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas. Los paneles
     // que el diagrama no tiene sitio (permisos, bucles, turno, sesión) siguen en columna debajo, sin perderse.
-    const conAsesor = panels.includes('architect')
+    // En el diagrama el asesor sale siempre, «de guardia» también sin consultas; solo lo quita `panels` sin architect.
+    const conAsesor = cfg.panels.includes('architect')
     const { aw, rw } = anchosDiagrama(W, conAsesor)
     const conTarjetas = panels.includes('agents')
     const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents', 'log'].includes(p))
