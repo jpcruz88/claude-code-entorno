@@ -224,19 +224,19 @@ const colorDeFila = async ($: Parameters<Parameters<typeof test>[1]>[0], usado: 
 }
 
 // Ritmo 45 %: 1 % queda 44 puntos por debajo, 55 % está 10 por encima y 70 % está 25 por encima.
-test('la fila de ritmo va en verde con el uso por debajo del ritmo', async ($, on) => {
+test('la fila de ritmo va en verde con el uso por debajo del ritmo', { options: { palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(1), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 1)).toBe('success')
 })
 
-test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', async ($, on) => {
+test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', { options: { palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(55), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 55)).toBe('warning')
 })
 
-test('la fila de ritmo va en rojo con más de 15 puntos por encima', async ($, on) => {
+test('la fila de ritmo va en rojo con más de 15 puntos por encima', { options: { palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(70), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 70)).toBe('error')
