@@ -97,3 +97,30 @@ test('la barra indeterminada tiene el ancho pedido y su bloque se mueve con el t
   expect(a).not.toBe(b)
   expect(barraIndeterminada(0, 2)).toBe('██')
 })
+
+// Indicador por estado: la luna gira mientras el agente trabaja; terminado ✅, fallido ❌, detenido 🛑.
+import { CARRILES_VISIBLES, emojiDeEstado } from '../hooks/agentes-anim'
+
+test('un agente en marcha muestra una luna que gira, un cuadro por paso', () => {
+  expect(emojiDeEstado(0, 'running')).toBe('🌑')
+  expect(emojiDeEstado(PASO_AGENTE_MS, 'running')).toBe('🌒')
+  expect(emojiDeEstado(8 * PASO_AGENTE_MS, 'running')).toBe('🌑')
+})
+
+test('cada agente va en su fase: el desfase cambia la luna de un mismo instante', () => {
+  expect(emojiDeEstado(0, 'running', 1)).toBe('🌒')
+})
+
+test('con la animación apagada, un agente en marcha muestra siempre la misma luna', () => {
+  expect(emojiDeEstado(3 * PASO_AGENTE_MS, 'running', 0, false)).toBe('🌑')
+})
+
+test('terminado, fallido y detenido tienen su emoji fijo', () => {
+  expect(emojiDeEstado(0, 'done')).toBe('✅')
+  expect(emojiDeEstado(0, 'failed')).toBe('❌')
+  expect(emojiDeEstado(0, 'stopped')).toBe('🛑')
+})
+
+test('la lista muestra hasta siete agentes', () => {
+  expect(CARRILES_VISIBLES).toBe(7)
+})

@@ -71,7 +71,7 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulso } from './animacion'
-import { barraAvance, barraIndeterminada, emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
+import { CARRILES_VISIBLES, barraAvance, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
 import { nombreDeTipo } from './savvy-core'
 import { filasVida, svgVida, vidaDe } from './vida'
@@ -1101,23 +1101,16 @@ export const register: Register = (on, options) => {
 
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
-    const glyph = (c: AgentCard) => glifoAgente(now, c.status, cfg.animacion)
-    // El emoji del agente en su pista: va de un lado a otro mientras trabaja y se queda quieto al terminar.
-    // `g` son las celdas de la pista (antes, barra, después); `i` desfasa a cada agente para que no vayan a la vez.
-    const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }, i: number) => {
-      const total = g.before + g.bar + g.after
-      const quieto = Math.max(0, Math.min(total - 2, g.before + g.bar - 2))
-      const p = total < 2 ? null : c.status === 'running' && cfg.animacion ? posicionMarcha(now, total, i * 3) : quieto
-      const { antes, despues } = pistaCarril(g, p)
+    // El emoji de estado: una luna que gira mientras el agente trabaja (cada uno en su fase) y ✅, ❌ o 🛑 al acabar.
+    const glyph = (c: AgentCard, i: number) => emojiDeEstado(now, c.status, i, cfg.animacion)
+    // La pista del agente: la barra en su color. El emoji va al principio de la fila, no en la pista.
+    const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }) => {
+      const { antes, despues } = pistaCarril(g, null)
       const color = (t: { barra: boolean }) => (t.barra ? statusColor(c) : C.faint)
       return (
         <Text>
-          {antes.map((t, k) => (
-            <Text key={`a${k}`} color={color(t)}>{t.texto}</Text>
-          ))}
-          {p === null ? null : <Text>{emojiDe(c.id)}</Text>}
-          {despues.map((t, k) => (
-            <Text key={`d${k}`} color={color(t)}>{t.texto}</Text>
+          {[...antes, ...despues].map((t, k) => (
+            <Text key={k} color={color(t)}>{t.texto}</Text>
           ))}
         </Text>
       )
@@ -1137,7 +1130,7 @@ export const register: Register = (on, options) => {
           </Text>
           {cards.length > 0 ? (
             <Box flexShrink={0}>
-              <Text color={C.faint}>{`1-${Math.min(cards.length, useLanes ? 6 : fit)}${isNarrow ? '' : ' abrir'}`}</Text>
+              <Text color={C.faint}>{`1-${Math.min(cards.length, useLanes ? CARRILES_VISIBLES : fit)}${isNarrow ? '' : ' abrir'}`}</Text>
             </Box>
           ) : null}
         </Box>
@@ -1151,11 +1144,11 @@ export const register: Register = (on, options) => {
         )
       }
       if (useLanes) {
-        const shown = cards.slice(-6)
-        // A lane is its glyph, a label, the bar and a clock: below 34 columns the label narrows, below
-        // 36 the bar, so a 24-column pane still holds it. From 40 they are as they always were.
-        const labelW = Math.min(17, Math.max(7, w - 17))
-        const barW = Math.max(4, w - 11 - labelW)
+        const shown = cards.slice(-CARRILES_VISIBLES)
+        // A lane is its glyph (an emoji, two columns), a label, the bar and a clock: below 34 columns the label
+        // narrows, below 36 the bar, so a 24-column pane still holds it. From 40 they are as they always were.
+        const labelW = Math.min(17, Math.max(7, w - 18))
+        const barW = Math.max(4, w - 12 - labelW)
         const geo = lanes(shown, now, barW)
         return (
           <Box flexDirection="column" width={w}>
@@ -1167,13 +1160,13 @@ export const register: Register = (on, options) => {
               return (
                 <Box columnGap={1}>
                   <Text color={statusColor(c)} bold={isViewed}>
-                    {isViewed ? '▶' : glyph(c)}
+                    {isViewed ? '▶ ' : glyph(c, i)}
                   </Text>
                   <Box width={labelW} flexShrink={0}>
                     <Button key={`card-${c.id}`} plain hotkey={String(i + 1)} label={shorten(cardTitle(c), labelW - 3)} onPress={expandOnPress(c.id)} />
                   </Box>
                   <Box flexShrink={0}>
-                    {pistaDe(c, gm ?? { before: 0, bar: barW, after: 0 }, i)}
+                    {pistaDe(c, gm ?? { before: 0, bar: barW, after: 0 })}
                   </Box>
                   {clock(`lane-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}
                 </Box>
@@ -1221,10 +1214,10 @@ export const register: Register = (on, options) => {
                         : barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
                     </Text>
                   ) : null}
-                  {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
+                  {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 })}
                   <Box columnGap={1}>
                     <Text color={c.lastStop === 'max_tokens' ? C.warn : statusColor(c)}>
-                      {cardW >= 26 ? `${glyph(c)} ${c.lastStop === 'max_tokens' ? 'tope de tokens' : statusLabel(c.status)}` : glyph(c)}
+                      {cardW >= 26 ? `${glyph(c, i)} ${c.lastStop === 'max_tokens' ? 'tope de tokens' : statusLabel(c.status)}` : glyph(c, i)}
                     </Text>
                     <Box flexShrink={0}>{clock(`card-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}</Box>
                   </Box>
@@ -1460,9 +1453,9 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ) : null}
-          {live.map(c => (
+          {live.map((c, i) => (
             <Box columnGap={1}>
-              <Text color={statusColor(c)}>{glyph(c)}</Text>
+              <Text color={statusColor(c)}>{glyph(c, i)}</Text>
               <Box width={Math.max(6, W - 30)} flexShrink={0}>
                 <Text wrap="truncate">{cardTitle(c)}</Text>
               </Box>

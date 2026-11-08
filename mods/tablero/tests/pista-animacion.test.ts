@@ -1,8 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { emojiDe } from '../hooks/agentes-anim'
-
 const pane = (bodyColumns: number) => ({
   plugin: 'tablero',
   component: 'Pane' as const,
@@ -46,49 +44,47 @@ const texto = (n: unknown): string => {
   return ''
 }
 
-// La pista del carril: el Text que contiene el emoji del agente como hijo. Devuelve su texto completo.
-const pistaDe = (arbol: unknown, emoji: string): string | undefined => {
-  let hallada: string | undefined
-  const visita = (n: unknown): void => {
-    if (hallada !== undefined || !n || typeof n !== 'object') return
-    const hijos = (n as { children?: unknown }).children
-    if (!Array.isArray(hijos)) return
-    if (hijos.some(h => h && typeof h === 'object' && (h as { type?: string }).type === 'Text' && texto(h) === emoji)) {
-      hallada = texto(n)
-      return
+// La luna del agente: el nodo más pequeño que contiene una luna (el emoji de estado de su fila).
+const LUNA = /[🌑🌒🌓🌔🌕🌖🌗🌘]/u
+const lunaDe = (arbol: unknown): string | undefined => {
+  const hijos = (n: unknown): unknown[] =>
+    n && typeof n === 'object' && Array.isArray((n as { children?: unknown }).children) ? (n as { children: unknown[] }).children : []
+  const busca = (n: unknown): string | undefined => {
+    if (!LUNA.test(texto(n))) return undefined
+    for (const h of hijos(n)) {
+      const r = busca(h)
+      if (r !== undefined) return r
     }
-    hijos.forEach(visita)
+    return texto(n)
   }
-  visita(arbol)
-  return hallada
+  return busca(arbol)
 }
 
-test('con animación apagada, el emoji del agente no cambia de sitio mientras trabaja', { options: { banda: true, animacion: false } }, async ($, on) => {
+test('con animación apagada, la luna del agente no cambia mientras trabaja', { options: { banda: true, animacion: false } }, async ($, on) => {
   const reloj = engine(on)
   await $.turn.start({ text: 'go', turnId: 'P1' })
   await $.agent.spawn(encargo as never)
-  const emoji = emojiDe('ag1')
   let ui = await $.ui.mount(pane(64) as never)
-  const primera = pistaDe(await ui.drawn(), emoji)
+  const primera = lunaDe(await ui.drawn())
   expect(primera).toBeDefined()
   // Ocho pasos de 250 ms; se vuelve a montar para que el panel se dibuje con la hora nueva.
   for (let k = 0; k < 8; k += 1) await reloj.advance(250)
   await ui.unmount()
   ui = await $.ui.mount(pane(64) as never)
-  expect(pistaDe(await ui.drawn(), emoji)).toBe(primera)
+  expect(lunaDe(await ui.drawn())).toBe(primera)
   await ui.unmount()
 })
 
-test('control: con animación encendida, el emoji sí se mueve', { options: { banda: true } }, async ($, on) => {
+test('control: con animación encendida, la luna sí gira', { options: { banda: true } }, async ($, on) => {
   const reloj = engine(on)
   await $.turn.start({ text: 'go', turnId: 'P2' })
   await $.agent.spawn(encargo as never)
-  const emoji = emojiDe('ag1')
   let ui = await $.ui.mount(pane(64) as never)
-  const primera = pistaDe(await ui.drawn(), emoji)
-  for (let k = 0; k < 8; k += 1) await reloj.advance(250)
+  const primera = lunaDe(await ui.drawn())
+  // Un paso de 250 ms: la luna avanza a la siguiente fase.
+  await reloj.advance(250)
   await ui.unmount()
   ui = await $.ui.mount(pane(64) as never)
-  expect(pistaDe(await ui.drawn(), emoji)).not.toBe(primera)
+  expect(lunaDe(await ui.drawn())).not.toBe(primera)
   await ui.unmount()
 })
