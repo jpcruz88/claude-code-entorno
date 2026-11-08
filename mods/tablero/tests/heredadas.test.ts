@@ -268,7 +268,7 @@ const spawn = (subagentType: string, description: string) => ({
   fork: false,
 })
 
-test('a fresh session draws on every surface and width, empty panels hidden', async ($, on) => {
+test('a fresh session draws on every surface and width, empty panels hidden', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     for (const cols of [40, 60, 86, 120]) {
@@ -486,7 +486,7 @@ test("a background architect's advice is read from its hand-back", async ($, on)
   await ui.unmount()
 })
 
-test('each rate-limit window shows the time to its reset where the main panel has room', async ($, on) => {
+test('each rate-limit window shows the time to its reset where the main panel has room', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   const at = (ms: number) => new Date(ms).toISOString()
@@ -511,7 +511,7 @@ test('each rate-limit window shows the time to its reset where the main panel ha
   await narrow.unmount()
 })
 
-test("the main box shows the last request's time to first token, and no tokens per second", async ($, on) => {
+test("the main box shows the last request's time to first token, and no tokens per second", { options: { layout: 'diagrama' } }, async ($, on) => {
   const clock = engine(on)
   // The model beneath: 800 ms to its first words, then 2 s more to stop after 120 tokens.
   on('turn.step', async function* () {
@@ -544,7 +544,7 @@ test("the main box shows the last request's time to first token, and no tokens p
   }
 })
 
-test('on a graphical surface, rows of marks hold fewer marks, keep the newest and clip at their box', async ($, on) => {
+test('on a graphical surface, rows of marks hold fewer marks, keep the newest and clip at their box', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   // The newest check is the one refused: its ✗ must stay in sight.
   on('tool.check', (_$, e) => ({ decision: e.tool_use_id === 'g29' ? 'deny' : 'allow' }))
@@ -691,7 +691,7 @@ const compactHost = (on: On, o: { window: () => number; compact: number | null; 
   return asked
 }
 
-test('the gauge and inline summary measure against the compaction window, read once per model window', { options: { palette: 'theme' } }, async ($, on) => {
+test('the gauge and inline summary measure against the compaction window, read once per model window', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   mock.clock(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   let window = 1_000_000
@@ -729,7 +729,7 @@ test('the gauge and inline summary measure against the compaction window, read o
 })
 
 const keepsModelWindow = (name: string, host: { compact: number | null; isEnabled?: boolean }, asks: number) =>
-  test(name, async ($, on) => {
+  test(name, { options: { layout: 'diagrama' } }, async ($, on) => {
     mock.clock(on)
     on('ui.status', () => ({ value: undefined }))
     on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -1006,7 +1006,7 @@ const busySession = async ($: Parameters<TestBody>[0], on: On) => {
   return clock
 }
 
-test('every panel fits the pane at every width from 24 columns, on every surface and placement, in lines a graphical surface keeps whole', { timeoutMs: 60_000 }, async ($, on) => {
+test('every panel fits the pane at every width from 24 columns, on every surface and placement, in lines a graphical surface keeps whole', { options: { layout: 'diagrama' }, timeoutMs: 60_000 }, async ($, on) => {
   await busySession($, on)
   const failures: string[] = []
   const check = async (label: string) => {

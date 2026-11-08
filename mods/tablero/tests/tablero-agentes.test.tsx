@@ -36,7 +36,7 @@ const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
     fork: false,
   } as never)
 
-test('el paso que reporta un trabajador aparece en su tarjeta de Tablero', async ($, on) => {
+test('el paso que reporta un trabajador aparece en su tarjeta de Tablero', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await lanzar($)
@@ -47,7 +47,7 @@ test('el paso que reporta un trabajador aparece en su tarjeta de Tablero', async
   await ui.unmount()
 })
 
-test('un subagente terminado sigue en Tablero', async ($, on) => {
+test('un subagente terminado sigue en Tablero', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await lanzar($)
@@ -57,7 +57,7 @@ test('un subagente terminado sigue en Tablero', async ($, on) => {
   await ui.unmount()
 })
 
-test('la tarjeta dibuja una barra de avance con los pasos del trabajador', async ($, on) => {
+test('la tarjeta dibuja una barra de avance con los pasos del trabajador', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await lanzar($)

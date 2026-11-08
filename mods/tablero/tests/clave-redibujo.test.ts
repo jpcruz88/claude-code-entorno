@@ -29,3 +29,11 @@ test('sin animación, el reloj mira el estado cada segundo para que un agente qu
   expect(PERIODO_RELOJ_MS(true)).toBe(120)
   expect(PERIODO_RELOJ_MS(false)).toBeLessThanOrEqual(1000)
 })
+
+test('con el mapa animado, la clave cambia con cada marco de la animación', () => {
+  const a = claveDeRedibujo({ ...base, marco: 1 })
+  const b = claveDeRedibujo({ ...base, marco: 2 })
+  expect(a).not.toBe(b)
+  // Sin mapa (sin `marco`) la clave es la de siempre.
+  expect(claveDeRedibujo(base)).toBe(claveDeRedibujo({ ...base, marco: undefined }))
+})

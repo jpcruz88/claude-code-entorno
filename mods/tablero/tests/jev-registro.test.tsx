@@ -79,7 +79,7 @@ test('barra muestra jev [3 decisiones]', { options: { layout: 'mini' } }, async 
   await ui.unmount()
 })
 
-test('tarjeta lleva jev ↑ sonnet', async ($, on) => {
+test('tarjeta lleva jev ↑ sonnet', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, { texto: linea({ descripcion: 'revisar auth' }) })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true } as never)
   await lanzar($, 'revisar auth')
