@@ -126,3 +126,17 @@ test('ESTADO muestra las barras de 5 h y 7 d bajo las cuatro líneas de estado',
   expect(cajaEstado(18)).toContain('7 d')
   expect(cajaEstado(18)).toContain('3%')
 })
+
+test('en reposo (sin agentes en curso ni asesor activo) el punto del lead no pulsa', () => {
+  const reposo = { ...datos(0), lead: { ...datos(0).lead, delegando: false } }
+  const g0 = componerMapa(reposo, 0)
+  const g1 = componerMapa(reposo, 0.6)
+  expect(g0[3][70].c).toBe('○')
+  expect(filasDeMapa(g0)).toEqual(filasDeMapa(g1))
+})
+
+test('con trabajo en curso, el punto del lead sigue pulsando', () => {
+  const activo = datos(3)
+  expect(componerMapa(activo, 0)[3][70].c).toBe('●')
+  expect(componerMapa(activo, 0.6)[3][70].c).toBe('○')
+})

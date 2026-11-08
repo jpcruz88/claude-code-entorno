@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.12 (tablero)
+
+- At rest, nothing moves. With no agent running and no permission pending, the pulse of the status row stays still, the dot of "en espera" in the main card is a fixed ○, and the map draws no packets along its lines, no pulse at the lead, and no spinner. The pulse and the packets come back when there is work.
+
 ## 0.3.10 (tablero)
 
 - From 100 columns, `layout: auto` (the default) draws the layout of the proposal: a text grid of 100 by 42 with the advisor and the state on the left, the lead, the JEV box and the agents on the right, the return path to the lead, the REGISTRO box with the last decisions, and the status bar. The line from the advisor to the lead, the packets, the connectors and the agent glyphs animate with the clock (every 120 ms with `animacion` on; still with it off). The grid is built by `hooks/mapa.ts`, a pure function with tests.

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { avanzar, necesitaRedibujo, puntoEspera, pulso } from '../hooks/animacion'
+import { avanzar, necesitaRedibujo, puntoEspera, pulso, pulsoActivo } from '../hooks/animacion'
 
 test('avanzar acerca el valor mostrado al objetivo en pasos', () => {
   expect(avanzar(0, 100)).toBe(25)
@@ -32,4 +32,10 @@ test('pulso alterna cada 5 fases', () => {
 test('necesitaRedibujo solo cuando el texto cambió', () => {
   expect(necesitaRedibujo('a', 'a')).toBe(false)
   expect(necesitaRedibujo('a', 'b')).toBe(true)
+})
+
+test('el pulso solo se mueve con trabajo: en reposo el punto queda apagado en todas las fases', () => {
+  for (const fase of [0, 3, 5, 7, 12]) expect(pulsoActivo(false, fase)).toBe('apagado')
+  expect(pulsoActivo(true, 0)).toBe('encendido')
+  expect(pulsoActivo(true, 5)).toBe('apagado')
 })
