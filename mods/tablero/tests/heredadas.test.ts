@@ -283,7 +283,7 @@ test('a fresh session draws on every surface and width, empty panels hidden', as
   }
 })
 
-test('inline above the prompt, the pane is a summary of at most 8 rows', async ($, on) => {
+test('inline above the prompt, the pane is a summary of at most 8 rows', { options: { layout: 'mini' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: `m${++n}` }))
@@ -292,7 +292,7 @@ test('inline above the prompt, the pane is a summary of at most 8 rows', async (
   for (const d of ['one', 'two', 'three', 'four', 'five']) await $.agent.spawn(spawn('general-purpose', `task ${d}`))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a' }, tool_use_id: 'm-k1' })
   for (const surface of ['terminal', 'vscode'] as const) {
-    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const }, surface })
+    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } , surface })
     const root = (await ui.drawn()) as { children?: unknown[] }
     expect((root.children ?? []).filter(Boolean).length <= 8).toBe(true)
     expect(await ui.find({ text: /\+2 agentes más/ })).toBeDefined()
@@ -582,12 +582,12 @@ test('on a graphical surface, rows of marks hold fewer marks, keep the newest an
   }
 })
 
-test("the inline summary's strip holds fewer marks on a graphical surface and keeps the newest", async ($, on) => {
+test("the inline summary's strip holds fewer marks on a graphical surface and keeps the newest", { options: { layout: 'mini' } }, async ($, on) => {
   engine(on)
   on('tool.check', (_$, e) => ({ decision: e.tool_use_id === 'n59' ? 'deny' : 'allow' }))
   for (let i = 0; i < 60; i += 1) await $.tool.check({ tool: 'Bash', input: { command: `ls ${i}` }, tool_use_id: `n${i}` })
   for (const surface of ['terminal', 'vscode'] as const) {
-    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const }, surface })
+    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } , surface })
     // 80 columns less "permisos " (el rótulo en español, 4 más que "gate ") and " 59 permitidos · 0 tú · 1 denegado" leave 37: 37 marks in a terminal, 24 elsewhere.
     const strip = await ui.find({ type: 'Text', text: /^[■✗]{2,}$/ })
     expect(strip?.props.wrap).toBe('truncate-start')

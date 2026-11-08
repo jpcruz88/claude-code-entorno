@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.9 (tablero)
+
+- With `layout: auto` (the default), the diagram is drawn inline above the prompt too, from 66 columns. Before, the inline panel always showed the summary of at most 8 rows. Below 66 columns, or with `layout: mini`, the summary stays.
+- The inline summary tests pin `layout: mini` explicitly, so they keep checking the summary.
+
 ## 0.3.8 (tablero)
 
 - The line between the advisor and the lead is five columns wide and drawn on the lead's content row. While there is work in progress a packet (● with its tail • ·) crosses it from the advisor to the lead, and the arrow ▶ ends it. With `motion: off` it is a still line.

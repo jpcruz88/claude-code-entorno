@@ -1409,7 +1409,8 @@ export const register: Register = (on, options) => {
         : null
 
     // Inline above the prompt (the terminal's main screen), the pane is a summary of at most 8 rows.
-    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline')
+    // Con `auto` y 66 columnas o más, el diagrama también va inline; el resumen queda para lo más estrecho.
+    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline' && !enDiagrama)
     if (isMini) {
       const live = [...cards.filter(c => c.status === 'running'), ...cards.filter(c => c.status !== 'running').reverse()].slice(0, 3)
       const counts = `${plural(s.rule, 'permitido', 'permitidos')} · ${s.cleared} ${decider}${s.ask > 0 ? ` · ${plural(s.ask, 'pendiente', 'pendientes')}` : ''} · ${plural(s.deny, 'denegado', 'denegados')}`

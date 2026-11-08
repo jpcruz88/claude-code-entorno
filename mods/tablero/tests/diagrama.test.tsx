@@ -158,6 +158,15 @@ test('auto con 66 columnas usa diagrama', async ($, on) => {
   await ui.unmount()
 })
 
+test('auto en panel inline con 80 columnas usa diagrama (no el resumen)', async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'D0' })
+  await lanzar($, 'revisar auth', 'd0')
+  const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } } as never)
+  expect(await ui.find({ text: /delegar a subagentes/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('auto con 65 usa la disposición apilada', async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D2' })
