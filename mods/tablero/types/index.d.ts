@@ -130,6 +130,9 @@ export type View = { expanded: string | null; gateOpen: Bucket | null; layout: L
 
 export type Roster = { architectTypes: string[] }
 
+/** Cuántas veces la sesión usó cada habilidad (herramienta Skill) y cada servidor MCP. */
+export type Usos = { skills: Record<string, number>; mcp: Record<string, number> }
+
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -144,6 +147,8 @@ declare module 'claude-code' {
       receipt: Receipt | null
       view: View
       roster: Roster
+      /** Habilidades y servidores MCP usados en la sesión. */
+      usos: Usos
       /** The git branch (or short commit) of the working folder; null outside a repository. */
       branch: string | null
       /** Las decisiones de Jev de la sesión y el último limites.json (ver JevEstado). */

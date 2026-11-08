@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.14 (tablero)
+
+- The main card shows the skills and MCP servers the session has used, with a count each: `habilidades caveman×2 · MCP tablero×3`. The line appears only once something has been used. The counts reset with `/clear`. They count from every loop, so a subagent's use counts too.
+- Tests: `tests/usos.test.ts` covers the counting and the line's format.
+
 ## 0.3.13 (tablero)
 
 - The panel header shows the mod version (`v0.3.13`) from 40 columns, right after the model name, so you can tell which copy is running. The constant `MOD_VERSION` in `hooks/core.ts` must match `.claude-plugin/plugin.json`.
@@ -7,6 +12,10 @@
 ## 0.3.12 (tablero)
 
 - At rest, nothing moves. With no agent running and no permission pending, the pulse of the status row stays still, the dot of "en espera" in the main card is a fixed ○, and the map draws no packets along its lines, no pulse at the lead, and no spinner. The pulse and the packets come back when there is work.
+
+## 0.3.11 (tablero)
+
+- ESTADO shows bars for the 5 h and 7 d limits, as in the proposal; before there were only text lines.
 
 ## 0.3.10 (tablero)
 

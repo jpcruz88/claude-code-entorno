@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
