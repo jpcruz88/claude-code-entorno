@@ -46,7 +46,7 @@ import {
   lanes,
   limitLabel,
   limitOf,
-  fmtResetIn,
+  fmtReinicio,
   fmtSpeed,
   listOf,
   marksIn,
@@ -949,14 +949,16 @@ export const register: Register = (on, options) => {
                   const lg = gauge(l.pct, 5)
                   // The time to each reset where the line has room for it: both windows fit from 56 columns,
                   // so a wide pane's half column (59 at 120) has them; a window that doesn't fit is left out.
-                  const resetIn = w >= 56 ? fmtResetIn(l.resetsAt, now) : ''
+                  // The hour the window resets (`↻ vie 06:00`): two windows share this line, so only the hour fits.
+                  const resetAt = w >= 56 ? fmtReinicio(l.resetsAt, now) : ''
+                  const reset = resetAt ? ` ↻ ${resetAt}` : ''
                   return {
                     lead: i > 0 ? 1 : u.costUsd !== null ? 2 : 0,
                     spans: [
                       { text: `${limitLabel(l.kind)} `, dim: true },
                       { text: lg.on, color: l.pct >= 80 ? C.warn : C.main },
                       { text: lg.off, color: C.faint },
-                      { text: ` ${Math.round(l.pct)}%${resetIn ? ` ↻${resetIn}` : ''}`, dim: true },
+                      { text: ` ${Math.round(l.pct)}%${reset}`, dim: true },
                     ],
                   }
                 }),
@@ -1533,6 +1535,8 @@ export const register: Register = (on, options) => {
           [
             W >= 40 ? { spans: [{ text: 'TABLERO', bold: true }, { text: ' ·', color: C.dim, bold: true }] } : null,
             { spans: [{ text: modelName.toUpperCase(), color: C.main, bold: true }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', bold: true }] },
+            W >= 56 ? { spans: [{ text: `⏱ ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`, dim: true }] } : null,
+            W >= 56 ? { spans: [{ text: `🕐 ${fmtClock(now).slice(0, 5)}`, dim: true }] } : null,
             showArchitect
               ? {
                   spans: [

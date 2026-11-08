@@ -90,6 +90,8 @@ export const normalizeCard = (stored: unknown): AgentCard =>
 
 export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt'
 const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt']
+/** Lo que sale por defecto: sin «último turno» (el diagrama ya muestra el flujo). `receipt` sigue válido en `panels`. */
+const PANELS_DEFECTO: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops']
 
 export type Config = {
   architect: RegExp
@@ -123,7 +125,7 @@ const safeRegExp = (source: string, fallback: string) => {
 export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
   const str = (k: string, d: string) => (typeof o[k] === 'string' && o[k] !== '' ? (o[k] as string) : d)
   const bool = (k: string, d: boolean) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : d)
-  const panels = str('panels', PANELS.join(','))
+  const panels = str('panels', PANELS_DEFECTO.join(','))
     .split(',')
     .map(s => s.trim())
     .filter((p): p is Panel => (PANELS as readonly string[]).includes(p))
@@ -134,7 +136,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     architect: safeRegExp(str('architectPattern', ''), 'advisor|architect'),
     architectLabel: str('architectLabel', 'ASESOR'),
     gateLabel: str('gateLabel', 'PERMISOS'),
-    panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS],
+    panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS_DEFECTO],
     motion: str('motion', 'while-active') !== 'off',
     moments: bool('moments', true),
     matchDescriptions: bool('matchDescriptions', false),
@@ -341,6 +343,21 @@ export const fmtResetIn = (resetsAt: number | null | undefined, now: number) => 
   const h = Math.floor((m % 1440) / 60)
   if (d > 0) return `${d}d${h}h`
   return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
+}
+
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+/** La hora de reinicio de una ventana: `hoy 23:05`, `mañana 01:30` o `vie 06:00`; vacío si no hay dato o ya pasó. */
+export const fmtReinicio = (resetsAt: number | null | undefined, now: number) => {
+  if (resetsAt === null || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= now) return ''
+  const at = new Date(resetsAt)
+  const hora = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  const hoy = new Date(now)
+  const manana = new Date(now + 86_400_000)
+  const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  if (mismoDia(at, hoy)) return `hoy ${hora}`
+  if (mismoDia(at, manana)) return `mañana ${hora}`
+  return `${DIAS_CORTOS[at.getDay()]} ${hora}`
 }
 
 /** A rate-limit window's short name: `five_hour` → `5h`, `seven_day_opus` → `7d opus`. */

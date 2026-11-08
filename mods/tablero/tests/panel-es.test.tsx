@@ -117,7 +117,7 @@ test('el panel principal junta costo, contexto, subagentes, permisos y uso con s
   expect(await ui.find({ text: /contexto/ })).toBeDefined()
   expect(await ui.find({ text: /agentes 1\/1/ })).toBeDefined()
   expect(await ui.find({ text: /permisos 1/ })).toBeDefined()
-  expect(await ui.find({ text: /19% ↻3h10m/ })).toBeDefined()
+  expect(await ui.find({ text: /19% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -180,4 +180,12 @@ test('con openOnStart apagado el primer prompt no abre el panel', { options: { o
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'hola' })
   expect(abiertos).toBe(0)
+})
+
+test('la cabecera muestra el tiempo de la sesión y la hora local', async ($, on) => {
+  motor(on)
+  const ui = await $.ui.mount(pane(120))
+  expect(await ui.find({ text: /⏱/ })).toBeDefined()
+  expect(await ui.find({ text: /🕐 (\d\d:\d\d|--:--)/ })).toBeDefined()
+  await ui.unmount()
 })
