@@ -10,6 +10,10 @@ import {
   DEFAULT_MAIN,
   DEFAULT_ROSTER,
   DEFAULT_TURN,
+  DEFAULT_USOS,
+  noteUso,
+  resumenUsos,
+  usoDe,
   DEFAULT_USAGE,
   DEFAULT_VIEW,
   EDIT_TOOLS,
@@ -105,6 +109,7 @@ const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null } as JevEstado)
+const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
@@ -250,6 +255,7 @@ async function resetAll($: EngineInterface) {
   await update($, gate, () => DEFAULT_GATE)
   await update($, agents, () => [])
   await update($, loops, () => [])
+  await update($, usos, () => DEFAULT_USOS)
   await update($, turn, () => DEFAULT_TURN)
   await update($, receipt, () => null)
   await update($, view, () => DEFAULT_VIEW)
@@ -613,6 +619,8 @@ export const register: Register = (on, options) => {
       if (isSettled) await refreshStatus($)
       return ran
     }
+    const uso = didRun ? usoDe(String(e.tool), e) : null
+    if (uso) await update($, usos, x => noteUso(normalize(DEFAULT_USOS, x), uso))
     const hasFailed = didRun && ran.isError === true
     const isEdit = !hasFailed && didRun && EDIT_TOOLS.has(e.tool)
     if (isEdit) {
@@ -762,7 +770,7 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs, branchNow] = await Promise.all([
+    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs, branchNow, usosNow] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
@@ -777,6 +785,7 @@ export const register: Register = (on, options) => {
       pasosDeAgentes($),
       getJev($),
       read($, gitBranch),
+      read($, usos).then(x => normalize(DEFAULT_USOS, x)),
     ])
     const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
     const jevN = resumenJevs.total
@@ -931,6 +940,7 @@ export const register: Register = (on, options) => {
           3,
         )}
         {branchNow ? <Text dimColor wrap="truncate">{`⎇ ${branchNow}`}</Text> : null}
+        {resumenUsos(usosNow) ? <Text dimColor wrap="truncate">{resumenUsos(usosNow)}</Text> : null}
         {ctxGauge
           ? line(
               [

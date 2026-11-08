@@ -16,13 +16,43 @@ import type {
   Tally,
   ToolNote,
   Turn,
+  Usos,
   Usage,
   View,
 } from '../types'
 
 export const SCHEMA_VERSION = 2
+
+export const DEFAULT_USOS: Usos = { skills: {}, mcp: {} }
+
+/** Qué cuenta una llamada: una habilidad (herramienta Skill) o un servidor MCP (mcp__servidor__herramienta). */
+export type Uso = { kind: 'skill'; name: string } | { kind: 'mcp'; server: string }
+
+export const usoDe = (tool: string, input: unknown): Uso | null => {
+  if (tool === 'Skill') {
+    const name = isObject(input) && typeof input.skill === 'string' ? input.skill.trim() : ''
+    return name ? { kind: 'skill', name } : null
+  }
+  const partes = tool.split('__')
+  return partes.length >= 3 && partes[0] === 'mcp' && partes[1] ? { kind: 'mcp', server: partes[1] } : null
+}
+
+const sumar = (cuentas: Record<string, number>, clave: string) => ({ ...cuentas, [clave]: (cuentas[clave] ?? 0) + 1 })
+
+export const noteUso = (u: Usos, uso: Uso): Usos =>
+  uso.kind === 'skill' ? { ...u, skills: sumar(u.skills, uso.name) } : { ...u, mcp: sumar(u.mcp, uso.server) }
+
+/** Una línea para la tarjeta: «habilidades caveman×2 · MCP tablero×3»; vacía si no hay usos. */
+export const resumenUsos = (u: Usos): string => {
+  const partes: string[] = []
+  const hab = Object.entries(u.skills).map(([k, n]) => `${k}×${n}`)
+  const mcp = Object.entries(u.mcp).map(([k, n]) => `${k}×${n}`)
+  if (hab.length) partes.push(`habilidades ${hab.join(' ')}`)
+  if (mcp.length) partes.push(`MCP ${mcp.join(' ')}`)
+  return partes.join(' · ')
+}
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.3.13'
+export const MOD_VERSION = '0.3.14'
 
 // ---------------------------------------------------------------- defaults
 
