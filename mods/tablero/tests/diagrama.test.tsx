@@ -167,6 +167,17 @@ test('auto en panel inline con 80 columnas usa diagrama (no el resumen)', async 
   await ui.unmount()
 })
 
+test('con 100 columnas o más se dibuja la rejilla de la propuesta: con REGISTRO y sin la línea antigua', async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'D100' })
+  await lanzar($, 'revisar auth', 'd100')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /REGISTRO/ })).toBeDefined()
+  expect(await ui.find({ text: /de vuelta al lead/ })).toBeDefined()
+  expect(await ui.find({ text: /delegar a subagentes/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('auto con 65 usa la disposición apilada', async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D2' })
@@ -177,7 +188,7 @@ test('auto con 65 usa la disposición apilada', async ($, on) => {
   await ui.unmount()
 })
 
-test('caja JEV con tres filas y total 1,382', async ($, on) => {
+test('caja JEV con tres filas y total 1,382', { options: { layout: 'diagrama' } }, async ($, on) => {
   const lineas = [
     ...Array.from({ length: 1000 }, (_, i) => decision(i, 'modelo', 'sonnet', 0.94, true)),
     ...Array.from({ length: 300 }, (_, i) => decision(1000 + i, 'esfuerzo', 'high', 0.86, true)),
@@ -215,7 +226,7 @@ const limitesJson = (usado: number, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ actualizado: seg(AHORA_RITMO) - 60, five_hour: { usado: 10, reinicio: seg(AHORA_RITMO) + 3600 }, seven_day: { usado, reinicio: reinicioSemana() }, ...extra })
 const unaDecision = () => decision(0, 'modelo', 'sonnet', 0.94, true)
 
-test('la caja JEV muestra la fila de ritmo con el exceso', async ($, on) => {
+test('la caja JEV muestra la fila de ritmo con el exceso', { options: { layout: 'diagrama' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(52), AHORA_RITMO)
   await fijar()
   await lanzar($, 'revisar auth', 'r1')
@@ -233,19 +244,19 @@ const colorDeFila = async ($: Parameters<Parameters<typeof test>[1]>[0], usado: 
 }
 
 // Ritmo 45 %: 1 % queda 44 puntos por debajo, 55 % está 10 por encima y 70 % está 25 por encima.
-test('la fila de ritmo va en verde con el uso por debajo del ritmo', { options: { palette: 'theme' } }, async ($, on) => {
+test('la fila de ritmo va en verde con el uso por debajo del ritmo', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(1), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 1)).toBe('success')
 })
 
-test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', { options: { palette: 'theme' } }, async ($, on) => {
+test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(55), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 55)).toBe('warning')
 })
 
-test('la fila de ritmo va en rojo con más de 15 puntos por encima', { options: { palette: 'theme' } }, async ($, on) => {
+test('la fila de ritmo va en rojo con más de 15 puntos por encima', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(70), AHORA_RITMO)
   await fijar()
   expect(await colorDeFila($, 70)).toBe('error')
@@ -259,31 +270,31 @@ const sinFila = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
   await ui.unmount()
 }
 
-test('sin limites.json no hay fila de ritmo', async ($, on) => {
+test('sin limites.json no hay fila de ritmo', { options: { layout: 'diagrama' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), null, AHORA_RITMO)
   await fijar()
   await sinFila($)
 })
 
-test('con limites.json roto no hay fila de ritmo', async ($, on) => {
+test('con limites.json roto no hay fila de ritmo', { options: { layout: 'diagrama' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), '{"actualizado": 17', AHORA_RITMO)
   await fijar()
   await sinFila($)
 })
 
-test('con un dato de más de 6 h no hay fila de ritmo', async ($, on) => {
+test('con un dato de más de 6 h no hay fila de ritmo', { options: { layout: 'diagrama' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(52, { actualizado: seg(AHORA_RITMO) - 6 * 3600 - 5 }), AHORA_RITMO)
   await fijar()
   await sinFila($)
 })
 
-test('con el reinicio de la semana vencido no hay fila de ritmo', async ($, on) => {
+test('con el reinicio de la semana vencido no hay fila de ritmo', { options: { layout: 'diagrama' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(52, { seven_day: { usado: 52, reinicio: seg(AHORA_RITMO) } }), AHORA_RITMO)
   await fijar()
   await sinFila($)
 })
 
-test('sin decisiones aún', async ($, on) => {
+test('sin decisiones aún', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(100) as never)
   expect(await ui.find({ text: /^JEV/ })).toBeDefined()
@@ -292,7 +303,7 @@ test('sin decisiones aún', async ($, on) => {
   await ui.unmount()
 })
 
-test('vuelta al lead solo con todas las tarjetas terminadas', async ($, on) => {
+test('vuelta al lead solo con todas las tarjetas terminadas', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'V1' })
   await lanzar($, 'primera', 'v1')

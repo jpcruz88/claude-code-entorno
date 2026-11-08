@@ -40,7 +40,7 @@ test('el pie del panel ya no muestra franja con carpeta ni costo', async ($, on)
   await ui.unmount()
 })
 
-test('la mascota vive en la tarjeta principal, con su vida según el contexto, y no hay panel SESIÓN', async ($, on) => {
+test('la mascota vive en la tarjeta principal, con su vida según el contexto, y no hay panel SESIÓN', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await medir($)
   const ui = await $.ui.mount(pane(120))
@@ -58,7 +58,7 @@ const sesionStart = (on: On) => {
   on('fs.read', () => ({ value: 'ref: refs/heads/main\n' }))
 }
 
-test('al iniciar, la rama se lee de .git/HEAD y se muestra bajo la carpeta, sin hooks', async ($, on) => {
+test('al iniciar, la rama se lee de .git/HEAD y se muestra bajo la carpeta, sin hooks', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   sesionStart(on)
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })

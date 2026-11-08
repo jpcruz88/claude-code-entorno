@@ -1,0 +1,109 @@
+import { expect, test } from 'claude-code/testing'
+
+import { MAPA_ALTO, MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa } from '../hooks/mapa'
+
+// La disposición de la propuesta a 100 columnas: asesor y estado a la izquierda, lead, JEV y tarjetas a la derecha.
+
+const datos = (cards: number): DatosMapa => ({
+  tiempo: '04:12',
+  reloj: '21:40',
+  asesor: ['de guardia', 'consultas   2', 'tokens   213k', 'cierra permisos', 'antes de delegar'],
+  estado: ['costo  $0.00', 'permisos 0', 'bucles   0', '7d ▱▱▱ 3%', '↻ vie 06:00'],
+  lead: { modelo: 'Sonnet 5.5 · high', turno: 'turno 14 · ctx 38%', delegando: true },
+  jev: {
+    filas: [
+      { etiqueta: 'qué modelo', valor: 0.94, texto: '0.94 sharp', color: 'jev' },
+      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '0.86 sharp', color: 'jev' },
+      { etiqueta: 'reintentar', valor: 0.64, texto: '0.64 split', color: 'warn' },
+    ],
+    decisiones: 1382,
+  },
+  tarjetas: Array.from({ length: cards }, (_, i) => ({
+    nombre: `tarea ${i + 1}`,
+    modelo: 'haiku · low',
+    hechos: 2,
+    total: 4,
+    estado: i % 2 === 0 ? ('R' as const) : ('D' as const),
+  })),
+  registro: ['21:52 jev haiku   ·91', '21:54 jev sonnet  ·94'],
+  asesorActivo: false,
+  barra: { hechos: 1, total: cards },
+})
+
+const fila = (g: { c: string }[][], y: number) => g[y].map(c => c.c).join('')
+
+test('la rejilla mide 100 columnas por 42 filas', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(g.length).toBe(MAPA_ALTO)
+  expect(MAPA_ANCHO).toBe(100)
+  for (const r of g) expect(r.length).toBe(MAPA_ANCHO)
+})
+
+test('el asesor va en la columna 2 con su título', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(g[2][2].c).toBe('┌')
+  expect(fila(g, 2)).toContain('ASESOR')
+})
+
+test('la flecha asesor → lead cruza la fila 4 hasta el ▶ en la columna 33', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(g[4][33].c).toBe('▶')
+  expect(g[4][28].c).toBe('─')
+})
+
+test('el lead, la caja JEV y el conector ▼ van en la columna 50', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(fila(g, 2)).toContain('LEAD · principal')
+  expect(fila(g, 11)).toContain('JEV · decisiones')
+  expect(g[10][50].c).toBe('▼')
+})
+
+test('el REGISTRO abajo a la izquierda muestra las últimas decisiones', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(fila(g, 33)).toContain('REGISTRO')
+  expect(fila(g, 34)).toContain('21:52 jev haiku')
+})
+
+test('con tres tarjetas se dibujan en tres columnas con su bajada ▼', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(g[23][14].c).toBe('▼')
+  expect(g[23][50].c).toBe('▼')
+  expect(g[23][85].c).toBe('▼')
+})
+
+test('con seis tarjetas aparece la lista AGENTES 6', () => {
+  const g = componerMapa(datos(6), 0)
+  expect(fila(g, 22)).toContain('AGENTES 6')
+})
+
+test('la barra de estado al pie muestra subagentes y jev', () => {
+  const g = componerMapa(datos(3), 0)
+  expect(fila(g, 40)).toContain('subagentes [1/3]')
+  expect(fila(g, 40)).toContain('[1382]')
+})
+
+test('filasDeMapa junta celdas del mismo color y deja fuera la mitad de un emoji', () => {
+  const g = componerMapa(datos(3), 0)
+  const filas = filasDeMapa(g)
+  expect(filas.length).toBe(MAPA_ALTO)
+  // Cada fila, al unir sus tramos, es el texto de la rejilla sin las mitades de emoji.
+  const texto = filas[0].map(t => t.c).join('')
+  expect(texto.trimStart().startsWith('TABLERO')).toBe(true)
+  expect(filas[0].every(t => t.c.length > 0)).toBe(true)
+  const tramo = filas[2].find(t => t.c.includes('LEAD · principal'))
+  expect(tramo?.k).toBe('lead')
+})
+
+test('el movimiento cambia la rejilla: los paquetes avanzan con t', () => {
+  const a = componerMapa(datos(3), 0)
+  const b = componerMapa(datos(3), 0.5)
+  expect(filasDeMapa(a)).not.toEqual(filasDeMapa(b))
+})
+
+test('un texto largo de ESTADO o ASESOR se corta antes del borde de su caja', () => {
+  const d = datos(3)
+  d.estado = ['costo  $0.00', 'permisos 3 ok · 0 pend. de más', 'bucles   0', 'ctx      38%', 'turno    04:12', 'x']
+  const g = componerMapa(d, 0)
+  // La caja ESTADO va de la columna 2 a la 25: su borde derecho sigue en la 25 en la fila 14.
+  expect(g[14][25].c).toBe('│')
+})

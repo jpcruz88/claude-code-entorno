@@ -10,6 +10,8 @@ export type EntradaClave = {
   agentesActivos: number
   permisosPendientes: number
   costoUsd: number
+  /** Marco de la animación del mapa: solo cuando el mapa está dibujado; sin él la clave no cambia. */
+  marco?: number
 }
 
 /** Con animación, el reloj corre cada 120 ms. Sin ella, cada segundo: así un agente que termina
@@ -26,4 +28,5 @@ export const claveDeRedibujo = (e: EntradaClave): string =>
     fotogramaDeMarcha(e.ahora, e.agentesActivos),
     e.permisosPendientes,
     e.costoUsd,
+    ...(e.marco === undefined ? [] : [e.marco]),
   ])

@@ -79,10 +79,11 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
+import { MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
 import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
@@ -282,6 +283,8 @@ async function noteMode($: EngineInterface, mode: string | undefined) {
 // Lo que la banda muestra ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
 const mostrado = { contexto: null as number | null, usos: new Map<string, number>() }
 let fase = 0
+// Verdadero mientras el último dibujo fue la rejilla animada: entonces el reloj redibuja con cada marco.
+let mapaVivo = false
 let ultimaClave = ''
 let reloj: { cancel: () => void } | null = null
 const redondeo = (n: number) => Math.round(n * 10) / 10
@@ -327,7 +330,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = claveDeRedibujo(e)
+  const clave = claveDeRedibujo({ ...e, marco: mapaVivo ? fase : undefined })
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
@@ -780,7 +783,10 @@ export const register: Register = (on, options) => {
     const W = Math.max(24, e.props.bodyColumns)
     const layout = v.layout ?? cfg.layout
     // El diagrama: `auto` y `diagrama` desde 66 columnas; por debajo, la columna de siempre.
-    const enDiagrama = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
+    const enDiagramaPosible = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
+    // Desde 100 columnas, `auto` dibuja la rejilla de la propuesta (ver mapa.ts); `diagrama` conserva el diagrama de siempre.
+    const enMapa = enDiagramaPosible && W >= MAPA_ANCHO && layout === 'auto'
+    const enDiagrama = enDiagramaPosible && !enMapa
     const isWide = layout === 'wide'
     const colW = isWide ? Math.floor((W - 2) / 2) : W
     const jevVisible = cfg.panels.includes('jev') && (jevN > 0 || enDiagrama)
@@ -1410,7 +1416,7 @@ export const register: Register = (on, options) => {
 
     // Inline above the prompt (the terminal's main screen), the pane is a summary of at most 8 rows.
     // Con `auto` y 66 columnas o más, el diagrama también va inline; el resumen queda para lo más estrecho.
-    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline' && !enDiagrama)
+    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline' && !enDiagrama && !enMapa)
     if (isMini) {
       const live = [...cards.filter(c => c.status === 'running'), ...cards.filter(c => c.status !== 'running').reverse()].slice(0, 3)
       const counts = `${plural(s.rule, 'permitido', 'permitidos')} · ${s.cleared} ${decider}${s.ask > 0 ? ` · ${plural(s.ask, 'pendiente', 'pendientes')}` : ''} · ${plural(s.deny, 'denegado', 'denegados')}`
@@ -1511,7 +1517,61 @@ export const register: Register = (on, options) => {
       activo: running.length > 0,
     }) : null
 
-    const body = enDiagrama ? diagramaBody : isWide ? (
+    // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
+    mapaVivo = enMapa && cfg.animacion
+    const colorDeTinta = (k: Tinta): string =>
+      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim })[k]
+    const pctCtx = ctxFill.pct === null ? '—' : `${Math.round(ctxFill.pct)}%`
+    const mapaDatos: DatosMapa = {
+      tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
+      reloj: fmtClock(now).slice(0, 5),
+      asesor: [advising ? 'asesorando' : 'de guardia', `consultas   ${a.consults.length}`, `permisos   ${s.ask} pend.`],
+      estado: [
+        `costo  $${(u.cost?.usd ?? 0).toFixed(2)}`,
+        `permisos ${s.cleared} ok · ${s.ask} pend.`,
+        `bucles   ${lp.length}`,
+        `ctx      ${pctCtx}`,
+        `turno    ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`,
+      ],
+      lead: { modelo: modelName, turno: `ctx ${pctCtx} · ${m.steps} respuestas`, delegando: running.length > 0 },
+      jev: {
+        filas: resumenJevs.filas
+          .slice(0, 3)
+          .filter(f => f.confianza !== null)
+          .map(f => ({
+            etiqueta: f.etiqueta,
+            valor: f.confianza ?? 0,
+            texto: `${(f.confianza ?? 0).toFixed(2)} ${f.sharp ? 'sharp' : 'split'}`,
+            color: (f.sharp ? 'jev' : 'warn') as Tinta,
+          })),
+        decisiones: jevN,
+      },
+      tarjetas: cards.map((c): TarjetaMapa => ({
+        nombre: nombreDeTipo(c.type),
+        modelo: prettyModel(c.model),
+        hechos: c.steps,
+        total: Math.max(1, c.steps),
+        estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'W' : 'Q',
+      })),
+      registro: jevs.decisiones.slice(-4).map(lineaLog),
+      asesorActivo: advising,
+      barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
+    }
+    const mapaBody = enMapa ? (
+      <Box flexDirection="column" width={MAPA_ANCHO}>
+        {filasDeMapa(componerMapa(mapaDatos, now / 1000)).map((tramos, y) => (
+          <Text key={y}>
+            {tramos.map((tr, i) => (
+              <Text key={i} color={colorDeTinta(tr.k)}>
+                {tr.c}
+              </Text>
+            ))}
+          </Text>
+        ))}
+      </Box>
+    ) : null
+
+    const body = enMapa ? mapaBody : enDiagrama ? diagramaBody : isWide ? (
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}
@@ -1521,6 +1581,8 @@ export const register: Register = (on, options) => {
     ) : (
       column(panels, W)
     )
+
+    if (enMapa) return <Box flexDirection="column" width={W}>{mapaBody}</Box>
 
     return (
       <Box flexDirection="column" width={W}>

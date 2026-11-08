@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.10 (tablero)
+
+- From 100 columns, `layout: auto` (the default) draws the layout of the proposal: a text grid of 100 by 42 with the advisor and the state on the left, the lead, the JEV box and the agents on the right, the return path to the lead, the REGISTRO box with the last decisions, and the status bar. The line from the advisor to the lead, the packets, the connectors and the agent glyphs animate with the clock (every 120 ms with `animacion` on; still with it off). The grid is built by `hooks/mapa.ts`, a pure function with tests.
+- Below 100 columns the diagram of 0.3.9 is unchanged. `layout: diagrama` keeps that diagram at any width, `layout: mini` keeps the summary.
+- The agent bars show steps taken, not progress: the mod does not know how many steps an agent will take. A finished agent shows a full bar.
+- The grid shows real data: cost, permissions, loops, context and turn time in ESTADO; the JEV decisions; the last four decisions in REGISTRO. Text that does not fit its box is cut at the box edge.
+
 ## 0.3.9 (tablero)
 
 - With `layout: auto` (the default), the diagram is drawn inline above the prompt too, from 66 columns. Before, the inline panel always showed the summary of at most 8 rows. Below 66 columns, or with `layout: mini`, the summary stays.

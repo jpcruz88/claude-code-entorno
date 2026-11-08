@@ -62,7 +62,7 @@ const motor = (on: On, cwd: string | Promise<string> = 'C:\\Proyectos\\mods\\mi-
   return reloj
 }
 
-test('el panel principal muestra la carpeta actual, solo el nombre final', async ($, on) => {
+test('el panel principal muestra la carpeta actual, solo el nombre final', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   for (const cols of [40, 64, 120]) {
     const ui = await $.ui.mount(pane(cols))
@@ -90,7 +90,7 @@ test('sin carpeta conocida el panel se dibuja igual', async ($, on) => {
   await ui.unmount()
 })
 
-test('el panel principal junta costo, contexto, subagentes, permisos y uso con su reseteo', async ($, on) => {
+test('el panel principal junta costo, contexto, subagentes, permisos y uso con su reseteo', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'p1' }))
   on('tool.check', () => ({ decision: 'ask' }))
@@ -121,7 +121,7 @@ test('el panel principal junta costo, contexto, subagentes, permisos y uso con s
   await ui.unmount()
 })
 
-test('las etiquetas del panel principal están en español', async ($, on) => {
+test('las etiquetas del panel principal están en español', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /esfuerzo/ })).toBeDefined()
@@ -182,7 +182,7 @@ test('con openOnStart apagado el primer prompt no abre el panel', { options: { o
   expect(abiertos).toBe(0)
 })
 
-test('la cabecera muestra el tiempo de la sesión y la hora local', async ($, on) => {
+test('la cabecera muestra el tiempo de la sesión y la hora local', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /⏱/ })).toBeDefined()
