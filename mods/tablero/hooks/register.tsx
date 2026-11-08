@@ -13,6 +13,7 @@ import {
   DEFAULT_USAGE,
   DEFAULT_VIEW,
   EDIT_TOOLS,
+  MOD_VERSION,
   SCHEMA_VERSION,
   afterCall,
   applyStep,
@@ -1598,6 +1599,7 @@ export const register: Register = (on, options) => {
           [
             W >= 40 ? { spans: [{ text: 'TABLERO', bold: true }, { text: ' ·', color: C.dim, bold: true }] } : null,
             { spans: [{ text: modelName.toUpperCase(), color: C.main, bold: true }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', bold: true }] },
+            W >= 40 ? { spans: [{ text: `v${MOD_VERSION}`, dim: true }] } : null,
             W >= 56 ? { spans: [{ text: `⏱ ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`, dim: true }] } : null,
             W >= 56 ? { spans: [{ text: `🕐 ${fmtClock(now).slice(0, 5)}`, dim: true }] } : null,
             showArchitect
