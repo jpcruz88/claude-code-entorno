@@ -21,6 +21,8 @@ import type {
 } from '../types'
 
 export const SCHEMA_VERSION = 2
+// Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
+export const MOD_VERSION = '0.3.13'
 
 // ---------------------------------------------------------------- defaults
 

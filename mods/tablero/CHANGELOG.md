@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.13 (tablero)
+
+- The panel header shows the mod version (`v0.3.13`) from 40 columns, right after the model name, so you can tell which copy is running. The constant `MOD_VERSION` in `hooks/core.ts` must match `.claude-plugin/plugin.json`.
+
 ## 0.3.12 (tablero)
 
 - At rest, nothing moves. With no agent running and no permission pending, the pulse of the status row stays still, the dot of "en espera" in the main card is a fixed ○, and the map draws no packets along its lines, no pulse at the lead, and no spinner. The pulse and the packets come back when there is work.
