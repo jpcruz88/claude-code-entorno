@@ -70,7 +70,7 @@ import {
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
-import { avanzar, necesitaRedibujo, puntoEspera, pulso } from './animacion'
+import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraAvance, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
 import { nombreDeTipo } from './savvy-core'
@@ -323,7 +323,7 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
     ...e,
     contextoPct: e.contextoPct === null ? null : redondeo(mostrado.contexto ?? e.contextoPct),
     limites: e.limites.map(l => ({ ...l, pct: redondeo(mostrado.usos.get(l.kind) ?? l.pct) })),
-    ...(cfg.animacion ? { pulso: pulso(fase) } : {}),
+    ...(cfg.animacion ? { pulso: pulsoActivo(e.agentesActivos > 0 || e.permisosPendientes > 0, fase) } : {}),
   }
 }
 
@@ -895,7 +895,7 @@ export const register: Register = (on, options) => {
           </Text>
           <Box flexShrink={0}>
             <Text color={m.isRunning ? C.main : C.dim}>
-              {m.isRunning ? '● trabajando' : `${puntoEspera(cfg.animacion ? pulso(fase) : undefined)} en espera`}
+              {m.isRunning ? '● trabajando' : `${puntoEspera(undefined)} en espera`}
             </Text>
           </Box>
         </Box>

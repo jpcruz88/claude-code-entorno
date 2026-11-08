@@ -165,7 +165,13 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   const listos = d.tarjetas.filter(x => x.estado === 'D').length
   const enCola = d.tarjetas.filter(x => x.estado === 'Q').length
   const sp = SPIN[Math.floor(t * 10) % SPIN.length]
-  const pulso = Math.floor(t * 1.7) % 2 === 0 ? '●' : '○'
+  // El punto del lead pulsa solo con trabajo en curso; en reposo queda ○ fijo.
+  const hayTrabajo = enCurso > 0 || d.asesorActivo
+  const pulso = hayTrabajo && Math.floor(t * 1.7) % 2 === 0 ? '●' : '○'
+  // Los paquetes solo recorren las líneas con trabajo: en reposo, las líneas quedan quietas.
+  const paq = (...a: Parameters<typeof paquete>) => {
+    if (hayTrabajo) paquete(...a)
+  }
 
   // Cabecera
   put(g, 2, 0, 'TABLERO', 'fg')
@@ -193,12 +199,12 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 36, 5, d.lead.delegando ? `delegando ${sp}` : 'a la espera', 'lead')
   hl(g, 26, 32, 4, '─', 'mut')
   put(g, 33, 4, '▶', 'ase')
-  if (d.asesorActivo || enCurso > 0) paquete(g, linea(26, 4, 33, 4), t, 6, 0, 'ase')
+  if (d.asesorActivo || enCurso > 0) paq(g, linea(26, 4, 33, 4), t, 6, 0, 'ase')
 
   // Conector lead → JEV
   vl(g, 50, 8, 9, '│', 'mut')
   put(g, 50, 10, '▼', 'mut')
-  paquete(g, linea(50, 8, 50, 10), t, 7, 0.3, 'lead')
+  paq(g, linea(50, 8, 50, 10), t, 7, 0.3, 'lead')
 
   // JEV (derecha, medio)
   caja(g, 34, 11, 40, 9, 'JEV · decisiones', 'jev')
@@ -218,7 +224,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
     put(g, 14, 21, '┌', 'mut')
     put(g, 85, 21, '┐', 'mut')
     put(g, 50, 21, '┼', 'mut')
-    paquete(g, linea(50, 20, 50, 21), t, 7, 0.6, 0, 'jev')
+    paq(g, linea(50, 20, 50, 21), t, 7, 0.6, 0, 'jev')
     const xs = [2, 38, 73]
     const bajadas = [14, 50, 85]
     d.tarjetas.forEach((ag, i) => {
@@ -233,7 +239,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
       barraPasos(g, x0 + 2, 26, 16, ag.hechos, ag.total, kc)
       put(g, x0 + 19, 26, `${Math.min(ag.hechos, ag.total)}/${ag.total}`, 'fg')
       put(g, x0 + 2, 27, `${gl} ${txt}`, kg)
-      if (ag.estado === 'R' || ag.estado === 'W') paquete(g, poligono([[50, 20], [50, 21], [cx, 21], [cx, 23]]), t, 7, i * 0.5, 'enj')
+      if (ag.estado === 'R' || ag.estado === 'W') paq(g, poligono([[50, 20], [50, 21], [cx, 21], [cx, 23]]), t, 7, i * 0.5, 'enj')
     })
     vl(g, 14, 29, 29, '│', 'mut')
     vl(g, 50, 29, 29, '│', 'mut')
@@ -243,8 +249,8 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
     put(g, 85, 30, '┘', 'mut')
     put(g, 50, 30, '┼', 'mut')
     vl(g, 50, 31, 32, '│', 'mut')
-    paquete(g, poligono([[14, 29], [14, 30], [50, 30], [50, 31]]), t, 6, 0.9, 'enj')
-    paquete(g, poligono([[85, 29], [85, 30], [50, 30], [50, 31]]), t, 6, 1.4, 'enj')
+    paq(g, poligono([[14, 29], [14, 30], [50, 30], [50, 31]]), t, 6, 0.9, 'enj')
+    paq(g, poligono([[85, 29], [85, 30], [50, 30], [50, 31]]), t, 6, 1.4, 'enj')
   } else {
     // Lista: hasta siete agentes, con «+N más» si hay más
     hl(g, 3, 96, 21, '─', 'mut')
@@ -252,7 +258,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
     put(g, 97, 21, '┐', 'mut')
     put(g, 50, 21, '┼', 'mut')
     vl(g, 50, 20, 20, '│', 'mut')
-    paquete(g, linea(50, 20, 50, 21), t, 7, 0.6, 0, 'jev')
+    paq(g, linea(50, 20, 50, 21), t, 7, 0.6, 0, 'jev')
     caja(g, 2, 22, 96, 10, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, 'enj')
     put(g, 50, 22, '┴', 'enj')
     const filas = N > 8 ? 7 : N
@@ -272,7 +278,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
     if (N > 8) put(g, 6, 30, `+${N - 7} más · ${enCola} en cola`, 'mut')
     put(g, 50, 31, '┬', 'enj')
     vl(g, 50, 32, 32, '│', 'mut')
-    paquete(g, poligono([[50, 31], [50, 32], [50, 33]]), t, 6, 0.9, 'enj')
+    paq(g, poligono([[50, 31], [50, 32], [50, 33]]), t, 6, 0.9, 'enj')
   }
 
   // Vuelta al lead, con la línea que sube por la derecha hasta el lead
@@ -286,7 +292,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 99, 3, '┐', 'mut')
   hl(g, 74, 98, 3, '─', 'mut')
   put(g, 74, 3, '◀', 'lead')
-  paquete(g, poligono([[63, 34], [99, 34], [99, 3], [74, 3]]), t, 6, 0.2, 'lead')
+  paq(g, poligono([[63, 34], [99, 34], [99, 3], [74, 3]]), t, 6, 0.2, 'lead')
 
   // Registro (izquierda, debajo del estado)
   caja(g, 2, 33, 24, 6, 'REGISTRO', 'mut')
@@ -299,6 +305,6 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 34, 40, d.asesorActivo ? '[asesorando]' : '[de guardia]', 'ase')
   put(g, 48, 40, ' · jev ', 'mut')
   put(g, 55, 40, `[${d.jev.decisiones}]`, 'jev')
-  put(g, 70, 40, ` ${sp}`, 'enj')
+  if (hayTrabajo) put(g, 70, 40, ` ${sp}`, 'enj')
   return g
 }

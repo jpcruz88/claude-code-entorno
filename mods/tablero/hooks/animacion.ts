@@ -18,3 +18,6 @@ export const puntoEspera = (latido: 'encendido' | 'apagado' | undefined): '●' 
 
 /** Redibujar solo si lo que se vería cambió. */
 export const necesitaRedibujo = (prev: string, sig: string): boolean => prev !== sig
+
+/** El pulso del latido solo se mueve con trabajo (agentes o permisos pendientes); en reposo queda apagado, fijo. */
+export const pulsoActivo = (hayTrabajo: boolean, fase: number): 'encendido' | 'apagado' => (hayTrabajo ? pulso(fase) : 'apagado')
