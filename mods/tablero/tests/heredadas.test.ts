@@ -160,7 +160,7 @@ test('consults open, close by id, and draw on a shared timeline', () => {
 
 test('config is read leniently: bad values fall back to defaults', () => {
   const d = parseConfig({})
-  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 7])
+  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 6])
   expect(d.architect.test('fable-advisor:fable-advisor')).toBe(true)
   const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'gate ,nope,gate', motion: 'off' })
   expect(c.architect.test('advisor')).toBe(true) // invalid regex → default
@@ -170,7 +170,12 @@ test('config is read leniently: bad values fall back to defaults', () => {
 })
 
 test('the default panels show the work: no session panel, no session log', () => {
-  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt'])
+  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops'])
+})
+
+test('el panel de «último turno» ya no sale por defecto, pero se puede volver a activar', () => {
+  expect(parseConfig({}).panels).not.toContain('receipt')
+  expect(parseConfig({ panels: 'main,receipt' }).panels).toEqual(['main', 'receipt'])
 })
 
 test('state saved under an older shape still reads', () => {
@@ -496,8 +501,8 @@ test('each rate-limit window shows the time to its reset where the main panel ha
   })
   for (const cols of [64, 120]) {
     const ui = await $.ui.mount({ ...pane(cols), surface: 'terminal' })
-    expect(await ui.find({ text: /19% ↻3h10m/ })).toBeDefined()
-    expect(await ui.find({ text: /3% ↻4d2h/ })).toBeDefined()
+    expect(await ui.find({ text: /19% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
+    expect(await ui.find({ text: /3% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
     await ui.unmount()
   }
   const narrow = await $.ui.mount({ ...pane(40), surface: 'terminal' })
@@ -866,7 +871,7 @@ test('switching to another model with the same window reads its compaction windo
   await ui.unmount()
 })
 
-test("a subagent's turn start does not reset the main turn's count", async ($, on) => {
+test("a subagent's turn start does not reset the main turn's count", { options: { panels: 'main,receipt' } }, async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'refactor it', turnId: 'T1' })
