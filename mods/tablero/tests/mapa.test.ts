@@ -107,3 +107,22 @@ test('un texto largo de ESTADO o ASESOR se corta antes del borde de su caja', ()
   // La caja ESTADO va de la columna 2 a la 25: su borde derecho sigue en la 25 en la fila 14.
   expect(g[14][25].c).toBe('│')
 })
+
+test('ESTADO muestra las barras de 5 h y 7 d bajo las cuatro líneas de estado', () => {
+  const d: DatosMapa = {
+    ...datos(3),
+    estado: ['costo  $0.00', 'permisos 0', 'bucles   0', 'ctx      38%'],
+    limites: [
+      { etiqueta: '5 h', valor: 0.42, texto: '42%' },
+      { etiqueta: '7 d', valor: 0.03, texto: '3%' },
+    ],
+  }
+  const g = componerMapa(d, 0)
+  const cajaEstado = (y: number) => g[y].slice(2, 26).map(c => c.c).join('')
+  expect(cajaEstado(16)).toContain('ctx      38%')
+  expect(cajaEstado(17)).toContain('5 h')
+  expect(cajaEstado(17)).toContain('█')
+  expect(cajaEstado(17)).toContain('42%')
+  expect(cajaEstado(18)).toContain('7 d')
+  expect(cajaEstado(18)).toContain('3%')
+})
