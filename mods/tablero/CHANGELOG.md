@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.7 (tablero)
+
+- Each agent row starts with an emoji for its state: a moon that turns while it works (each agent at its own phase, so they don't turn in step), ✅ when done, ❌ when failed, 🛑 when stopped. The walking crab in the bar is gone; the bar is drawn in the agent's colour.
+- The lane list shows up to seven agents (it showed six). Older ones past that are counted as «+N anteriores».
+- The card status line uses the same emoji. Emoji take two columns, so the lane label and bar are one column narrower.
+
 ## 0.3.6 (tablero)
 
 - The default `panels` drops `receipt` (the «último turno» box): the diagram already shows the flow. `receipt` still works if you list it in `panels`.

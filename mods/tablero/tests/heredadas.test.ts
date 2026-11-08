@@ -47,7 +47,6 @@ import {
   startConsult,
   stepSpeed,
 } from '../hooks/core'
-import { EMOJI_AGENTES } from '../hooks/agentes-anim'
 import type { Check } from '../types'
 
 // ---------------------------------------------------------------- pure behaviour
@@ -364,7 +363,7 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
     const lanesUi = await $.ui.mount({ ...pane(64), surface })
     expect(await lanesUi.find({ text: /4 total/ })).toBeDefined()
     expect(await lanesUi.find({ text: /━/ })).toBeDefined()
-    expect(await lanesUi.find({ text: new RegExp(EMOJI_AGENTES.join('|')) })).toBeDefined() // el cangrejo del carril
+    expect(await lanesUi.find({ text: /[🌑🌒🌓🌔🌕🌖🌗🌘]/u })).toBeDefined() // la luna del carril
     await lanesUi.unmount()
   }
 })
@@ -634,8 +633,8 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   await $.turn.complete({ answer: 'ok', durationMs: 10, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
   await step()
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /◐ en curso/ })).toBeDefined()
-  expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
+  expect(await ui.find({ text: /[🌑🌒🌓🌔🌕🌖🌗🌘] en curso/u })).toBeDefined()
+  expect(await ui.find({ text: /✅ listo/ })).toBeUndefined()
   expect(await ui.find({ text: /ctx 10 · sal 10 · 2 pas\./ })).toBeDefined()
   await ui.unmount()
 })
