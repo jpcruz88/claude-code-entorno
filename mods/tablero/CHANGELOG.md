@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.8 (tablero)
+
+- The line between the advisor and the lead is five columns wide and drawn on the lead's content row. While there is work in progress a packet (● with its tail • ·) crosses it from the advisor to the lead, and the arrow ▶ ends it. With `motion: off` it is a still line.
+- The lead box is five columns narrower in the diagram, to make room for the line.
+
 ## 0.3.7 (tablero)
 
 - Each agent row starts with an emoji for its state: a moon that turns while it works (each agent at its own phase, so they don't turn in step), ✅ when done, ❌ when failed, 🛑 when stopped. The walking crab in the bar is gone; the bar is drawn in the agent's colour.
