@@ -25,6 +25,8 @@ export type DatosMapa = {
   reloj: string
   asesor: string[]
   estado: string[]
+  /** Barras de los límites de uso (5 h, 7 d): van bajo las líneas de estado, de dos en dos como mucho. */
+  limites?: { etiqueta: string; valor: number; texto: string }[]
   lead: { modelo: string; turno: string; delegando: boolean }
   jev: { filas: FilaJev[]; decisiones: number }
   tarjetas: TarjetaMapa[]
@@ -175,7 +177,13 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   caja(g, 2, 2, 24, 7, 'ASESOR', 'ase')
   d.asesor.slice(0, 5).forEach((s, i) => put(g, 4, 3 + i, recortar(s), i === 0 ? 'ase' : 'fg'))
   caja(g, 2, 11, 24, 9, 'ESTADO', 'mut')
-  d.estado.slice(0, 6).forEach((s, i) => put(g, 4, 13 + i, recortar(s), 'fg'))
+  d.estado.slice(0, 4).forEach((s, i) => put(g, 4, 13 + i, recortar(s), 'fg'))
+  ;(d.limites ?? []).slice(0, 2).forEach((l, i) => {
+    const y = 17 + i
+    put(g, 4, y, l.etiqueta, 'fg')
+    barra(g, 8, y, 12, l.valor, l.valor >= 0.8 ? 'warn' : 'enj')
+    put(g, 21, y, l.texto, 'fg')
+  })
 
   // Lead (derecha, arriba) con la línea desde el asesor
   caja(g, 34, 2, 40, 6, 'LEAD · principal', 'lead')

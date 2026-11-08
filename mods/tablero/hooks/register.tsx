@@ -1526,6 +1526,13 @@ export const register: Register = (on, options) => {
       tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
       reloj: fmtClock(now).slice(0, 5),
       asesor: [advising ? 'asesorando' : 'de guardia', `consultas   ${a.consults.length}`, `permisos   ${s.ask} pend.`],
+      limites: [
+        { kind: 'five_hour', etiqueta: '5 h' },
+        { kind: 'seven_day', etiqueta: '7 d' },
+      ].flatMap(({ kind, etiqueta }) => {
+        const l = u.limits.find(x => x.kind === kind)
+        return l ? [{ etiqueta, valor: l.pct / 100, texto: `${Math.round(l.pct)}%` }] : []
+      }),
       estado: [
         `costo  $${(u.cost?.usd ?? 0).toFixed(2)}`,
         `permisos ${s.cleared} ok · ${s.ask} pend.`,
