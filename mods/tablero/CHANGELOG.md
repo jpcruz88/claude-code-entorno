@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.5 (tablero)
+
+- La paleta por defecto es `neon` (colores fijos saturados para que las líneas de las cajas brillen). Antes el default era `theme`, así que sin `/config` no se veía. Para volver a los colores del tema, pon `palette` en `theme`; `pastel` sigue disponible.
+- Las pruebas de ritmo y de la barra de contexto fijan `palette: theme`, porque comprueban nombres de color del tema.
+
 ## Unreleased (tablero)
 
 - The session log (`registro de sesión`) and the session panel (`sesión`) are gone: the default `panels` is now `main,jev,architect,gate,agents,loops,receipt`. The context bar moves into the main card, under its speed line. The jev decisions no longer write lines to a log; they still show in the JEV box. The diagram layout loses its log box. The git branch no longer has a place in the pane (it was a row of the session panel); it is still read. Values saved under the old `log` and `sesion` keys are no longer read.

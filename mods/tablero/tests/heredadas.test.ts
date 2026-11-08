@@ -310,11 +310,17 @@ test('/clear starts the pane fresh', async ($, on) => {
   await ui.unmount()
 })
 
-test('colours come from the theme by default, raw hex only when asked', async ($, on) => {
+test('the neon palette is on by default, with no config', async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  const title = await ui.find({ text: /· principal$/ })
-  expect(title?.props.color).toBe('claude')
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
+  await ui.unmount()
+})
+
+test('palette theme takes the theme colours', { options: { palette: 'theme' } }, async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('claude')
   await ui.unmount()
 })
 
@@ -322,6 +328,13 @@ test('pastel keeps the fixed dark-terminal colours', { options: { palette: 'past
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#7dd3fc')
+  await ui.unmount()
+})
+
+test('neon draws the box lines in saturated fixed colours', { options: { palette: 'neon' } }, async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
   await ui.unmount()
 })
 
@@ -674,7 +687,7 @@ const compactHost = (on: On, o: { window: () => number; compact: number | null; 
   return asked
 }
 
-test('the gauge and inline summary measure against the compaction window, read once per model window', async ($, on) => {
+test('the gauge and inline summary measure against the compaction window, read once per model window', { options: { palette: 'theme' } }, async ($, on) => {
   mock.clock(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   let window = 1_000_000

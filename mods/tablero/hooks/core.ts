@@ -142,7 +142,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     // The body clamps its drawing at 40 columns, so a narrower dock would only clip it.
     paneColumns: Math.max(40, cols),
     layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
-    palette: str('palette', 'theme') === 'pastel' ? 'pastel' : 'theme',
+    palette: (['theme', 'pastel', 'neon'] as const).find(p => p === str('palette', 'neon')) ?? 'neon',
     openOnStart: bool('openOnStart', true),
     statusLine: bool('statusLine', false),
     banda: bool('banda', true),
@@ -152,12 +152,12 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
 
 // ---------------------------------------------------------------- palette
 
-export type Palette = 'theme' | 'pastel'
+export type Palette = 'theme' | 'pastel' | 'neon'
 export type Colors = Record<'main' | 'agent' | 'gate' | 'cleared' | 'arch' | 'amber' | 'warn' | 'dim' | 'faint' | 'text', string>
 
 /**
  * `theme` names the person's own theme colours (they follow light, dark and colour-blind themes);
- * `pastel` is fixed hex tuned for dark terminals.
+ * `pastel` is fixed hex tuned for dark terminals; `neon` is saturated fixed hex that makes the box lines glow.
  */
 export const PALETTES: Record<Palette, Colors> = {
   theme: {
@@ -183,6 +183,18 @@ export const PALETTES: Record<Palette, Colors> = {
     dim: '#6b7280',
     faint: '#3f4654',
     text: '#e5e7eb',
+  },
+  neon: {
+    main: '#00f0ff',
+    agent: '#ff2bd6',
+    gate: '#39ff14',
+    cleared: '#00ffa3',
+    arch: '#b388ff',
+    amber: '#ffe600',
+    warn: '#ff3b5c',
+    dim: '#6b7280',
+    faint: '#3f4654',
+    text: '#f5f5f5',
   },
 }
 
