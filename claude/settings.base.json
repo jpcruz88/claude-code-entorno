@@ -84,6 +84,11 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/cbm-session-reminder"
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/al-dia.py",
+            "timeout": 5
           }
         ]
       },
