@@ -185,7 +185,9 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   // Asesor (izquierda, arriba) y estado (izquierda, debajo)
   caja(g, 2, 2, 24, 7, 'ASESOR', 'ase')
   d.asesor.slice(0, 5).forEach((s, i) => put(g, 4, 3 + i, recortar(s), i === 0 ? 'ase' : 'fg'))
-  caja(g, 2, 11, 24, 9, 'ESTADO', 'mut')
+  // La caja se ajusta a sus líneas: borde, una fila de aire y una fila por dato, y el borde inferior.
+  const filasEstado = Math.min(4, d.estado.length) + Math.min(2, (d.limites ?? []).length)
+  caja(g, 2, 11, 24, filasEstado + 3, 'ESTADO', 'mut')
   d.estado.slice(0, 4).forEach((s, i) => put(g, 4, 13 + i, recortar(s), 'fg'))
   ;(d.limites ?? []).slice(0, 2).forEach((l, i) => {
     const y = 17 + i
@@ -224,7 +226,8 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
 
   // Registro y barra de estado; en la versión compacta suben para cerrar la rejilla de 28 filas.
   const pie = (yReg: number, yBarra: number) => {
-    caja(g, 2, yReg, 24, 6, 'REGISTRO', 'mut')
+    // Tantas filas como entradas (hasta 4), con un mínimo de una fila de contenido.
+    caja(g, 2, yReg, 24, Math.max(3, Math.min(4, d.registro.length) + 2), 'REGISTRO', 'mut')
     d.registro.slice(-4).forEach((s, i) => put(g, 4, yReg + 1 + i, recortar(s), 'fg'))
     put(g, 2, yBarra, 'subagentes ', 'mut')
     put(g, 13, yBarra, `[${d.barra.hechos}/${d.barra.total}]`, 'fg')

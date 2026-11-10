@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.17 (tablero)
+
+- The ESTADO box fits its lines: without limits it ends at row 17 instead of leaving three empty rows. The REGISTRO box has one row per entry (up to 4), so no blank rows under the entries.
+- Tests: `tests/mapa.test.ts` covers the bottom border of both boxes.
+
 ## 0.3.16 (tablero)
 
 - The JEV box leaves a free column between the label and the bar, so «qué esfuerzo» no longer touches `█`. The bar starts at column 49 and the text at 62.
