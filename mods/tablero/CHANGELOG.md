@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3 (tablero)
+
+- The footer shows the right version: `MOD_VERSION` in `hooks/core.ts` was left at 0.5.0 in 0.5.1 and 0.5.2.
+
 ## 0.5.2 (tablero)
 
 - In the stacked map (40 to 99 columns), AGENTES goes right under the status band, before ESTADO, when there are tasks. At the bottom of a 53-row map a short pane cut it off and only the first agent showed. Without tasks the order is unchanged.
