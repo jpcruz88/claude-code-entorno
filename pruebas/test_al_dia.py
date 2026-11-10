@@ -284,6 +284,58 @@ class PruebaFoto(unittest.TestCase):
         self.assertIn("hola", salida)
 
 
+class PruebaMaquinaReal(unittest.TestCase):
+    """Lo que salió en la primera revisión real en una Mac (2026-11-09)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name)
+        self.salidas = {
+            ("claude", "plugin", "list", "--json"): (0, json.dumps([
+                {"id": "superpowers@claude-plugins-official", "version": "5.1.0", "installPath": "/x/s"},
+                {"id": "cowork-plugin-management@synced", "version": "1.0.0", "installPath": "/x/c"},
+                {"id": "data-viz-2025@skills-dir", "version": "1.0.0", "installPath": "/x/d"}])),
+            ("herdr", "--version"): (0, "herdr 0.9.5"),
+            ("codebase-memory-mcp", "--version"): (0, "codebase-memory-mcp 0.12.0"),
+        }
+
+    def ejecutar(self, cmd, timeout):
+        return self.salidas.get(tuple(cmd), (1, "no existe"))
+
+    def test_plugins_sincronizados_o_de_carpeta_no_entran(self):
+        # @synced viene de claude.ai y @skills-dir de ~/.claude/skills: no tienen marketplace que actualizar.
+        f = cargar().foto(self.home, self.ejecutar, lambda programa, home: programa)
+        self.assertIn("plugin:superpowers@claude-plugins-official", f)
+        self.assertNotIn("plugin:cowork-plugin-management@synced", f)
+        self.assertNotIn("plugin:data-viz-2025@skills-dir", f)
+        claves = [x[0] for x in cargar().pasos(f, "skills@1.7.2")]
+        self.assertNotIn("marketplace:synced", claves)
+        self.assertNotIn("marketplace:skills-dir", claves)
+
+    def test_programa_de_homebrew_se_actualiza_con_brew(self):
+        # herdr instalado con Homebrew no deja `herdr update`: se usa `brew upgrade herdr`.
+        cellar = self.home / "opt" / "homebrew" / "Cellar" / "herdr" / "0.9.5" / "bin"
+        cellar.mkdir(parents=True)
+        (cellar / "herdr").write_text("")
+        enlace = self.home / "bin-herdr"
+        enlace.symlink_to(cellar / "herdr")
+        buscar = lambda programa, home: str(enlace) if programa == "herdr" else programa
+        ejecutar = lambda cmd, t: self.salidas.get(("herdr", "--version") if cmd[0] == str(enlace) else tuple(cmd), (1, ""))
+        f = cargar().foto(self.home, ejecutar, buscar)
+        self.assertEqual(f["programa:herdr"].get("instalador"), "brew")
+        self.assertNotIn("instalador", f["MCP:codebase-memory"])
+        comandos = {x[0]: x[1] for x in cargar().pasos(f, "skills@1.7.2")}
+        self.assertEqual(comandos["programa:herdr"], ["brew", "upgrade", "herdr"])
+        self.assertEqual(comandos["MCP:codebase-memory"], ["codebase-memory-mcp", "update", "-y"])
+
+    def test_plugins_de_herdr_con_yes(self):
+        # Sin terminal, `herdr plugin update` exige --yes.
+        antes = {"plugin:herdr/x": {"nombre": "x", "tipo": "plugin", "version": "1", "carpeta": None}}
+        comandos = {x[0]: x[1] for x in cargar().pasos(antes, "skills@1.7.2")}
+        self.assertEqual(comandos["plugin:herdr/*"], ["herdr", "plugin", "update", "--yes"])
+
+
 class PopenFalso:
     """Reemplaza subprocess.Popen: guarda los argumentos y no lanza nada."""
     instancias = []
@@ -651,7 +703,7 @@ class PruebaRevision(unittest.TestCase):
             if cmd == ["herdr", "plugin", "list", "--json"]:
                 return 0, json.dumps({"result": {"plugins": [
                     {"plugin_id": "x.y", "version": "0.1.0", "plugin_root": "/p"}]}})
-            if cmd == ["herdr", "plugin", "update"]:
+            if cmd == ["herdr", "plugin", "update", "--yes"]:
                 return 1, "sin red"
             if cmd == ["herdr", "update"]:
                 return 0, "ok"
@@ -781,7 +833,7 @@ class PruebaRevision(unittest.TestCase):
                          ["npx", "-y", self.SK, "update", "caveman", "-g", "-y"])
         self.assertEqual(comandos["MCP:codebase-memory"], ["codebase-memory-mcp", "update", "-y"])
         self.assertEqual(comandos["programa:herdr"], ["herdr", "update"])
-        self.assertEqual(comandos["plugin:herdr/*"], ["herdr", "plugin", "update"])
+        self.assertEqual(comandos["plugin:herdr/*"], ["herdr", "plugin", "update", "--yes"])
         self.assertEqual(comandos["programa:opencode"], ["opencode", "upgrade"])
         self.assertEqual(comandos["programa:neovim-plugins"],
                          ["nvim", "--headless", "+Lazy! update", "+qa"])
