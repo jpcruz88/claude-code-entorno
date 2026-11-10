@@ -1,3 +1,4 @@
+import type { AlDia } from './al-dia-modelo'
 import { bannerDe, type DetalleBanner, type Situacion } from './situacion'
 
 // La disposición de 100 columnas de la propuesta: una rejilla de celdas que se compone a partir de los datos
@@ -80,6 +81,8 @@ export type DatosMapa = {
   registro: LineaRegistro[]
   asesorActivo: boolean
   barra: { hechos: number; total: number }
+  /** Lo que la revisión «Al día» actualizó; null (o ausente) y la caja no se dibuja. */
+  alDia: AlDia | null
 }
 
 /** Un tramo de una fila: texto seguido del color que comparten sus celdas. */
@@ -154,6 +157,9 @@ const put = (g: Celda[][], x: number, y: number, s: string, k: Tinta = 'fg', bg?
     }
   }
 }
+
+/** Columnas que ocupa un texto: los emojis (como ⚠) ocupan dos, igual que en `put`. */
+const columnas = (s: string): number => Array.from(s).reduce((n, ch) => n + (EMOJI.test(ch) ? 2 : 1), 0)
 
 /** Lo que cabe en `n` columnas; lo demás se corta antes del borde de la caja. */
 const recortar = (s: string, n: number): string => Array.from(s).slice(0, n).join('')
@@ -273,8 +279,64 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
  * Compone el mapa para los datos, el instante `t` (segundos desde que empezó la animación) y el ancho del panel.
  * Desde 100 columnas, la rejilla de dos columnas de 100; por debajo, todo apilado al ancho del panel.
  */
-export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO): Celda[][] =>
-  ancho >= MAPA_ANCHO ? componerAncho(d, t) : componerAngosto(d, t, Math.max(MAPA_MIN, Math.floor(ancho)))
+export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO): Celda[][] => {
+  const ancha = ancho >= MAPA_ANCHO
+  const W = ancha ? MAPA_ANCHO : Math.max(MAPA_MIN, Math.floor(ancho))
+  const g = ancha ? componerAncho(d, t) : componerAngosto(d, t, W)
+  if (!d.alDia) return g
+  // AL DÍA va en la fila 5, justo bajo la franja (filas 1 a 3), con una fila en blanco debajo; lo demás baja.
+  const enBlanco = crearRejilla(1, W)
+  g.splice(5, 0, ...componerAlDia(d.alDia, W), ...enBlanco)
+  return g
+}
+
+/** Lo más que enseña la caja AL DÍA: con más cosas, una fila menos para «+N más». */
+const AL_DIA_FILAS = 6
+/** Desde este ancho, cada fila dice el tipo y «⚠ cambió texto»; por debajo, solo ⚠. */
+const AL_DIA_ANCHO_TIPO = 66
+const AL_DIA_MARCA: Record<AlDia['filas'][number]['marca'], Tinta> = { '↑': 'jev', '✗': 'warn', '…': 'amb' }
+
+/**
+ * La caja AL DÍA de la maqueta B: una fila por cosa (marca, nombre, antes → después, tipo y aviso) y, al pie, cuántas
+ * quedaron al día. A `ancho` columnas; el tipo y el aviso se acortan antes de recortar el nombre.
+ */
+export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
+  const W = Math.floor(ancho)
+  const iw = W - 4
+  const hay = a.filas.length
+  const mostradas = hay > AL_DIA_FILAS ? AL_DIA_FILAS - 1 : hay
+  const extra = hay > AL_DIA_FILAS ? 1 : 0
+  const alto = mostradas + extra + 1 + 2
+  const g = crearRejilla(alto, W)
+  caja(g, 0, 0, W, alto, recortar(`AL DÍA · ${a.cuando}`, W - 6), 'enj')
+  a.filas.slice(0, mostradas).forEach((f, i) => {
+    const y = 1 + i
+    put(g, 2, y, f.marca, AL_DIA_MARCA[f.marca])
+    // A la derecha: el tipo y el aviso; en poco ancho, solo ⚠ (y se recorta el nombre después, no antes).
+    const tipo = W >= AL_DIA_ANCHO_TIPO ? f.tipo : ''
+    const aviso = f.aviso ? (W >= AL_DIA_ANCHO_TIPO ? '⚠ cambió texto' : '⚠') : ''
+    const der = [tipo, aviso].filter(Boolean).join('  ')
+    const xDer = W - 2 - columnas(der)
+    if (tipo) put(g, xDer, y, tipo, 'box')
+    if (aviso) put(g, W - 2 - columnas(aviso), y, aviso, 'amb')
+    const nw = Math.max(6, Math.min(18, xDer - 1 - 4 - 1 - 12))
+    put(g, 4, y, recortar(f.nombre, nw), 'fg')
+    // El detalle: «antes → después» en dos tintas; cualquier otro texto (fallo, pendiente) en gris.
+    const x = 4 + nw + 1
+    const libre = (der ? xDer - 1 : W - 2) - x
+    const flecha = f.detalle.indexOf(' → ')
+    if (flecha < 0) put(g, x, y, recortar(f.detalle, libre), 'box')
+    else {
+      const antes = recortar(f.detalle.slice(0, flecha), libre)
+      put(g, x, y, antes, 'box')
+      const nAntes = Array.from(antes).length
+      put(g, x + nAntes, y, recortar(f.detalle.slice(flecha), libre - nAntes), 'fg')
+    }
+  })
+  if (extra) put(g, 4, 1 + mostradas, recortar(`+${hay - mostradas} más`, iw - 2), 'box')
+  put(g, 2, alto - 2, recortar(`${a.alDia} al día · reinicia Claude para usar lo nuevo`, iw), 'box')
+  return g
+}
 
 const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
   const N = d.tarjetas.length

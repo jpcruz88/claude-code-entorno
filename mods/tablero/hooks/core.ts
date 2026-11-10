@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.7.0'
+export const MOD_VERSION = '0.8.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -120,10 +120,10 @@ export const normalizeCard = (stored: unknown): AgentCard =>
 
 // ---------------------------------------------------------------- config
 
-export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt'
-const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt']
+export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'aldia'
+const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'aldia']
 /** Lo que sale por defecto: sin «último turno» (el diagrama ya muestra el flujo). `receipt` sigue válido en `panels`. */
-const PANELS_DEFECTO: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops']
+export const PANELS_DEFECTO: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'aldia']
 
 export type Config = {
   architect: RegExp

@@ -190,7 +190,7 @@ declare module 'claude-code' {
 }
 
 /**
- * Las decisiones de Jev de la sesión y el último limites.json. `limites` es el último limites.json válido (null sin
+ * Las decisiones de Jev de la sesión y el último limites.json. `alDia` es el texto de ~/.claude/al-dia/resultado.json tal como se leyó (null sin archivo); se interpreta al dibujar. `limites` es el último limites.json válido (null sin
  * archivo o roto); un valor guardado antes de existir se lee como null.
  */
-export type JevEstado = { decisiones: DecisionJev[]; limites: LimitesJev | null }
+export type JevEstado = { decisiones: DecisionJev[]; limites: LimitesJev | null; alDia?: string | null }

@@ -159,7 +159,7 @@ test('consults open, close by id, and draw on a shared timeline', () => {
 
 test('config is read leniently: bad values fall back to defaults', () => {
   const d = parseConfig({})
-  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 6])
+  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 7])
   expect(d.architect.test('fable-advisor:fable-advisor')).toBe(true)
   const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'gate ,nope,gate', motion: 'off' })
   expect(c.architect.test('advisor')).toBe(true) // invalid regex → default
@@ -169,7 +169,7 @@ test('config is read leniently: bad values fall back to defaults', () => {
 })
 
 test('the default panels show the work: no session panel, no session log', () => {
-  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops'])
+  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'aldia'])
 })
 
 test('el panel de «último turno» ya no sale por defecto, pero se puede volver a activar', () => {
