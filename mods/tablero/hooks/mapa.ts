@@ -75,7 +75,8 @@ export type DatosMapa = {
   asesor: { estado: string; consultas: number; ultima: string | null } | null
   lead: { modelo: string; turno: string | null; ctx: number | null; mas: number; menos: number; respuestas: number; delegando: boolean }
   /** `umbral`: la confianza desde la que Jev cambia lo de Claude. `recientes`: la más nueva primero. */
-  jev: { umbral: number; recientes: DecisionReciente[]; decisiones: number; tope: string | null }
+  /** `tope` es la línea del tope vigente; `topeTinta`, su color (ámbar si no se dice). */
+  jev: { umbral: number; recientes: DecisionReciente[]; decisiones: number; tope: string | null; topeTinta?: Tinta }
   tarjetas: TarjetaMapa[]
   /** La más nueva primero. */
   registro: LineaRegistro[]
@@ -468,7 +469,7 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
     barraConfianza(g, 76, 24 + i, r.conf)
     put(g, 87, 24 + i, r.conf.toFixed(2), 'box')
   })
-  if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 45), 'amb')
+  if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 45), d.jev.topeTinta ?? 'amb')
 
   // Registro (izquierda, bajo el asesor): cinco filas, la más nueva arriba.
   caja(g, 0, yReg, 44, 7, REGISTRO_TITULO, 'mut')
@@ -762,7 +763,7 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
     put(g, 2, yy, r.hora, 'box')
     put(g, 8, yy, recortar(r.txt, Math.max(0, xBar - 1 - 8)), 'fg')
   })
-  if (d.jev.tope) put(g, 2, yJev + 2 + recientes.length, recortar(d.jev.tope, iw), 'amb')
+  if (d.jev.tope) put(g, 2, yJev + 2 + recientes.length, recortar(d.jev.tope, iw), d.jev.topeTinta ?? 'amb')
   y = yJev + altoJev + 1
 
   // ASESOR: solo si hubo consultas.

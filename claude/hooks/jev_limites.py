@@ -26,7 +26,8 @@ DEFAULTS_LIMITES = {
     "semana_escalones": [[-10, "opus", "xhigh"], [5, "opus", "high"], [10, "opus", "medium"],
                          [15, "sonnet", "high"], [25, "sonnet", "medium"]],
     # 5 h: se compara el uso (<). Desde el último umbral: haiku/medium.
-    # xhigh solo pasa con la semana por debajo del ritmo y la ventana de 5 h bajo 60 %.
+    # xhigh solo pasa con la semana por debajo del ritmo y la ventana de 5 h bajo 60 %
+    # (o sin ventana de 5 h en la cuenta).
     "h5_escalones": [[60, "opus", "xhigh"], [75, "opus", "medium"], [85, "sonnet", "medium"]],
     "h5_gracia_min": 15,
     "corte_dia": 3,  # jueves, con lunes = 0
@@ -161,8 +162,11 @@ def calcular_tope(limites, ahora, config, tz=None):
         cfg = _config_limites(config)
         candidatos = []
         semana = None
+        # Hay cuentas a las que Claude Code no les manda la ventana de 5 h: si falta del
+        # todo, decide solo la semana. Una ventana presente pero vencida o rota no cuenta.
         completo = (_ventana_valida(limites.get("seven_day"), ahora)
-                    and _ventana_valida(limites.get("five_hour"), ahora))
+                    and ("five_hour" not in limites
+                         or _ventana_valida(limites.get("five_hour"), ahora)))
         if _ventana_valida(limites.get("seven_day"), ahora):
             modelo, esfuerzo, motivo, semana = _tope_semana(limites["seven_day"], ahora, cfg, tz)
             candidatos.append((modelo, esfuerzo, motivo))
@@ -173,7 +177,7 @@ def calcular_tope(limites, ahora, config, tz=None):
         modelo = min((c[0] for c in candidatos), key=MODELOS.index)
         esfuerzo = min((c[1] for c in candidatos), key=ESFUERZOS.index)
         if not completo and ESFUERZOS.index(esfuerzo) > ESFUERZOS.index("high"):
-            esfuerzo = "high"  # xhigh exige conocer las dos ventanas
+            esfuerzo = "high"  # xhigh exige conocer la semana y, si la cuenta la tiene, la de 5 h
         # Pone el motivo la ventana que baja el modelo; si ninguna, la que baja el esfuerzo.
         manda = min(candidatos, key=lambda c: (MODELOS.index(c[0]), ESFUERZOS.index(c[1])))
         motivo = manda[2]

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from '../hooks/jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
 import type { DecisionJev } from '../hooks/jev-modelo'
 
 const SESION = 'sesion-a'
@@ -262,9 +262,13 @@ test('xhigh ok: después del corte se apaga desde 97 % y con la 5 h alta', () =>
   expect(filaRitmo(rs(85, 90, true), h5(70), AHORA)?.texto).not.toContain('xhigh ok')
 })
 
-test('xhigh ok: sin la ventana de 5 h o con la 5 h vencida no lo muestra', () => {
-  expect(filaRitmo(rs(25, 40), undefined, AHORA)?.texto).toBe('semana 25% · ritmo 40% · −15')
-  expect(filaRitmo(rs(85, 90, true), undefined, AHORA)?.texto).not.toContain('xhigh ok')
+test('xhigh ok: una cuenta sin ventana de 5 h lo muestra si la semana lo permite', () => {
+  expect(filaRitmo(rs(25, 40), undefined, AHORA)?.texto).toBe('semana 25% · ritmo 40% · −15 · xhigh ok')
+  expect(filaRitmo(rs(85, 90, true), undefined, AHORA)?.texto).toContain('xhigh ok')
+  expect(filaRitmo(rs(31, 40), undefined, AHORA)?.texto).not.toContain('xhigh ok')
+})
+
+test('xhigh ok: con la 5 h vencida no lo muestra', () => {
   expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA }, AHORA)?.texto).not.toContain('xhigh ok')
   expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA - 60 }, AHORA)?.texto).not.toContain('xhigh ok')
 })
@@ -278,4 +282,55 @@ test('ritmo: despuesDelCorte marca si ya pasó el corte del jueves', () => {
   expect(ritmoSemana(semana(52, '2026-11-12T23:00:00+01:00'), AHORA, undefined, UTC1)?.despuesDelCorte).toBe(false)
   const l = { actualizado: ep('2026-11-13T00:00:00+01:00'), seven_day: { usado: 52, reinicio: ep('2026-11-13T00:30:00+01:00') } }
   expect(ritmoSemana(l, ep('2026-11-13T00:00:00+01:00'), undefined, UTC1)?.despuesDelCorte).toBe(true)
+})
+
+// ---------------------------------------------------------------- tope vigente (réplica de calcular_tope)
+// Con `semana(u, JUEVES)` el ritmo a las 12:00 del lunes es 45,5: el exceso es u − 45,5.
+const JUEVES = '2026-11-12T23:00:00+01:00'
+const ta = (l: Parameters<typeof topeAhora>[0], ahora = AHORA) => topeAhora(l, ahora, UTC1)
+
+test('tope ahora: la semana sola recorre los escalones, del más libre al más bajo', () => {
+  expect(ta(semana(30, JUEVES))).toEqual({ texto: 'tope ahora: opus xhigh · sin recorte', nivel: 'verde' })
+  expect(ta(semana(44, JUEVES))).toEqual({ texto: 'tope ahora: opus high · semana −2 pts', nivel: 'verde' })
+  expect(ta(semana(52, JUEVES))).toEqual({ texto: 'tope ahora: opus medium · semana +6 pts', nivel: 'ambar' })
+  expect(ta(semana(58, JUEVES))).toEqual({ texto: 'tope ahora: sonnet high · semana +12 pts', nivel: 'ambar' })
+  expect(ta(semana(66, JUEVES))).toEqual({ texto: 'tope ahora: sonnet medium · semana +20 pts', nivel: 'ambar' })
+  expect(ta(semana(75, JUEVES))).toEqual({ texto: 'tope ahora: haiku medium · semana +29 pts', nivel: 'rojo' })
+})
+
+test('tope ahora: con la meta de la semana cumplida baja a haiku y dice el uso', () => {
+  const l = { actualizado: ep('2026-11-12T20:00:00+01:00'), seven_day: { usado: 91, reinicio: ep(JUEVES) + 3600 } }
+  expect(ta(l, ep('2026-11-12T20:00:00+01:00')).texto).toBe('tope ahora: haiku medium · semana 91%')
+})
+
+test('tope ahora: después del corte es libre hasta 97 % y desde ahí baja a haiku', () => {
+  const tarde = ep('2026-11-13T00:00:00+01:00')
+  const l = (usado: number) => ({ actualizado: tarde, seven_day: { usado, reinicio: ep('2026-11-13T00:30:00+01:00') } })
+  expect(ta(l(95), tarde).texto).toBe('tope ahora: opus xhigh · sin recorte')
+  expect(ta(l(97), tarde)).toEqual({ texto: 'tope ahora: haiku medium · semana 97%', nivel: 'rojo' })
+})
+
+test('tope ahora: la ventana de 5 h manda cuando es la que más baja', () => {
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(40) }).texto).toBe('tope ahora: opus xhigh · sin recorte')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(65) }).texto).toBe('tope ahora: opus medium · 5h 65%')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(80) }).texto).toBe('tope ahora: sonnet medium · 5h 80%')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(90) })).toEqual({ texto: 'tope ahora: haiku medium · 5h 90%', nivel: 'rojo' })
+  expect(ta({ ...semana(58, JUEVES), five_hour: h5(40) }).texto).toBe('tope ahora: sonnet high · semana +12 pts')
+})
+
+test('tope ahora: la 5 h en gracia (reinicia en menos de 15 min) no recorta', () => {
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(90, 14 * 60) }).texto).toBe('tope ahora: opus xhigh · sin recorte')
+})
+
+test('tope ahora: con una ventana vencida o sin la semana, xhigh no pasa y dice qué dato falta', () => {
+  expect(ta({ ...semana(30, JUEVES), five_hour: { usado: 10, reinicio: AHORA - 60 } }).texto).toBe('tope ahora: opus high · falta dato de 5h')
+  expect(ta({ actualizado: AHORA, five_hour: h5(40) }).texto).toBe('tope ahora: opus high · falta dato de semana')
+  expect(ta({ actualizado: AHORA, five_hour: h5(80) }).texto).toBe('tope ahora: sonnet medium · 5h 80%')
+})
+
+test('tope ahora: sin dato o con dato viejo no hay tope y lo dice', () => {
+  const sinDato = { texto: 'tope ahora: opus high · sin dato de uso', nivel: 'verde' }
+  expect(ta(null)).toEqual(sinDato)
+  expect(ta({ actualizado: AHORA })).toEqual(sinDato)
+  expect(ta({ ...semana(75, JUEVES), actualizado: AHORA - 6 * 3600 - 1 })).toEqual(sinDato)
 })
