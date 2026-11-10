@@ -182,3 +182,9 @@ test('la barra de estado queda en la última fila de la rejilla compacta', () =>
 test('ninguna fila compacta se sale de las 100 columnas', () => {
   for (const n of [0, 1]) for (const r of componerMapa(conTareas(n, 'D'), 0.4)) expect(r.length).toBe(MAPA_ANCHO)
 })
+
+test('en la caja JEV hay un hueco entre la etiqueta y la barra: «qué esfuerzo» no pega con █', () => {
+  const g = componerMapa(datos(1), 0)
+  expect(fila(g, 14)).toContain('qué esfuerzo')
+  expect(g[14][48].c).toBe(' ')
+})
