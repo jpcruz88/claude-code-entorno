@@ -1,9 +1,9 @@
-// La caja JEV: total de decisiones, una fila por tipo con su confianza y sharp/split, y la fila de ritmo semanal. Solo dibujo: los datos
+// La caja JEV: total de decisiones, una fila por tipo con qué tan seguro estuvo Jev y qué pasó, y la fila de ritmo semanal. Solo dibujo: los datos
 // vienen de resumenJev (jev-modelo.ts), que ya los separa por sesión.
 import type { EngineInterface } from 'claude-code'
 
 import type { Colors } from './core'
-import type { FilaJev, NivelRitmo } from './jev-modelo'
+import { ESTADO_TEXTO, type FilaJev, type NivelRitmo } from './jev-modelo'
 
 type Elementos = ReturnType<EngineInterface['ui']['resolve']>
 export type ResumenJevPanel = { total: number; filas: FilaJev[]; ritmo?: { texto: string; nivel: NivelRitmo } | null }
@@ -23,16 +23,16 @@ export const barraJev = (confianza: number | null, celdas = CELDAS_JEV) => {
   return '█'.repeat(llenas) + media + '░'.repeat(celdas - llenas - media.length)
 }
 
-/** Ancho que pide una fila completa: etiqueta 18, barra 8, valor 4, sharp/split 5, con un espacio entre cada una. */
-const FILA_COMPLETA = 38
+/** Ancho que pide una fila completa: etiqueta 18, barra 8, porcentaje 4, qué pasó 14, con un espacio entre cada una. */
+const FILA_COMPLETA = 47
 
-/** La caja JEV de `w` columnas: total, filas y la leyenda de sharp y split. Sin decisiones, dice que aún no hay. */
+/** La caja JEV de `w` columnas: total, filas y la regla del 80 %. Sin decisiones, dice que aún no hay. */
 export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: ResumenJevPanel) => {
   const { Box, Text } = els
   const compacta = w - 4 < FILA_COMPLETA
   const fila = (f: FilaJev) => {
-    const valor = f.confianza === null ? '—' : f.confianza.toFixed(2)
-    const forma = f.sharp === null ? '' : f.sharp ? 'sharp' : 'split'
+    const valor = f.confianza === null ? '—' : `${Math.round(f.confianza * 100)}%`
+    const forma = f.confianza === null || f.estado === null ? '' : ESTADO_TEXTO[f.estado]
     if (compacta) {
       return <Text wrap="truncate">{[f.etiqueta, valor, forma].filter(Boolean).join(' ')}</Text>
     }
@@ -47,7 +47,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
         <Box width={4} flexShrink={0}>
           <Text bold>{valor}</Text>
         </Box>
-        <Box width={5} flexShrink={0}>
+        <Box width={14} flexShrink={0}>
           <Text dimColor>{forma}</Text>
         </Box>
       </Box>
@@ -57,7 +57,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
     <Box flexDirection="column" borderStyle="round" borderColor={colores.cleared} paddingX={1} width={w}>
       <Box justifyContent="space-between">
         <Text color={colores.cleared} bold wrap="truncate">
-          JEV · decisiones
+          JEV · elige modelo y esfuerzo
         </Text>
         <Box flexShrink={0}>
           <Text color={colores.cleared} bold>
@@ -73,7 +73,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
       ) : null}
       {resumen.total > 0 ? (
         <Text dimColor wrap="wrap">
-          sharp → se aplica en código · split → decide Claude
+          Jev cambia lo de Claude si está ≥80% seguro
         </Text>
       ) : null}
     </Box>

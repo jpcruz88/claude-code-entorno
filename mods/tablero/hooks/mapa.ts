@@ -16,7 +16,13 @@ export type Tinta = 'fg' | 'mut' | 'lead' | 'jev' | 'enj' | 'ase' | 'warn' | 'bo
 /** Una celda de la rejilla. `bg` es el color de fondo (la franja de situación). `e` marca la segunda mitad de un emoji de dos columnas: no se dibuja. */
 export type Celda = { c: string; k: Tinta; bg?: Tinta; e?: boolean }
 
-export type FilaJev = { etiqueta: string; valor: number; texto: string; color: Tinta }
+/** Los títulos y la regla de Jev, dichos para leerse sin glosario. La regla va de la forma larga a la corta. */
+const JEV_TITULO = 'JEV · elige modelo y esfuerzo'
+const JEV_REGLA = ['Jev cambia lo de Claude si está ≥80% seguro', 'cambia lo de Claude si ≥80% seguro']
+const REGISTRO_TITULO = 'REGISTRO · decisiones de Jev'
+
+/** `texto`: `97% seguro · lo cambió Jev`; `corto`: lo mismo sin «seguro», para paneles angostos. */
+export type FilaJev = { etiqueta: string; valor: number; texto: string; corto?: string; color: Tinta }
 
 export type TarjetaMapa = {
   nombre: string
@@ -320,20 +326,21 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
   paq(g, linea(75, 19, 75, 21), t, 7, 0.3, 'lead')
 
   // JEV (derecha, bajo el lead)
-  caja(g, 51, 22, 49, 8, 'JEV · decisiones', 'jev')
+  caja(g, 51, 22, 49, 8, JEV_TITULO, 'jev')
   put(g, 53, 23, `${d.jev.decisiones} decisiones`, 'jev')
-  put(g, 86, 23, 'umbral 0.80', 'mut')
   d.jev.filas.slice(0, 3).forEach((f, i) => {
     put(g, 53, 24 + i, f.etiqueta, 'fg')
-    // Una columna libre entre la etiqueta (hasta la 64) y la barra, que empieza en la 66.
-    barra(g, 66, 24 + i, 12, f.valor, f.color)
-    put(g, 79, 24 + i, f.texto, f.color)
+    // El texto va pegado a la derecha; la barra, entre la etiqueta (hasta la 64) y el texto, con un hueco a cada lado.
+    const xTxt = 98 - Array.from(f.texto).length
+    const bw = Math.min(12, xTxt - 1 - 66)
+    if (bw >= 3) barra(g, 66, 24 + i, bw, f.valor, f.color)
+    put(g, xTxt, 24 + i, f.texto, f.color)
   })
   if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 44), 'warn')
-  put(g, 53, 28, 'sharp → código · split → claude', 'mut')
+  put(g, 53, 28, JEV_REGLA[0], 'mut')
 
   // Registro (izquierda, bajo el asesor): tantas filas como entradas, hasta 4.
-  caja(g, 0, 17, 44, Math.max(3, Math.min(4, d.registro.length) + 2), 'REGISTRO', 'mut')
+  caja(g, 0, 17, 44, Math.max(3, Math.min(4, d.registro.length) + 2), REGISTRO_TITULO, 'mut')
   d.registro.slice(-4).forEach((s, i) => put(g, 2, 18 + i, recortar(s, 40), 'fg'))
 
   // Pie: a la izquierda el estado de las tareas; a la derecha, la versión y el autor.
@@ -585,21 +592,23 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   const yJev = y
   const filasJev = d.jev.filas.slice(0, 3)
   const altoJev = 2 + 1 + filasJev.length + (d.jev.tope ? 1 : 0) + 1
-  caja(g, 0, yJev, W, altoJev, 'JEV · decisiones', 'jev')
+  caja(g, 0, yJev, W, altoJev, JEV_TITULO, 'jev')
   put(g, 2, yJev + 1, `${d.jev.decisiones} decisiones`, 'jev')
-  if (W >= 50) put(g, W - 2 - 11, yJev + 1, 'umbral 0.80', 'mut')
   filasJev.forEach((f, i) => {
     const yy = yJev + 2 + i
-    const txt = f.texto
+    const etiqueta = recortar(f.etiqueta, 13)
+    // El texto largo si cabe con un espacio tras la etiqueta; si no, el corto.
+    const largo = f.texto
+    const txt = 2 + Array.from(etiqueta).length + 1 + Array.from(largo).length <= W - 2 ? largo : recortar(f.corto ?? largo, iw - Array.from(etiqueta).length - 1)
     const xTxt = W - 2 - Array.from(txt).length
-    put(g, 2, yy, recortar(f.etiqueta, 13), 'fg')
+    put(g, 2, yy, etiqueta, 'fg')
     const bw = Math.min(12, xTxt - 1 - 16)
     if (bw >= 3) barra(g, xTxt - 1 - bw, yy, bw, f.valor, f.color)
     put(g, xTxt, yy, txt, f.color)
   })
   let yj = yJev + 2 + filasJev.length
   if (d.jev.tope) put(g, 2, yj++, recortar(d.jev.tope, iw), 'warn')
-  put(g, 2, yj, recortar('sharp → código · split → claude', iw), 'mut')
+  put(g, 2, yj, JEV_REGLA.find(r => Array.from(r).length <= iw) ?? recortar(JEV_REGLA.at(-1)!, iw), 'mut')
   y = yJev + altoJev + 1
 
   // ASESOR
@@ -612,7 +621,7 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
 
   // REGISTRO: tantas filas como entradas, hasta 4.
   const reg = d.registro.slice(-4)
-  caja(g, 0, y, W, Math.max(3, reg.length + 2), 'REGISTRO', 'mut')
+  caja(g, 0, y, W, Math.max(3, reg.length + 2), REGISTRO_TITULO, 'mut')
   reg.forEach((s, i) => put(g, 2, y + 1 + i, recortar(s, iw), 'fg'))
   y += Math.max(3, reg.length + 2) + 1
 

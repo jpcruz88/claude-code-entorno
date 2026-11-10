@@ -30,9 +30,9 @@ const datos = (cards: number): DatosMapa => ({
   lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
   jev: {
     filas: [
-      { etiqueta: 'qué modelo', valor: 0.94, texto: '0.94 sharp', color: 'jev' },
-      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '0.86 sharp', color: 'jev' },
-      { etiqueta: 'reintentar', valor: 0.64, texto: '0.64 split', color: 'warn' },
+      { etiqueta: 'qué modelo', valor: 0.94, texto: '94% seguro · lo cambió Jev', corto: '94% · lo cambió Jev', color: 'jev' },
+      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '86% seguro · igual a Claude', corto: '86% · igual a Claude', color: 'jev' },
+      { etiqueta: 'reintentar', valor: 0.64, texto: '64% seguro · decide Claude', corto: '64% · decide Claude', color: 'warn' },
     ],
     decisiones: 1382,
     tope: 'tope semana +12 pts → sonnet',
@@ -206,12 +206,12 @@ test('el conector lead → JEV baja por la columna 75 hasta la ▼ de la fila 21
   expect(g[21][75].c).toBe('▼')
 })
 
-test('JEV va bajo el lead con sus decisiones, el umbral y el tope', () => {
+test('JEV va bajo el lead con sus decisiones, la regla del 80% y el tope', () => {
   const g = componerMapa(datos(0), 0)
   expect(g[22][51].c).toBe('┌')
-  expect(fila(g, 22)).toContain('JEV · decisiones')
+  expect(fila(g, 22)).toContain('JEV · elige modelo y esfuerzo')
   expect(fila(g, 23)).toContain('1382 decisiones')
-  expect(fila(g, 23)).toContain('umbral 0.80')
+  expect(fila(g, 28)).toContain('Jev cambia lo de Claude si está ≥80% seguro')
   expect(fila(g, 24)).toContain('qué modelo')
   expect(fila(g, 27)).toContain('tope semana +12 pts → sonnet')
   expect(g[29][51].c).toBe('└')

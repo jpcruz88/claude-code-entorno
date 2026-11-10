@@ -19,7 +19,13 @@ export type DecisionJev = {
   motivo: string
 }
 
-export type FilaJev = { tipo: string; etiqueta: string; confianza: number | null; sharp: boolean | null }
+/**
+ * Qué pasó en la última decisión de un tipo: Jev cambió lo que pidió Claude, coincidió con Claude, eligió sin
+ * elección de Claude, o no llegó a la confianza mínima y se queda lo de Claude.
+ */
+export type EstadoJev = 'cambio' | 'igual' | 'eligio' | 'claude'
+
+export type FilaJev = { tipo: string; etiqueta: string; confianza: number | null; sharp: boolean | null; estado: EstadoJev | null }
 
 const TIPOS: TipoFila[] = ['modelo', 'esfuerzo', 'reintento']
 const TIPOS_VALIDOS: TipoDecision[] = [...TIPOS, 'tope']
@@ -89,6 +95,40 @@ export const leerDecisiones = (texto: string, sessionId: string): DecisionJev[] 
   return ds
 }
 
+const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus']
+
+/** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
+const familiaDe = (modelo: string): string => {
+  const m = modelo.toLowerCase()
+  for (const familia of FAMILIAS_MODELO) {
+    if (m === familia || m.startsWith(`claude-${familia}`)) return familia
+  }
+  return m
+}
+
+/** Qué pasó en una decisión; ver `EstadoJev`. Sin respuesta de Jev, decide Claude. */
+const estadoDe = (d: DecisionJev): EstadoJev => {
+  if (!d.sharp || d.opcion === null) return 'claude'
+  if (d.claude === null) return 'eligio'
+  return familiaDe(d.claude) === familiaDe(d.opcion) ? 'igual' : 'cambio'
+}
+
+/** Qué pasó, dicho en palabras: lo que muestra cada fila de la caja JEV. */
+export const ESTADO_TEXTO: Record<EstadoJev, string> = {
+  cambio: 'lo cambió Jev',
+  igual: 'igual a Claude',
+  eligio: 'lo eligió Jev',
+  claude: 'decide Claude',
+}
+
+const pct = (confianza: number) => `${Math.round(confianza * 100)}%`
+
+/** El texto de una fila de la caja JEV: `97% seguro · lo cambió Jev`, y su forma corta para paneles angostos. */
+export const textoFilaJev = (confianza: number, estado: EstadoJev | null): { largo: string; corto: string } => {
+  const que = estado ? ` · ${ESTADO_TEXTO[estado]}` : ''
+  return { largo: `${pct(confianza)} seguro${que}`, corto: `${pct(confianza)}${que}` }
+}
+
 /**
  * Las tres filas del tablero (una por tipo, siempre en el mismo orden) y el total de decisiones. La confianza
  * es la media de las últimas 20 con respuesta de ese tipo; el `sharp` es el de la última decisión del tipo.
@@ -103,7 +143,7 @@ export const resumenJev = (ds: DecisionJev[]): { total: number; filas: FilaJev[]
       .map(d => d.confianza)
     const media = confianzas.length > 0 ? confianzas.reduce((a, b) => a + b, 0) / confianzas.length : null
     const ultima = del.at(-1)
-    return { tipo, etiqueta: ETIQUETAS[tipo], confianza: media, sharp: ultima ? ultima.sharp : null }
+    return { tipo, etiqueta: ETIQUETAS[tipo], confianza: media, sharp: ultima ? ultima.sharp : null, estado: ultima ? estadoDe(ultima) : null }
   })
   return { total: propias.length, filas }
 }
@@ -127,24 +167,28 @@ const lineaTope = (d: DecisionJev): string => {
   return [`tope → ${d.opcion ?? 'sin modelo'}`, ...partes].join(' · ')
 }
 
-/** La línea de log de una decisión: `qué modelo → sonnet   p=0.91 sharp → código`, `… split → claude` o `sin respuesta`. */
+/** Cómo se nombra cada tipo en el registro. */
+const OBJETO: Record<TipoFila, string> = { modelo: 'modelo', esfuerzo: 'esfuerzo', reintento: 'reintentar' }
+
+/** El valor tal como se lee: la familia del modelo (`claude-haiku-5-5` → `haiku`) y sin guiones bajos. */
+const legible = (v: string) => familiaDe(v).replace(/_/g, ' ')
+
+/**
+ * La línea de registro de una decisión, en una frase que se entiende sola y en 40 columnas o menos:
+ * `Jev cambió esfuerzo low→medium (88%)`, `Jev dejó modelo haiku (98%)`, `Jev no tocó esfuerzo low (solo 62%)`.
+ */
 export const lineaLog = (d: DecisionJev): string => {
   if (d.tipo === 'tope') return lineaTope(d)
-  const etiqueta = ETIQUETAS[d.tipo]
-  if (d.opcion === null) return `${etiqueta} → sin respuesta`
-  const confianza = d.confianza === null ? '' : `   p=${d.confianza.toFixed(2)}`
-  return `${etiqueta} → ${d.opcion}${confianza} ${d.sharp ? 'sharp → código' : 'split → claude'}`
-}
-
-const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus']
-
-/** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
-const familiaDe = (modelo: string): string => {
-  const m = modelo.toLowerCase()
-  for (const familia of FAMILIAS_MODELO) {
-    if (m === familia || m.startsWith(`claude-${familia}`)) return familia
-  }
-  return m
+  const objeto = OBJETO[d.tipo]
+  if (d.opcion === null) return `Jev no respondió sobre ${objeto}`
+  const seguro = d.confianza === null ? '' : ` (${pct(d.confianza)})`
+  const solo = d.confianza === null ? '' : ` (solo ${pct(d.confianza)})`
+  if (d.tipo === 'reintento') return d.sharp ? `Jev decidió: ${legible(d.opcion)}${seguro}` : `Jev no decidió si reintentar${solo}`
+  const estado = estadoDe(d)
+  if (estado === 'claude') return d.claude === null ? `Jev no tocó ${objeto}${solo}` : `Jev no tocó ${objeto} ${legible(d.claude)}${solo}`
+  if (estado === 'eligio') return `Jev eligió ${objeto} ${legible(d.opcion)}${seguro}`
+  if (estado === 'igual') return `Jev dejó ${objeto} ${legible(d.opcion)}${seguro}`
+  return `Jev cambió ${objeto} ${legible(d.claude ?? '')}→${legible(d.opcion)}${seguro}`
 }
 
 /** `jev ↑ sonnet` o `jev ↓ haiku` si Jev cambió lo que eligió Claude; null si no se aplicó o no se puede comparar. */

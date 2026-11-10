@@ -85,8 +85,8 @@ test('resumenJev da las tres filas en orden, con el total de todas las decisione
   expect(r.total).toBe(3)
   expect(r.filas.map(f => f.tipo)).toEqual(['modelo', 'esfuerzo', 'reintento'])
   expect(r.filas.map(f => f.etiqueta)).toEqual(['qué modelo', 'qué esfuerzo', 'reintentar o parar'])
-  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'qué modelo', confianza: 0.91, sharp: true })
-  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'reintentar o parar', confianza: null, sharp: false })
+  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'qué modelo', confianza: 0.91, sharp: true, estado: 'cambio' })
+  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'reintentar o parar', confianza: null, sharp: false, estado: 'claude' })
 })
 
 test('resumenJev sin decisiones deja filas vacías con null', () => {
@@ -115,11 +115,11 @@ test('sharp es el de la última decisión de ese tipo', () => {
   expect(r.filas[0]?.sharp).toBe(false)
 })
 
-test('línea de log sharp y split', () => {
-  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.91, sharp: true }))).toBe('qué modelo → sonnet   p=0.91 sharp → código')
-  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.62, sharp: false, aplicada: false, claude: 'sonnet' }))).toBe('qué modelo → sonnet   p=0.62 split → claude')
-  expect(lineaLog(decision({ tipo: 'esfuerzo', opcion: 'low', confianza: 0.85, sharp: true, claude: 'high' }))).toBe('qué esfuerzo → low   p=0.85 sharp → código')
-  expect(lineaLog(sinRespuesta())).toBe('qué modelo → sin respuesta')
+test('línea de log: qué pidió Claude, qué hizo Jev y qué tan seguro estaba', () => {
+  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.91, sharp: true }))).toBe('Jev cambió modelo haiku→sonnet (91%)')
+  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.62, sharp: false, aplicada: false, claude: 'sonnet' }))).toBe('Jev no tocó modelo sonnet (solo 62%)')
+  expect(lineaLog(decision({ tipo: 'esfuerzo', opcion: 'low', confianza: 0.85, sharp: true, claude: 'high' }))).toBe('Jev cambió esfuerzo high→low (85%)')
+  expect(lineaLog(sinRespuesta())).toBe('Jev no respondió sobre modelo')
 })
 
 test('marca solo si se aplicó: jev ↑ o ↓ según haiku < sonnet < opus', () => {
