@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1 (tablero)
+
+Instalable desde un clon limpio.
+
+- `marketplace.json` listaba tablero en 0.3.5 y con la descripción vieja de la banda; ahora usa la misma versión y descripción que `plugin.json`. Una prueba del repo (`pruebas/test_mods.py`) vigila que no vuelvan a separarse.
+- El README dice cómo instalarlo y verlo funcionar.
+
 ## 0.8.0 (tablero)
 
 Caja AL DÍA en el mapa: lo que la revisión diaria actualizó, justo bajo la franja de situación.
