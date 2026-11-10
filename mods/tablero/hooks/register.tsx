@@ -84,7 +84,7 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana, textoFilaJev } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
@@ -1588,12 +1588,10 @@ export const register: Register = (on, options) => {
         filas: resumenJevs.filas
           .slice(0, 3)
           .filter(f => f.confianza !== null)
-          .map(f => ({
-            etiqueta: f.etiqueta,
-            valor: f.confianza ?? 0,
-            texto: `${(f.confianza ?? 0).toFixed(2)} ${f.sharp ? 'sharp' : 'split'}`,
-            color: (f.sharp ? 'jev' : 'warn') as Tinta,
-          })),
+          .map(f => {
+            const { largo, corto } = textoFilaJev(f.confianza ?? 0, f.estado)
+            return { etiqueta: f.etiqueta, valor: f.confianza ?? 0, texto: largo, corto, color: (f.sharp ? 'jev' : 'warn') as Tinta }
+          }),
         decisiones: jevN,
         tope: ultimoTope?.motivo || null,
       },

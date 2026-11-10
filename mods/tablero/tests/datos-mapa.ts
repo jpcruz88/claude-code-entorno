@@ -26,9 +26,9 @@ export const datos = (cards: number): DatosMapa => ({
   lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
   jev: {
     filas: [
-      { etiqueta: 'qué modelo', valor: 0.94, texto: '0.94 sharp', color: 'jev' },
-      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '0.86 sharp', color: 'jev' },
-      { etiqueta: 'reintentar', valor: 0.64, texto: '0.64 split', color: 'warn' },
+      { etiqueta: 'qué modelo', valor: 0.94, texto: '94% seguro · lo cambió Jev', corto: '94% · lo cambió Jev', color: 'jev' },
+      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '86% seguro · igual a Claude', corto: '86% · igual a Claude', color: 'jev' },
+      { etiqueta: 'reintentar', valor: 0.64, texto: '64% seguro · decide Claude', corto: '64% · decide Claude', color: 'warn' },
     ],
     decisiones: 1382,
     tope: 'tope semana +12 pts → sonnet',

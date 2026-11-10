@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 (tablero)
+
+- Jev's texts read without a glossary. The JEV box is titled `JEV · elige modelo y esfuerzo`; each row says how sure Jev was and what happened in its last decision: `97% seguro · lo cambió Jev`, `igual a Claude`, `lo eligió Jev` (Claude gave no choice) or `decide Claude` (Jev was under 80 %). The bottom line states the rule: `Jev cambia lo de Claude si está ≥80% seguro`. Gone: `sharp`, `split`, `umbral 0.80` and `p=0.97`.
+- REGISTRO is titled `REGISTRO · decisiones de Jev` and each line is a sentence of 40 columns or less: `Jev cambió esfuerzo low→medium (88%)`, `Jev dejó modelo haiku (98%)`, `Jev no tocó esfuerzo low (solo 62%)`, `Jev decidió: parar y preguntar (85%)`, `Jev no respondió sobre modelo`. Model ids show as their family (`claude-haiku-5-5` → `haiku`).
+- In the stacked map, a row whose long text doesn't fit drops «seguro» (`97% · lo cambió Jev`), and the rule line has a shorter form.
+- Tests: `tests/jev-textos.test.ts`.
+
 ## 0.5.0 (tablero)
 
 - The map is responsive. Docked beside the transcript, `auto` draws it from 40 columns and fits the pane's real width: from 100 columns, the two-column layout of 0.4.0; from 40 to 99, everything stacked at full width (header, status band, ESTADO, LEAD, JEV, ASESOR, REGISTRO, AGENTES, footer). Before, the map only showed at 100 columns or more, and the pane asks for 66 (Claude Code caps it at 45 % of the terminal), so most terminals kept the old diagram.
