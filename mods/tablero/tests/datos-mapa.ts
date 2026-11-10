@@ -47,4 +47,5 @@ export const datos = (cards: number): DatosMapa => ({
   ],
   asesorActivo: false,
   barra: { hechos: Math.min(1, cards), total: cards },
+  alDia: null,
 })

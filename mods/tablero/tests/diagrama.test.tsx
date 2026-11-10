@@ -28,7 +28,7 @@ const decision = (i: number, tipo: string, opcion: string, confianza: number, sh
     descripcion: 'buscar',
   })
 
-const motor = (on: On, decisiones: string | null, limites: string | null = null, ahoraMs: number = BASE) => {
+const motor = (on: On, decisiones: string | null, limites: string | null = null, ahoraMs: number = BASE, resultado: string | null = null) => {
   const reloj = mock.clock(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.status', () => ({ value: undefined }))
@@ -37,7 +37,8 @@ const motor = (on: On, decisiones: string | null, limites: string | null = null,
   on('session.id', () => ({ value: SESION }))
   on('env.get', () => ({ value: '/casa' }))
   on('fs.read', (_$, e) => {
-    const texto = String((e as { path?: string }).path ?? '').endsWith('limites.json') ? limites : decisiones
+    const ruta = String((e as { path?: string }).path ?? '')
+    const texto = ruta.endsWith('resultado.json') ? resultado : ruta.endsWith('limites.json') ? limites : decisiones
     if (texto === null) throw new Error('ENOENT')
     return { value: texto }
   })
@@ -405,5 +406,39 @@ test('con motion off el conector de la columna es texto │, sin módulo animado
   await lanzar($, 'revisar auth', 'd3')
   const ui = await $.ui.mount(pane(66) as never)
   expect(await ui.find({ text: /^│$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------- caja AL DÍA
+
+const resultadoAlDia = JSON.stringify({
+  ts: BASE / 1000 - 60,
+  al_dia: 61,
+  cambios: [{ nombre: 'superpowers', tipo: 'plugin', antes: '5.1.0', despues: '5.2.0', cambio_texto: true }],
+  fallos: [],
+  pendientes: [],
+})
+
+test('con resultado.json reciente, el mapa de 100 columnas dibuja la caja AL DÍA', async ($, on) => {
+  motor(on, null, null, BASE, resultadoAlDia)()
+  await lanzar($, 'revisar auth', 'al1')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /AL DÍA · (hoy|ayer) \d\d:\d\d/ })).toBeDefined()
+  expect(await ui.find({ text: /61 al día · reinicia Claude/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('sin resultado.json o con el panel aldia apagado, no hay caja AL DÍA', async ($, on) => {
+  motor(on, null)
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /AL DÍA/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('con aldia fuera de panels no hay caja aunque haya resultado', { options: { panels: 'main,jev,agents' } }, async ($, on) => {
+  motor(on, null, null, BASE, resultadoAlDia)()
+  await lanzar($, 'revisar auth', 'al2')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /AL DÍA/ })).toBeUndefined()
   await ui.unmount()
 })

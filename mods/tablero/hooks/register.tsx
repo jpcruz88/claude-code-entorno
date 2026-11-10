@@ -89,6 +89,7 @@ import { anotarCosto, costoPorMinuto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
+import { leerAlDia } from './al-dia-modelo'
 import { situacionDe } from './situacion'
 import { MAPA_ANCHO, MAPA_MIN, SPARK_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
 
@@ -109,7 +110,7 @@ const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
-const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null } as JevEstado)
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
 const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
 
@@ -137,10 +138,10 @@ async function getLoops($: EngineInterface): Promise<Loop[]> {
 }
 /** Un valor guardado de cualquier forma: lo que no se entiende queda en su valor vacío, sin romperse. */
 function normalizeJev(stored: unknown): JevEstado {
-  const j = normalize<JevEstado>({ decisiones: [], limites: null }, stored)
+  const j = normalize<JevEstado>({ decisiones: [], limites: null, alDia: null }, stored)
   // `limites` pasa por leerLimites: un valor guardado con otra forma (o sin la clave) queda en null.
   const limites = j.limites ? leerLimites(JSON.stringify(j.limites)) : null
-  return { decisiones: listOf<DecisionJev>(j.decisiones), limites }
+  return { decisiones: listOf<DecisionJev>(j.decisiones), limites, alDia: typeof j.alDia === 'string' ? j.alDia : null }
 }
 
 async function getJev($: EngineInterface): Promise<JevEstado> {
@@ -170,8 +171,11 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Roto o ausente es «sin dato».
   const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
   const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  // Lo que actualizó la revisión «Al día»; ausente o roto es «sin dato» (la caja no se dibuja).
+  const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
+  const alDia = typeof textoAlDia === 'string' ? textoAlDia : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  await update($, jev, () => ({ decisiones: ds, limites }))
+  await update($, jev, () => ({ decisiones: ds, limites, alDia }))
   return ds
 }
 
@@ -393,6 +397,8 @@ export const register: Register = (on, options) => {
     }
     // The git branch: a host without a repository just starts without it.
     await refrescarRama($).catch(() => undefined)
+    // Lo que actualizó la revisión «Al día» ya está en disco al abrir la sesión: la caja sale desde el primer cuadro.
+    await releerJev($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
     // El reloj redibuja el panel (animación, cuenta del turno, cambio de minuto): siempre corre.
     iniciarReloj($, cfg)
@@ -814,6 +820,8 @@ export const register: Register = (on, options) => {
       agents: cards.length === 0,
       loops: lp.length === 0,
       receipt: !m.isRunning && !r,
+      // La caja AL DÍA se dibuja dentro del mapa, no como un panel de la columna.
+      aldia: true,
     }
     const panels = cfg.panels.filter(p => !isEmpty[p])
     const decider = m.mode === 'auto' ? 'auto' : 'tú'
@@ -1595,6 +1603,7 @@ export const register: Register = (on, options) => {
         estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'F' : c.status === 'stopped' ? 'S' : 'Q',
       })),
       registro: jevs.decisiones.slice(-5).reverse().map(lineaRegistroJev),
+      alDia: cfg.panels.includes('aldia') ? leerAlDia(jevs.alDia ?? null, now) : null,
       asesorActivo: advising,
       barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
     }
