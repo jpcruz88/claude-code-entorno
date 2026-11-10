@@ -232,6 +232,19 @@ class PruebaFoto(unittest.TestCase):
         self.assertIn("plugin:superpowers@claude-plugins-official", f)
         self.assertIn("plugin:herdr/permgps.telegram-agents", f)
 
+    def test_json_de_salta_avisos_con_corchetes_antes_del_json(self):
+        texto = ("(node:123) [DEP0040] DeprecationWarning: The `punycode` module is "
+                 "deprecated.\n" + json.dumps([{"id": "a@mk", "version": "1.0.0"}]))
+        self.assertEqual(cargar()._json_de(texto), [{"id": "a@mk", "version": "1.0.0"}])
+        self.salidas[("claude", "plugin", "list", "--json")] = (0, texto)
+        self.assertIn("plugin:a@mk", self.foto())
+
+    def test_json_de_sin_json_devuelve_none(self):
+        m = cargar()
+        self.assertIsNone(m._json_de("(node:1) [DEP0040] aviso { raro"))
+        self.assertIsNone(m._json_de("[1, 2"))
+        self.assertIsNone(m._json_de(None))
+
     def test_plugin_sin_version_se_omite(self):
         self.salidas[("claude", "plugin", "list", "--json")] = (0, json.dumps([
             {"id": "a@mk", "version": "", "installPath": "/x/a"},
@@ -269,6 +282,123 @@ class PruebaFoto(unittest.TestCase):
             [sys.executable, "-c", "print('hola')"], 10)
         self.assertEqual(codigo, 0)
         self.assertIn("hola", salida)
+
+
+class PopenFalso:
+    """Reemplaza subprocess.Popen: guarda los argumentos y no lanza nada."""
+    instancias = []
+    espera_timeout = False
+
+    def __init__(self, cmd, **kw):
+        self.cmd, self.kw = cmd, kw
+        self.pid = 4242
+        self.stdin = self.stdout = self.stderr = None
+        self.returncode = 0
+        self.llamadas = 0
+        PopenFalso.instancias.append(self)
+
+    def communicate(self, timeout=None):
+        self.llamadas += 1
+        if PopenFalso.espera_timeout and self.llamadas == 1:
+            raise subprocess.TimeoutExpired(self.cmd, timeout)
+        return "ok", None
+
+    def kill(self):
+        pass
+
+    def wait(self, timeout=None):
+        return 0
+
+
+class PruebaEjecutarReal(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name)
+        PopenFalso.instancias = []
+        PopenFalso.espera_timeout = False
+        self.addCleanup(setattr, PopenFalso, "espera_timeout", False)
+
+    def correr(self, cmd, plataforma=None, home=None):
+        m = cargar()
+        with unittest.mock.patch.object(m.subprocess, "Popen", PopenFalso):
+            if plataforma:
+                with unittest.mock.patch.object(m.sys, "platform", plataforma):
+                    r = m.ejecutar_real(cmd, 5, home or self.home)
+            else:
+                r = m.ejecutar_real(cmd, 5, home or self.home)
+        return r, PopenFalso.instancias[-1].kw
+
+    @unittest.skipIf(sys.platform == "win32", "solo POSIX")
+    def test_tiempo_limite_mata_tambien_al_nieto(self):
+        pidfile = self.home / "nieto.pid"
+        t0 = time.monotonic()
+        codigo, salida = cargar().ejecutar_real(
+            ["sh", "-c", f"sleep 30 & echo $! > '{pidfile}'; sleep 30"], 1, self.home)
+        nieto = int(pidfile.read_text().strip())
+        try:
+            self.assertEqual((codigo, salida), (124, "tiempo agotado"))
+            self.assertLess(time.monotonic() - t0, 8)
+            vivo = True
+            for _ in range(40):
+                try:
+                    os.kill(nieto, 0)
+                except ProcessLookupError:
+                    vivo = False
+                    break
+                time.sleep(0.1)
+            self.assertFalse(vivo, "el nieto sigue vivo")
+        finally:
+            try:
+                os.kill(nieto, 9)   # PID concreto, solo si la prueba falló
+            except OSError:
+                pass
+
+    @unittest.skipIf(sys.platform == "win32", "solo POSIX")
+    def test_posix_abre_sesion_nueva(self):
+        _, k = self.correr(["x"], "darwin")
+        self.assertIs(k["start_new_session"], True)
+        self.assertNotIn("creationflags", k)
+
+    def test_windows_taskkill_por_pid_con_arbol(self):
+        m = cargar()
+        PopenFalso.espera_timeout = True
+        with unittest.mock.patch.object(m.subprocess, "Popen", PopenFalso), \
+                unittest.mock.patch.object(m.subprocess, "run") as run, \
+                unittest.mock.patch.object(m.sys, "platform", "win32"):
+            r = m.ejecutar_real(["x"], 1, self.home)
+        self.assertEqual(r, (124, "tiempo agotado"))
+        cmd = run.call_args.args[0]
+        self.assertEqual(cmd, ["taskkill", "/PID", "4242", "/T", "/F"])
+
+    def test_windows_sin_ventana_de_consola(self):
+        _, k = self.correr(["x"], "win32")
+        sin_ventana = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        grupo = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200)
+        self.assertTrue(k["creationflags"] & sin_ventana)
+        self.assertTrue(k["creationflags"] & grupo)
+        self.assertNotIn("start_new_session", k)
+
+    def test_path_del_hijo_lleva_programa_y_carpetas_conocidas_sin_duplicar(self):
+        m = cargar()
+        actual = os.pathsep.join(["/usr/bin", "/opt/homebrew/bin", "/bin"])
+        with unittest.mock.patch.dict(os.environ, {"PATH": actual}):
+            _, k = self.correr(["/opt/tools/npx", "-v"])
+        esperado = ["/opt/tools"] + [str(c) for c in m._carpetas_de_programas(self.home)]
+        for c in ["/usr/bin", "/opt/homebrew/bin", "/bin"]:
+            if c not in esperado:
+                esperado.append(c)
+        self.assertEqual(k["env"]["PATH"].split(os.pathsep), esperado)
+
+    def test_hijo_corre_en_home_no_en_la_carpeta_del_proyecto(self):
+        _, k = self.correr(["x"])
+        self.assertEqual(k["cwd"], str(self.home))
+
+    def test_cwd_por_defecto_es_el_home_del_usuario(self):
+        m = cargar()
+        with unittest.mock.patch.object(m.subprocess, "Popen", PopenFalso):
+            m.ejecutar_real(["x"], 5)
+        self.assertEqual(PopenFalso.instancias[-1].kw["cwd"], str(Path.home()))
 
 
 class PruebaRevision(unittest.TestCase):
@@ -382,6 +512,18 @@ class PruebaRevision(unittest.TestCase):
         texto = esperado.read_text(encoding="utf-8")
         self.assertIn("+linea nueva", texto)
         self.assertNotIn("+instrucciones viejas", texto)
+
+    def test_si_no_se_puede_escribir_el_diff_la_revision_sigue(self):
+        # cambios/ es un archivo: mkdir falla con OSError
+        self._texto(self.home / ".claude" / "al-dia" / "cambios", "no soy carpeta")
+        r = self.revisar()
+        (c,) = self.por_nombre(r["cambios"], "caveman")
+        self.assertIs(c["cambio_texto"], True)
+        self.assertIsNone(c["diff"])
+        guardado = json.loads((self.home / ".claude" / "al-dia" / "resultado.json")
+                              .read_text(encoding="utf-8"))
+        self.assertEqual(guardado, r)
+        self.assertEqual(len(self.por_nombre(r["cambios"], "codebase-memory")), 1)
 
     def test_plugin_cambia_de_version_sin_cambiar_texto(self):
         r = self.revisar()
@@ -881,6 +1023,21 @@ class PruebaHook(unittest.TestCase):
         self.assertIs(k["stdout"], subprocess.DEVNULL)
         self.assertIs(k["stderr"], subprocess.DEVNULL)
         self.assertIs(k["close_fds"], True)
+
+    def test_lanzar_corre_en_home_no_en_la_carpeta_del_proyecto(self):
+        self.assertEqual(self._banderas_de_lanzar("darwin")["cwd"], str(Path.home()))
+        self.assertEqual(self._banderas_de_lanzar("win32")["cwd"], str(Path.home()))
+
+    def test_el_trabajador_ejecuta_con_el_home_dado(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook, "revisar") as rev:
+            hook.main(["--revisar"], self.home, self.t, self.lanzar)
+        ejecutar = rev.call_args.args[2]
+        PopenFalso.espera_timeout = False
+        with unittest.mock.patch.object(hook.al_dia.subprocess, "Popen", PopenFalso):
+            PopenFalso.instancias = []
+            ejecutar(["x"], 5)
+        self.assertEqual(PopenFalso.instancias[-1].kw["cwd"], str(self.home))
 
     def test_lanzar_en_windows_usa_creationflags_y_desliga_todo(self):
         k = self._banderas_de_lanzar("win32")

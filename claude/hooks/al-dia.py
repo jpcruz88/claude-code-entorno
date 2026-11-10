@@ -10,6 +10,7 @@ Dos modos:
 
 Cualquier fallo propio sale con código 0: este hook nunca bloquea la sesión.
 """
+import functools
 import os
 import subprocess
 import sys
@@ -31,7 +32,9 @@ def lanzar_separado(cmd):
     if os.environ.get("AL_DIA_NO_LANZAR"):   # solo para las pruebas
         return
     opciones = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL, "close_fds": True}
+                "stderr": subprocess.DEVNULL, "close_fds": True,
+                # no hereda la carpeta del proyecto abierto (su .npmrc, etc.)
+                "cwd": str(Path.home())}
     if sys.platform == "win32":
         opciones["creationflags"] = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
                                      | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
@@ -57,7 +60,7 @@ def _trabajar(argv, home, ahora):
             # Si la revisión truena, no se relanza en cada sesión; `revisar` lo reemplaza al acabar.
             al_dia.escribir_json(archivo, {"inicio": ahora, "repetir": [],
                                            "ultimo_intento": ahora})
-        revisar(home, ahora, al_dia.ejecutar_real, solo=solo)
+        revisar(home, ahora, functools.partial(al_dia.ejecutar_real, home=home), solo=solo)
     finally:
         al_dia.soltar_cerrojo(carpeta)
 
