@@ -308,17 +308,74 @@ const H5_XHIGH = 60
 /** Si la ventana de 5 h se reinicia en menos de estos minutos, no pone tope. */
 const H5_GRACIA_MIN = 15
 
+type ModeloTope = 'haiku' | 'sonnet' | 'opus'
+type EsfuerzoTope = 'low' | 'medium' | 'high' | 'xhigh'
+const MODELOS_TOPE: ModeloTope[] = ['haiku', 'sonnet', 'opus']
+const ESFUERZOS_TOPE: EsfuerzoTope[] = ['low', 'medium', 'high', 'xhigh']
+/** Lo que permite una ventana y por qué: `causa` es lo que se le dice a quien mira el panel. */
+type Candidato = { modelo: ModeloTope; esfuerzo: EsfuerzoTope; causa: string }
+/** Escalones de la semana por exceso sobre el ritmo (≤). Por encima del último: haiku medium. */
+const SEMANA_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [
+  [MARGEN_XHIGH, 'opus', 'xhigh'], [5, 'opus', 'high'], [10, 'opus', 'medium'], [15, 'sonnet', 'high'], [25, 'sonnet', 'medium'],
+]
+/** Escalones de la ventana de 5 h por uso (<). Desde el último: haiku medium. */
+const H5_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [[H5_XHIGH, 'opus', 'xhigh'], [75, 'opus', 'medium'], [85, 'sonnet', 'medium']]
+
+const pts = (exceso: number): string => {
+  const n = Math.round(exceso)
+  return `${n < 0 ? `−${-n}` : `+${n}`} pts`
+}
+
+/** Lo que permite la semana; igual que `_tope_semana` de jev_limites.py con los valores por defecto. */
+const topeSemana = (r: RitmoSemana): Candidato => {
+  const uso = `semana ${Math.round(r.usado)}%`
+  if (r.despuesDelCorte) return r.usado >= FINAL_SEMANA ? { modelo: 'haiku', esfuerzo: 'medium', causa: uso } : { modelo: 'opus', esfuerzo: 'xhigh', causa: uso }
+  if (r.usado >= CFG_RITMO.metaCorte) return { modelo: 'haiku', esfuerzo: 'medium', causa: uso }
+  const [, modelo, esfuerzo] = SEMANA_ESCALONES.find(([umbral]) => r.exceso <= umbral) ?? [0, 'haiku' as const, 'medium' as const]
+  return { modelo, esfuerzo, causa: `semana ${pts(r.exceso)}` }
+}
+
+/** Lo que permite la ventana de 5 h; igual que `_tope_5h`. En gracia (reinicia en menos de 15 min) no recorta. */
+const tope5h = (cinco: VentanaLimite, ahora: number): Candidato => {
+  const causa = `5h ${Math.round(cinco.usado)}%`
+  if (cinco.reinicio - ahora < H5_GRACIA_MIN * 60) return { modelo: 'opus', esfuerzo: 'xhigh', causa }
+  const [, modelo, esfuerzo] = H5_ESCALONES.find(([umbral]) => cinco.usado < umbral) ?? [0, 'haiku' as const, 'medium' as const]
+  return { modelo, esfuerzo, causa }
+}
+
 /**
- * ¿El tope de jev_limites.py devolvería xhigh? Con los valores por defecto (no lee config.json):
- * hay dato de la ventana de 5 h y sigue vigente (reinicio futuro); va bajo 60 % o está en gracia
- * (reinicia en menos de 15 min); y la semana va 10 puntos o más bajo el ritmo (antes del corte)
- * o bajo 97 % (después del corte).
+ * El tope vigente, igual que `calcular_tope` de jev_limites.py con los valores por defecto (no lee config.json):
+ * de cada ventana vigente sale un máximo y gana el más bajo. xhigh solo pasa si se conoce la semana y, cuando
+ * la cuenta trae ventana de 5 h, también esa; una cuenta sin ventana de 5 h decide solo con la semana.
+ * `r` es el ritmo de la semana (null sin dato vigente); `sinDato` dice que limites.json falta o es viejo.
  */
-const xhighOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): boolean => {
-  if (!cinco || cinco.reinicio <= ahora) return false
-  const cincoOk = cinco.usado < H5_XHIGH || cinco.reinicio - ahora < H5_GRACIA_MIN * 60
-  const semanaOk = r.despuesDelCorte ? r.usado < FINAL_SEMANA : r.exceso <= MARGEN_XHIGH
-  return cincoOk && semanaOk
+const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ahora: number, sinDato = false): Candidato => {
+  const cincoVigente = !sinDato && cinco && cinco.reinicio > ahora ? cinco : undefined
+  const candidatos = [...(r ? [topeSemana(r)] : []), ...(cincoVigente ? [tope5h(cincoVigente, ahora)] : [])]
+  if (!candidatos.length) return { modelo: 'opus', esfuerzo: 'high', causa: 'sin dato de uso' }
+  const rango = (c: Candidato) => MODELOS_TOPE.indexOf(c.modelo) * 10 + ESFUERZOS_TOPE.indexOf(c.esfuerzo)
+  const manda = candidatos.reduce((a, b) => (rango(b) < rango(a) ? b : a))
+  const modelo = candidatos.map(c => c.modelo).reduce((a, b) => (MODELOS_TOPE.indexOf(b) < MODELOS_TOPE.indexOf(a) ? b : a))
+  const esfuerzo = candidatos.map(c => c.esfuerzo).reduce((a, b) => (ESFUERZOS_TOPE.indexOf(b) < ESFUERZOS_TOPE.indexOf(a) ? b : a))
+  if (esfuerzo !== 'xhigh') return { modelo, esfuerzo, causa: manda.causa }
+  if (!r) return { modelo, esfuerzo: 'high', causa: 'falta dato de semana' }
+  if (cinco && !cincoVigente) return { modelo, esfuerzo: 'high', causa: 'falta dato de 5h' }
+  return { modelo, esfuerzo, causa: 'sin recorte' }
+}
+
+/** ¿El tope de jev_limites.py dejaría pasar xhigh ahora? */
+const xhighOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): boolean => topeVigente(r, cinco, ahora).esfuerzo === 'xhigh'
+
+/**
+ * La línea del tope que rige ahora para los subagentes: `tope ahora: sonnet high · semana +12 pts`.
+ * Verde si deja pasar Opus con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
+ * `ahora` y los datos van en segundos epoch.
+ */
+export const topeAhora = (limites: LimitesJev | null, ahora: number, zona: Zona = zonaDelSistema): { texto: string; nivel: NivelRitmo } => {
+  const sinDato = !limites || ahora - limites.actualizado > CFG_RITMO.maxAntiguedadH * 3600
+  const t = topeVigente(ritmoSemana(limites, ahora, undefined, zona), limites?.five_hour, ahora, sinDato)
+  const libre = t.modelo === 'opus' && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
+  return { texto: `tope ahora: ${t.modelo} ${t.esfuerzo} · ${t.causa}`, nivel: libre ? 'verde' : t.modelo === 'haiku' ? 'rojo' : 'ambar' }
 }
 
 /**

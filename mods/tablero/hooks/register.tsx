@@ -84,7 +84,7 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, lineaRegistroJev, marcaTarjeta, recientesJev, resumenJev, ritmoSemana } from './jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaRegistroJev, marcaTarjeta, recientesJev, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
 import { anotarCosto, costoPorMinuto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
@@ -1541,7 +1541,8 @@ export const register: Register = (on, options) => {
       ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: (nivelRit === 'verde' ? 'jev' : nivelRit === 'ambar' ? 'amb' : 'warn') as Tinta }
       : undefined
     const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
-    const ultimoTope = jevs.decisiones.filter(x => x.tipo === 'tope').at(-1)
+    // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
+    const topeVigente = topeAhora(jevs.limites, now / 1000)
     anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
     const juntar = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ')
     const mapaDatos: DatosMapa = {
@@ -1592,7 +1593,8 @@ export const register: Register = (on, options) => {
         umbral: 0.8,
         recientes: recientesJev(jevs.decisiones),
         decisiones: jevN,
-        tope: ultimoTope?.motivo || null,
+        tope: topeVigente.texto,
+        topeTinta: topeVigente.nivel === 'verde' ? 'jev' : topeVigente.nivel === 'ambar' ? 'amb' : 'warn',
       },
       tarjetas: cards.map((c): TarjetaMapa => ({
         nombre: nombreDeTipo(c.type),

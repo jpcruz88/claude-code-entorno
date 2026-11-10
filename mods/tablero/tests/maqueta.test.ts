@@ -78,6 +78,16 @@ test('LEAD: contexto con barra ▓░ magenta y el conector baja a ▾', () => {
   expect([reposo[19][75].c, reposo[20][75].c, reposo[21][75].c]).toEqual(['│', '│', '▾'])
 })
 
+test('JEV: la línea del tope toma el color de su nivel; sin nivel va en ámbar', () => {
+  const d = datos(0)
+  const verde = { ...d, jev: { ...d.jev, tope: 'tope ahora: opus xhigh · sin recorte', topeTinta: 'jev' as const } }
+  expect(componerMapa(verde, 0)[27][53].k).toBe('jev')
+  const angosto = componerMapa(verde, 0, 66)
+  const y = angosto.findIndex(r => r.map(c => c.c).join('').includes('tope ahora:'))
+  expect(angosto[y][2].k).toBe('jev')
+  expect(componerMapa(d, 0)[27][53].k).toBe('amb')
+})
+
 test('JEV · decisiones: umbral, una fila por decisión con hora, texto, ▮▯ y confianza, y el tope', () => {
   const g = componerMapa(datos(0), 0)
   expect(fila(g, 22)).toContain('┌─ JEV · decisiones ')

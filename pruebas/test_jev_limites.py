@@ -94,8 +94,9 @@ class TopeSemana(unittest.TestCase):
         self.assertEqual(t["motivo"], "tope semana 91% → haiku")
 
     def test_viernes_despues_del_corte_95_es_libre(self):
+        # Sin ventana de 5 h en la cuenta decide solo la semana: tras el corte deja pasar xhigh.
         t = tope(datos(semana=95, ahora=VIERNES), VIERNES)
-        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]), ("opus", "high", None))
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]), ("opus", "xhigh", None))
         self.assertAlmostEqual(t["semana"]["ritmo"], 90)
 
     def test_viernes_despues_del_corte_97_es_haiku(self):
@@ -228,9 +229,20 @@ class Xhigh(unittest.TestCase):
     def test_viernes_desde_97_es_haiku_medium_aunque_5h_este_baja(self):
         self.assertEqual(self.r(ahora=VIERNES, semana=97, h5=30), ("haiku", "medium"))
 
-    def test_sin_una_de_las_ventanas_el_maximo_es_high(self):
-        self.assertEqual(self.r(semana=28), ("opus", "high"))
+    def test_sin_la_semana_el_maximo_es_high(self):
         self.assertEqual(self.r(h5=40), ("opus", "high"))
+
+    def test_cuenta_sin_ventana_de_5h_decide_solo_la_semana(self):
+        # Claude Code no manda `five_hour` en todas las cuentas: su ausencia no frena xhigh.
+        self.assertEqual(self.r(semana=28), ("opus", "xhigh"))
+        self.assertEqual(self.r(semana=30.5), ("opus", "high"))
+        self.assertEqual(self.r(ahora=VIERNES, semana=92), ("opus", "xhigh"))
+
+    def test_ventana_de_5h_rota_no_cuenta_como_ausente(self):
+        d = datos(semana=28)
+        d["five_hour"] = {"usado": "mucho"}
+        t = tope(d)
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"]), ("opus", "high"))
 
     def test_5h_en_gracia_no_pone_ningun_tope_ni_limita_xhigh(self):
         t = tope(datos(semana=28, h5=90, h5_reinicio=LUNES + 600))

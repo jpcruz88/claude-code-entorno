@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 (tablero)
+
+La caja JEV dice el tope que rige ahora para los subagentes.
+
+- Línea nueva `tope ahora: <modelo> <esfuerzo> · <causa>`, por ejemplo `tope ahora: opus xhigh · sin recorte` o `tope ahora: sonnet high · semana +12 pts`. Se calcula del uso de la cuenta (`~/.claude/jev/limites.json`) con las mismas reglas que `jev_limites.py`. Verde si deja pasar Opus con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku. Sin dato de uso lo dice: `opus high · sin dato de uso`.
+- Antes la caja mostraba el último tope aplicado, que podía ser de horas atrás y no decía nada si nunca hubo uno.
+- Una cuenta sin ventana de 5 h decide solo con la semana: `xhigh ok` y `opus xhigh` ya no exigen ese dato. El mismo cambio va en `claude/hooks/jev_limites.py`, que antes bajaba siempre xhigh a high en esas cuentas.
+
 ## 0.8.1 (tablero)
 
 Instalable desde un clon limpio.
