@@ -3,13 +3,16 @@
 Base de la revisión que actualiza una vez al día skills, plugins y programas.
 Solo biblioteca estándar.
 """
+import difflib
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -168,10 +171,25 @@ def _salida(programa, args, ejecutar, buscar_, home):
 
 
 def _json_de(texto):
-    try:
-        return json.loads(texto)
-    except (TypeError, ValueError):
+    """JSON desde el primer `[` o `{`: stderr va mezclado y un aviso antes lo rompería."""
+    if not isinstance(texto, str):
         return None
+    inicios = [i for i in (texto.find("["), texto.find("{")) if i >= 0]
+    if not inicios:
+        return None
+    try:
+        return json.JSONDecoder().raw_decode(texto, min(inicios))[0]
+    except ValueError:
+        return None
+
+
+def _version_de(p):
+    """Versión como texto; None si falta, es nula o está vacía."""
+    v = p.get("version")
+    if v is None or isinstance(v, (dict, list)):
+        return None
+    v = str(v).strip()
+    return v or None
 
 
 def _entrada(nombre, tipo, version, carpeta=None):
@@ -202,10 +220,11 @@ def _foto_plugins(home, ejecutar, buscar_):
         if not isinstance(p, dict) or not isinstance(p.get("id"), str):
             continue
         id_ = p["id"]
-        if id_.endswith("@claude-code-entorno"):
+        version = _version_de(p)
+        if id_.endswith("@claude-code-entorno") or not version:
             continue
         r[f"plugin:{id_}"] = _entrada(id_.split("@")[0], "plugin",
-                                      str(p.get("version", "")), p.get("installPath"))
+                                      version, p.get("installPath"))
     return r
 
 
@@ -219,10 +238,13 @@ def _foto_plugins_herdr(home, ejecutar, buscar_):
     for p in plugins:
         if not isinstance(p, dict) or not isinstance(p.get("plugin_id"), str):
             continue
+        version = _version_de(p)
+        if not version:
+            continue
         origen = p.get("source") if isinstance(p.get("source"), dict) else {}
         nombre = origen.get("repo") or p["plugin_id"]
         r[f"plugin:herdr/{p['plugin_id']}"] = _entrada(
-            nombre, "plugin", str(p.get("version", "")), p.get("plugin_root"))
+            nombre, "plugin", version, p.get("plugin_root"))
     return r
 
 
@@ -278,3 +300,215 @@ def foto(home, ejecutar, buscar=buscar):
         except Exception:
             pass
     return r
+
+
+# --- Revisión: actualizar, comparar y guardar diffs ---------------------------
+
+TIEMPO_PASO = 300        # cada skill o plugin
+TIEMPO_PROGRAMA = 600    # cada programa
+EXTENSIONES = {".md", ".json", ".py", ".sh", ".ts", ".tsx", ".js", ".toml", ".yaml", ".yml"}
+MAX_TEXTO = 512 * 1024
+IGNORADAS = {"node_modules", ".git"}
+MAX_ERROR = 120
+EN_USO = ("in use", "being used", "busy", "denied")
+
+
+def _leer_skills_cli():
+    """SKILLS_CLI de herramientas/instalar_comun.py, para no duplicarlo a mano."""
+    ruta = Path(__file__).resolve().parent.parent.parent / "herramientas" / "instalar_comun.py"
+    try:
+        m = re.search(r'^SKILLS_CLI\s*=\s*["\']([^"\']+)["\']',
+                      ruta.read_text(encoding="utf-8"), re.M)
+    except OSError:
+        m = None
+    # Último recurso: el hook también corre copiado fuera del repo, sin ese archivo al lado.
+    return m.group(1) if m else "skills@1.7.2"
+
+
+SKILLS_CLI = _leer_skills_cli()
+
+
+def pasos(antes, cli_skills=SKILLS_CLI):
+    """Pasos de actualización: [(clave, comando, timeout)], solo de lo que está en `antes`.
+
+    Los `marketplace update` van primero, para que `plugin update` vea lo último.
+    """
+    plugins = [k for k in antes if k.startswith("plugin:") and not k.startswith("plugin:herdr/")]
+    r = []
+    marketplaces = []
+    for k in plugins:
+        mk = k[len("plugin:"):].partition("@")[2]
+        if mk and mk not in marketplaces:
+            marketplaces.append(mk)
+    for mk in marketplaces:
+        r.append((f"marketplace:{mk}", ["claude", "plugin", "marketplace", "update", mk],
+                  TIEMPO_PASO))
+    for k in plugins:
+        r.append((k, ["claude", "plugin", "update", k[len("plugin:"):]], TIEMPO_PASO))
+    for k, datos in antes.items():
+        if k.startswith("skill:"):
+            r.append((k, ["npx", "-y", cli_skills, "update", datos["nombre"], "-g", "-y"],
+                      TIEMPO_PASO))
+    programas = [
+        ("MCP:codebase-memory", ["codebase-memory-mcp", "update", "-y"]),
+        ("programa:herdr", ["herdr", "update"]),
+    ]
+    for clave, cmd in programas:
+        if clave in antes:
+            r.append((clave, cmd, TIEMPO_PROGRAMA))
+    if any(k.startswith("plugin:herdr/") for k in antes):
+        r.append(("plugin:herdr/*", ["herdr", "plugin", "update"], TIEMPO_PASO))
+    finales = [
+        ("programa:opencode", ["opencode", "upgrade"]),
+        ("programa:neovim-plugins", ["nvim", "--headless", "+Lazy! update", "+qa"]),
+        ("programa:claude", ["claude", "update"]),   # el último: puede reemplazar al binario
+    ]
+    for clave, cmd in finales:
+        if clave in antes:
+            r.append((clave, cmd, TIEMPO_PROGRAMA))
+    return r
+
+
+def textos(carpeta_):
+    """Archivos de texto de la carpeta: {ruta relativa: contenido}. {} si no se puede leer."""
+    base = Path(carpeta_)
+    r = {}
+    try:
+        for raiz, dirs, archivos in os.walk(base):
+            dirs[:] = sorted(d for d in dirs if d not in IGNORADAS)
+            for nombre in sorted(archivos):
+                ruta = Path(raiz) / nombre
+                if ruta.suffix.lower() not in EXTENSIONES:
+                    continue
+                try:
+                    if ruta.stat().st_size >= MAX_TEXTO:
+                        continue
+                    r[str(ruta.relative_to(base))] = ruta.read_text(
+                        encoding="utf-8", errors="replace")
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    return r
+
+
+def _diff(antes_, despues_):
+    """Diff unificado entre dos {ruta: texto}; "" si no hay diferencias."""
+    trozos = []
+    for ruta in sorted(set(antes_) | set(despues_)):
+        a, b = antes_.get(ruta, ""), despues_.get(ruta, "")
+        if a == b:
+            continue
+        trozos.extend(difflib.unified_diff(
+            a.splitlines(keepends=True), b.splitlines(keepends=True),
+            fromfile=f"a/{ruta}", tofile=f"b/{ruta}"))
+        if trozos and not trozos[-1].endswith("\n"):
+            trozos.append("\n")
+    return "".join(trozos)
+
+
+def _error(salida):
+    texto = " ".join((salida or "").split())
+    return texto[:MAX_ERROR] if texto else "sin detalle"
+
+
+def _identidad_fallo(clave, antes):
+    """(nombre, tipo) con que un paso fallido sale en `fallos`."""
+    if clave.startswith("marketplace:"):
+        return "marketplace " + clave[len("marketplace:"):], "plugin"
+    if clave == "plugin:herdr/*":
+        return "plugins de herdr", "plugin"
+    datos = antes.get(clave) or {}
+    return datos.get("nombre") or clave, datos.get("tipo") or "programa"
+
+
+def _resultado_previo(home, ahora):
+    previo = leer_json(carpeta(home) / "resultado.json")
+    if not previo or not isinstance(previo.get("cambios"), list):
+        return None
+    ts = previo.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or ahora - ts >= HORAS_REVISION:
+        return None
+    return previo
+
+
+def _ruta_diff(home, ahora, nombre, tipo, usadas):
+    dia = time.strftime("%Y-%m-%d", time.localtime(ahora))
+    base = nombre.replace("/", "_").replace("\\", "_")
+    ruta = carpeta(home) / "cambios" / dia / (base + ".diff")
+    if ruta in usadas:   # mismo nombre en skill y plugin
+        ruta = ruta.with_name(f"{base}-{tipo}.diff")
+    usadas.add(ruta)
+    return ruta
+
+
+def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=SKILLS_CLI):
+    """Actualiza, compara la foto de antes con la de después y guarda el resultado.
+
+    `solo` (modo reintento): claves de los únicos pasos que corren; el resultado nuevo
+    se suma al anterior si este tiene menos de 24 h.
+    """
+    home = Path(home)
+    antes = foto(home, ejecutar, buscar)
+    lista = pasos(antes, cli_skills)
+    if solo is not None:
+        lista = [p for p in lista if p[0] in solo]
+
+    # Textos de antes de actualizar, solo de lo que va a correr.
+    textos_antes = {}
+    for clave, _, _ in lista:
+        datos = antes.get(clave)
+        if datos and datos["tipo"] in ("skill", "plugin") and datos.get("carpeta"):
+            textos_antes[clave] = textos(datos["carpeta"])
+
+    fallos, pendientes, malas = [], [], []
+    for clave, cmd, timeout in lista:
+        ruta = buscar(cmd[0], home)
+        if not ruta:
+            continue    # herramienta no instalada: se salta en silencio
+        try:
+            codigo, salida = ejecutar([ruta, *cmd[1:]], timeout)
+        except Exception as e:
+            codigo, salida = 1, str(e)
+        if codigo == 0:
+            continue
+        nombre, tipo = _identidad_fallo(clave, antes)
+        if clave == "MCP:codebase-memory" and any(
+                x in (salida or "").lower() for x in EN_USO):
+            pendientes.append({"nombre": nombre, "tipo": tipo, "motivo": "en uso"})
+        else:
+            fallos.append({"nombre": nombre, "tipo": tipo, "error": _error(salida)})
+        malas.append(clave)
+
+    despues = foto(home, ejecutar, buscar)
+    cambios, usadas = [], set()
+    for clave, d in despues.items():
+        a = antes.get(clave)
+        if not a or a["version"] == d["version"]:
+            continue
+        cambio = {"nombre": d["nombre"], "tipo": d["tipo"], "antes": a["version"],
+                  "despues": d["version"], "cambio_texto": False, "diff": None}
+        if clave in textos_antes and d.get("carpeta"):
+            texto = _diff(textos_antes[clave], textos(d["carpeta"]))
+            if texto:
+                destino = _ruta_diff(home, ahora, d["nombre"], d["tipo"], usadas)
+                destino.parent.mkdir(parents=True, exist_ok=True)
+                destino.write_text(texto, encoding="utf-8")
+                cambio["cambio_texto"] = True
+                cambio["diff"] = str(destino)
+        cambios.append(cambio)
+
+    if solo is not None:
+        previo = _resultado_previo(home, ahora)
+        if previo:
+            cambios = [c for c in previo["cambios"] if isinstance(c, dict)] + cambios
+
+    con_cambio = {(c.get("nombre"), c.get("tipo")) for c in cambios}
+    al_dia = sum(1 for k, d in despues.items()
+                 if k not in malas and (d["nombre"], d["tipo"]) not in con_cambio)
+    resultado = {"version": 1, "ts": int(ahora), "cambios": cambios, "fallos": fallos,
+                 "pendientes": pendientes, "al_dia": al_dia}
+    d_estado = carpeta(home)
+    escribir_json(d_estado / "resultado.json", resultado)
+    escribir_json(d_estado / "ultima-revision.json", {"inicio": ahora, "repetir": malas})
+    return resultado
