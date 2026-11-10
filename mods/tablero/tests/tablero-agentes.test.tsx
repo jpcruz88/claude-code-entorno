@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { STEP_TOOL } from '../hooks/savvy-core'
+import { nombreDeTipo } from '../hooks/nombres'
 
 const pane = {
   plugin: 'tablero',
@@ -28,24 +28,13 @@ const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
   $.agent.spawn({
     prompt: 'haz el trabajo',
     description: 'revisar auth',
-    subagentType: 'savvy-careful',
+    subagentType: 'general-purpose',
     tool_use_id: 'tu1',
     provider: { plugin: 'engine', tier: 'core' as const },
     parentModel: 'claude-opus-5-5',
     background: true,
     fork: false,
   } as never)
-
-test('el paso que reporta un trabajador aparece en su tarjeta de Tablero', { options: { layout: 'diagrama' } }, async ($, on) => {
-  motor(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  await lanzar($)
-  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
-  const ui = await $.ui.mount(pane as never)
-  expect(await ui.find({ text: /2\/4/ })).toBeDefined()
-  expect(await ui.find({ text: /leyendo/ })).toBeDefined()
-  await ui.unmount()
-})
 
 test('un subagente terminado sigue en Tablero', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
@@ -57,12 +46,8 @@ test('un subagente terminado sigue en Tablero', { options: { layout: 'diagrama' 
   await ui.unmount()
 })
 
-test('la tarjeta dibuja una barra de avance con los pasos del trabajador', { options: { layout: 'diagrama' } }, async ($, on) => {
-  motor(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  await lanzar($)
-  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
-  const ui = await $.ui.mount(pane as never)
-  expect(await ui.find({ text: /████░░░░|██░░░░░░/ })).toBeDefined()
-  await ui.unmount()
+test('los tipos de Claude Code se nombran en español; uno desconocido queda igual', () => {
+  expect(nombreDeTipo('general-purpose')).toBe('propósito general')
+  expect(nombreDeTipo('Explore')).toBe('explorar')
+  expect(nombreDeTipo('mi-agente')).toBe('mi-agente')
 })

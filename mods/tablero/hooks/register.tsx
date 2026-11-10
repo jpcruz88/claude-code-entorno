@@ -76,9 +76,9 @@ import {
 } from './core'
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
-import { CARRILES_VISIBLES, barraAvance, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
+import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
-import { nombreDeTipo } from './savvy-core'
+import { nombreDeTipo } from './nombres'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
@@ -90,7 +90,6 @@ import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
 import { situacionDe } from './situacion'
 import { MAPA_ANCHO, MAPA_MIN, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
-import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -363,12 +362,8 @@ export const register: Register = (on, options) => {
   const C = PALETTES[cfg.palette]
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
-  // Panel de progreso y de agentes (savvy-progress, adaptado): barra sobre el prompt y panel «Agentes».
-  registrarAgentes(on)
 
   on('session.start', async ($, e, next) => {
-    // Un host sin herramientas o comandos arranca sin el panel de agentes, como la banda sin uso.
-    await iniciarAgentes($).catch(() => undefined)
     await $.command.register({
       name: 'tablero',
       description: 'Tablero: abre, cierra, reinicia o cambia la distribución del panel completo',
@@ -396,7 +391,8 @@ export const register: Register = (on, options) => {
     // The git branch: a host without a repository just starts without it.
     await refrescarRama($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
-    if (cfg.banda) iniciarReloj($, cfg)
+    // El reloj redibuja el panel (animación, cuenta del turno, cambio de minuto): siempre corre.
+    iniciarReloj($, cfg)
     await refreshStatus($)
     const done = await next(e)
     if (resumedWindow > 0) {
@@ -528,7 +524,6 @@ export const register: Register = (on, options) => {
       }
     }
     const result = yield* next(e)
-    await pasoDeSubagente($, e, result)
     const [cards, a] = await Promise.all([getCards($), getArchitect($)])
     if (cards.some(c => c.id === id)) {
       const step = { model: e.model, usage: result.usage, stopReason: result.stopReason }
@@ -678,7 +673,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const started = await lanzarAgente($, e, next)
+    const started = await next(e)
     const decisiones = await releerJev($)
     if (!e.parentAgentId) await noteMode($, e.permissionMode)
     if (started.deny !== undefined || !started.agentId) return started
@@ -714,7 +709,6 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    await finDeTurno($, e)
     await releerJev($)
     const id = e.agentId
     const now = await $.clock.now()
@@ -771,7 +765,7 @@ export const register: Register = (on, options) => {
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, t, r, v, now, cwd, pasos, jevs, branchNow, usosNow] = await Promise.all([
+    const [m, u, a, g, cards, lp, t, r, v, now, cwd, jevs, branchNow, usosNow] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
@@ -783,7 +777,6 @@ export const register: Register = (on, options) => {
       getView($),
       $.clock.now(),
       $.session.cwd().catch(() => ''),
-      pasosDeAgentes($),
       getJev($),
       read($, gitBranch),
       read($, usos).then(x => normalize(DEFAULT_USOS, x)),
@@ -1000,7 +993,7 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column" borderStyle="round" borderColor={C.arch} paddingX={1} width={w}>
           <Box justifyContent="space-between">
             <Text color={C.arch} bold wrap="truncate">
-              {cfg.architectLabel} · {advising ? 'asesorando' : 'de guardia'}
+              {cfg.architectLabel} · {advising ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`}
             </Text>
             <Box flexShrink={0}>
               <Text>
@@ -1223,15 +1216,11 @@ export const register: Register = (on, options) => {
                     {`${sameModel ? nombreDeTipo(c.type) : `${nombreDeTipo(c.type)} · ${prettyModel(c.model)}`}${c.jev ? ` · ${c.jev}` : ''}`}
                   </Text>
                   <Text dimColor wrap="truncate">
-                    {pasos.has(c.id)
-                      ? `${pasos.get(c.id)!.done}/${pasos.get(c.id)!.total}${pasos.get(c.id)!.note ? ` ${pasos.get(c.id)!.note}` : ''}`
-                      : c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
+                    {c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
                   </Text>
-                  {cardW >= 14 && (pasos.has(c.id) || c.status === 'running') ? (
-                    <Text color={c.status === 'running' ? C.agent : C.dim} wrap="truncate">
-                      {pasos.has(c.id)
-                        ? barraAvance(pasos.get(c.id)!.done, pasos.get(c.id)!.total, cardW - 4)
-                        : barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
+                  {cardW >= 14 && c.status === 'running' ? (
+                    <Text color={C.agent} wrap="truncate">
+                      {barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
                     </Text>
                   ) : null}
                   {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 })}
@@ -1510,8 +1499,8 @@ export const register: Register = (on, options) => {
 
     // El diagrama: el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas. Los paneles
     // que el diagrama no tiene sitio (permisos, bucles, turno, sesión) siguen en columna debajo, sin perderse.
-    // En el diagrama el asesor sale siempre, «de guardia» también sin consultas; solo lo quita `panels` sin architect.
-    const conAsesor = cfg.panels.includes('architect')
+    // El asesor sale solo si hubo consultas (y `panels` lo incluye): sin asesor configurado, la caja estorbaba vacía.
+    const conAsesor = cfg.panels.includes('architect') && showArchitect
     const { aw, rw } = anchosDiagrama(W, conAsesor)
     const conTarjetas = panels.includes('agents')
     const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents'].includes(p))
@@ -1526,7 +1515,7 @@ export const register: Register = (on, options) => {
       expandido: conTarjetas ? expandedPanel(W) : null,
       vuelta: conTarjetas && running.length === 0,
       resto: restoPaneles.length > 0 ? column(restoPaneles, W) : null,
-      barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}] · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : 'de guardia'}]${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
+      barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}]${conAsesor ? ` · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : a.consults.length}]` : ''}${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
       motion: cfg.motion,
       activo: running.length > 0,
     }) : null
@@ -1549,9 +1538,9 @@ export const register: Register = (on, options) => {
       rama: branchNow || null,
       version: MOD_VERSION,
       situacion,
-      detalle: { turno: t.startedAt ? fmtTimer(now - t.startedAt) : undefined, permisos: s.ask, errores: t.errorStreak },
+      detalle: { turno: m.isRunning && t.startedAt ? fmtTimer(now - t.startedAt) : undefined, permisos: s.ask, errores: t.errorStreak },
       estado: {
-        costo: `$${(u.cost?.usd ?? 0).toFixed(2)}`,
+        costo: `$${(u.costUsd ?? 0).toFixed(2)}`,
         ultimoTurno: r?.costDelta != null ? fmtUsd(r.costDelta) : null,
         limites: [
           { kind: 'five_hour', etiqueta: '5 h' },
@@ -1569,15 +1558,17 @@ export const register: Register = (on, options) => {
         skills: juntar(usosNow.skills),
         mcp: juntar(usosNow.mcp),
       },
-      asesor: {
-        estado: advising ? 'asesorando' : 'de guardia',
-        consultas: a.consults.length,
-        permisos: s.ask,
-        ultima: lastConsult ? `hace ${fmtDuration(now - lastConsult.at)}` : null,
-      },
+      asesor:
+        showArchitect && cfg.panels.includes('architect')
+          ? {
+              estado: advising ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`,
+              consultas: a.consults.length,
+              ultima: lastConsult ? `hace ${fmtDuration(now - lastConsult.at)}` : null,
+            }
+          : null,
       lead: {
         modelo: modelName,
-        turno: t.startedAt ? fmtTimer(now - t.startedAt) : null,
+        turno: m.isRunning && t.startedAt ? fmtTimer(now - t.startedAt) : null,
         ctx: ctxFill.pct === null ? null : ctxFill.pct / 100,
         mas: u.linesAdded ?? 0,
         menos: u.linesRemoved ?? 0,
@@ -1599,8 +1590,9 @@ export const register: Register = (on, options) => {
         nombre: nombreDeTipo(c.type),
         modelo: prettyModel(c.model),
         hechos: c.steps,
-        total: Math.max(1, c.steps),
-        estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'W' : 'Q',
+        // Nadie reporta un plan de pasos: sin total, el mapa muestra los pasos dados sin barra.
+        total: null,
+        estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'F' : c.status === 'stopped' ? 'S' : 'Q',
       })),
       registro: jevs.decisiones.slice(-4).map(lineaLog),
       asesorActivo: advising,

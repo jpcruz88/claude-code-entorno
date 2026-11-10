@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.5.3'
+export const MOD_VERSION = '0.6.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -138,10 +138,7 @@ export type Config = {
   layout: Layout
   palette: Palette
   openOnStart: boolean
-  statusLine: boolean
-  /** La banda de Tablero sobre el prompt. */
-  banda: boolean
-  /** Movimiento de la banda: barras que se llenan, indicador que pulsa, reloj. */
+  /** Animación del panel: spinner, paquetes en las líneas, bordes que respiran. */
   animacion: boolean
 }
 
@@ -178,8 +175,6 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
     palette: (['theme', 'pastel', 'neon'] as const).find(p => p === str('palette', 'neon')) ?? 'neon',
     openOnStart: bool('openOnStart', true),
-    statusLine: bool('statusLine', false),
-    banda: bool('banda', true),
     animacion: bool('animacion', true),
   }
 }

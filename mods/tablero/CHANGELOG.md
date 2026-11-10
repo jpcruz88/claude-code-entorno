@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 (tablero)
+
+Limpieza: fuera lo que nunca recibía datos y arreglos de valores que salían mal.
+
+- ESTADO muestra el costo real de la sesión. Antes leía `u.cost?.usd`, un campo que no existe, y siempre decía `$0.00`.
+- El contador `turno` del LEAD y de la franja solo corre mientras el lead trabaja. Antes seguía subiendo después de terminar el turno.
+- Las tareas detenidas dicen «⛔ detenido» y las fallidas «❌ falló». Antes salían como «en cola» y «reintenta», y una fallida contaba como en curso.
+- Las tareas sin un plan de pasos reportado muestran «N pasos», sin barra. Antes la barra salía siempre llena (`n/n`).
+- La caja ASESOR solo aparece si hubo consultas al asesor, en el mapa, en el diagrama y en el pie. Sin asesor configurado se quedaba siempre «de guardia» y vacía. Ya no repite los permisos pendientes de ESTADO.
+- «bucles» solo sale en ESTADO cuando hay alguno. «último turno» se llama ahora «costo turno», porque es un costo.
+- El reloj del panel corre siempre. Antes dependía de la opción `banda`, y si se apagaba, el panel dejaba de redibujarse.
+- Se quitan las opciones `banda` y `statusLine`, que ya no hacían nada.
+- Se quita la copia de savvy-progress que llevaba el tablero: las herramientas `progreso` y `paso`, su banda sobre el prompt y su panel. Solo se activaba con agentes `savvy-*`, y el plugin savvy-progress ya hace lo mismo.
+- Fuera el código sin uso: la banda vieja (`bandaFilas`, `bandaElemento`, `footerTexto`) y el resumen viejo (`resumenLineas`, `modoLabel`, `partirLinea`).
+
 ## 0.5.3 (tablero)
 
 - The footer shows the right version: `MOD_VERSION` in `hooks/core.ts` was left at 0.5.0 in 0.5.1 and 0.5.2.
