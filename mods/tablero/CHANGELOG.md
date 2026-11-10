@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 (tablero)
+
+- Se borran 40 archivos `.js` viejos del 6-nov que quedaban en `hooks/` y `tests/` sin seguimiento en git. Se copiaban a la caché del plugin, y como los imports van sin extensión, el cargador podía tomar código antiguo en lugar de los `.ts` actuales.
+
 ## 0.6.0 (tablero)
 
 Limpieza: fuera lo que nunca recibía datos y arreglos de valores que salían mal.
