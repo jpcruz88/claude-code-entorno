@@ -96,7 +96,7 @@ class TopeSemana(unittest.TestCase):
     def test_viernes_despues_del_corte_95_es_libre(self):
         # Sin ventana de 5 h en la cuenta decide solo la semana: tras el corte deja pasar xhigh.
         t = tope(datos(semana=95, ahora=VIERNES), VIERNES)
-        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]), ("opus", "xhigh", None))
+        self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]), ("fable", "xhigh", None))
         self.assertAlmostEqual(t["semana"]["ritmo"], 90)
 
     def test_viernes_despues_del_corte_97_es_haiku(self):
@@ -130,7 +130,7 @@ class CorteEnElBorde(unittest.TestCase):
         # Entre el corte y el reinicio ya no se aplica el ritmo.
         ahora2 = epoch(2026, 11, 12, 23, 15)
         t2 = tope(datos(semana=85, reinicio=reinicio, ahora=ahora2), ahora2)
-        self.assertEqual(t2["modelo_max"], "opus")
+        self.assertEqual(t2["modelo_max"], "fable")
 
     def test_reinicio_el_jueves_a_las_22_corta_el_jueves_anterior(self):
         reinicio = epoch(2026, 11, 12, 22, 0)
@@ -221,7 +221,8 @@ class Xhigh(unittest.TestCase):
         self.assertEqual(self.r(semana=30.5, h5=40), ("opus", "high"))
 
     def test_viernes_despues_del_corte_92_con_5h_al_30_es_xhigh(self):
-        self.assertEqual(self.r(ahora=VIERNES, semana=92, h5=30), ("opus", "xhigh"))
+        self.assertEqual(self.r(ahora=VIERNES, semana=92, h5=30), ("fable", "xhigh"))
+        self.assertEqual(self.r(ahora=VIERNES, semana=92, h5=45), ("opus", "xhigh"))
 
     def test_viernes_despues_del_corte_con_5h_alta_no_da_xhigh(self):
         self.assertEqual(self.r(ahora=VIERNES, semana=92, h5=65), ("opus", "medium"))
@@ -236,7 +237,7 @@ class Xhigh(unittest.TestCase):
         # Claude Code no manda `five_hour` en todas las cuentas: su ausencia no frena xhigh.
         self.assertEqual(self.r(semana=28), ("opus", "xhigh"))
         self.assertEqual(self.r(semana=30.5), ("opus", "high"))
-        self.assertEqual(self.r(ahora=VIERNES, semana=92), ("opus", "xhigh"))
+        self.assertEqual(self.r(ahora=VIERNES, semana=92), ("fable", "xhigh"))
 
     def test_ventana_de_5h_rota_no_cuenta_como_ausente(self):
         d = datos(semana=28)
@@ -248,6 +249,50 @@ class Xhigh(unittest.TestCase):
         t = tope(datos(semana=28, h5=90, h5_reinicio=LUNES + 600))
         self.assertEqual((t["modelo_max"], t["esfuerzo_max"], t["motivo"]),
                          ("opus", "xhigh", None))
+
+
+class Fable(unittest.TestCase):
+    """Fable solo entra con mucho margen: semana 20 puntos bajo el ritmo y 5 h bajo 40 %."""
+
+    def r(self, ahora=LUNES, **kw):
+        t = tope(datos(ahora=ahora, **kw), ahora)
+        return (t["modelo_max"], t["esfuerzo_max"], t["motivo"])
+
+    def test_semana_25_puntos_bajo_el_ritmo_permite_fable(self):
+        self.assertEqual(self.r(semana=15), ("fable", "xhigh", None))
+
+    def test_borde_exceso_menos_20_y_menos_19(self):
+        self.assertEqual(self.r(semana=20)[:2], ("fable", "xhigh"))
+        self.assertEqual(self.r(semana=20.5)[:2], ("opus", "xhigh"))
+
+    def test_la_ventana_de_5h_permite_fable_solo_bajo_40(self):
+        self.assertEqual(self.r(semana=15, h5=39)[:2], ("fable", "xhigh"))
+        self.assertEqual(self.r(semana=15, h5=40), ("opus", "xhigh", None))
+
+    def test_5h_en_gracia_no_frena_fable(self):
+        self.assertEqual(self.r(semana=15, h5=90, h5_reinicio=LUNES + 600)[:2], ("fable", "xhigh"))
+
+    def test_sin_dato_no_hay_fable(self):
+        self.assertEqual(jev_limites.aplicar_tope("fable", "xhigh", tope(None)), ("opus", "high"))
+
+    def test_con_una_ventana_vencida_no_hay_fable(self):
+        self.assertEqual(self.r(semana=15, h5=10, h5_reinicio=LUNES - 3600)[:2], ("opus", "high"))
+        self.assertEqual(self.r(h5=10)[:2], ("opus", "high"))
+
+    def test_aplicar_baja_fable_a_opus_y_conserva_el_id_si_cabe(self):
+        opus = tope(datos(semana=28))
+        self.assertEqual(jev_limites.aplicar_tope("fable", "xhigh", opus), ("opus", "xhigh"))
+        self.assertEqual(jev_limites.aplicar_tope("claude-fable-5-2", "xhigh", opus), ("opus", "xhigh"))
+        libre = tope(datos(semana=15))
+        self.assertEqual(jev_limites.aplicar_tope("claude-fable-5-2", "xhigh", libre),
+                         ("claude-fable-5-2", "xhigh"))
+        self.assertEqual(jev_limites.aplicar_tope("sonnet", "medium", libre), ("sonnet", "medium"))
+
+    def test_con_poco_credito_fable_baja_a_sonnet_o_haiku(self):
+        self.assertEqual(jev_limites.aplicar_tope("fable", "xhigh", tope(datos(semana=52))),
+                         ("sonnet", "high"))
+        self.assertEqual(jev_limites.aplicar_tope("fable", "xhigh", tope(datos(semana=70))),
+                         ("haiku", "medium"))
 
 
 class ReinicioVencido(unittest.TestCase):

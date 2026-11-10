@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.0 (tablero)
+
+El tope de uso tiene un escalón más alto: Fable, solo con mucho margen.
+
+- La línea `tope ahora` puede decir `fable xhigh · sin recorte`: la semana va 20 puntos o más por debajo del ritmo (o ya pasó el corte y está bajo 97 %) y la ventana de 5 h, si la cuenta la trae, va bajo 40 % o está en gracia.
+- `opus xhigh` ya no dice `sin recorte`: dice qué ventana lo pone, por ejemplo `opus xhigh · semana −15 pts` o `opus xhigh · 5h 50%`.
+- La fila de ritmo añade `· fable ok` cuando el tope dejaría pasar Fable; `· xhigh ok` queda para cuando solo llega a xhigh.
+- Sin dato de la semana, o con la ventana de 5 h vencida, el máximo sigue siendo `opus high`.
+- Réplica de `claude/hooks/jev_limites.py`, que es quien decide: en cada Agent o Task mira el uso de la cuenta y baja el modelo pedido. Ver «Fable con mucho margen» en el README.
+
 ## 0.8.2 (tablero)
 
 La caja JEV dice el tope que rige ahora para los subagentes.

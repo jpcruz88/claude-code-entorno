@@ -396,15 +396,17 @@ Cada sesión arranca con **Haiku**. Se fija en dos sitios que se complementan:
 | Dónde | Qué hace |
 |---|---|
 | `claude/settings.base.json` → `"model": "haiku"` | Es el modelo con el que arranca Claude Code. |
-| `claude/rules/modelo.md` | Le indica a Claude que use Haiku también en los subagentes (`model: "haiku"`) y que no cambie de modelo por su cuenta. |
+| `claude/rules/modelo.md` | Le indica a Claude qué modelo y esfuerzo pedir en los subagentes según el tamaño de la tarea, y que no cambie el modelo de la sesión por su cuenta. |
 
 Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o
 usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
-Fable no se usa por omisión: solo si lo pides de forma explícita.
+En la sesión principal, Fable no se usa por omisión: solo si lo pides de forma explícita.
 
-**Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-`low`, `medium` o `high`; `xhigh` solo cuando el tope de uso de la cuenta deja
-margen (si no, baja a `high`). Nunca `max` ni Fable. Lo revisa el hook
+**Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
+esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide según el tamaño de la tarea
+y el tope de uso de la cuenta lo baja en cada lanzamiento si el crédito no alcanza:
+`xhigh` y `fable` solo pasan con margen (si no, bajan a `high` y a `opus`, o más).
+Nunca `max`. En un workflow, solo `haiku`, `sonnet` u `opus`. Lo revisa el hook
 `claude/hooks/guard-subagentes.py` en las llamadas a Agent, Task y Workflow. Si
 Jev está seguro (confianza de al menos 0,80), elige el modelo y el esfuerzo de cada
 subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base sigue fijando
