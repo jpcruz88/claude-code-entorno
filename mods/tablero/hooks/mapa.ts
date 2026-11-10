@@ -3,6 +3,8 @@
 
 export const MAPA_ANCHO = 100
 export const MAPA_ALTO = 42
+/** Con 0 o 1 tarea no hace falta el bus de tarjetas: el mapa baja a 28 filas. */
+export const MAPA_ALTO_COMPACTO = 28
 
 /** Color de una celda: se resuelve en el render contra la paleta de Tablero. */
 export type Tinta = 'fg' | 'mut' | 'lead' | 'jev' | 'enj' | 'ase' | 'warn' | 'box'
@@ -58,8 +60,8 @@ const EMOJI = /\p{Extended_Pictographic}/u
 
 type Punto = [number, number]
 
-const crearRejilla = (): Celda[][] =>
-  Array.from({ length: MAPA_ALTO }, () => Array.from({ length: MAPA_ANCHO }, () => ({ c: ' ', k: 'fg' as Tinta })))
+const crearRejilla = (alto: number): Celda[][] =>
+  Array.from({ length: alto }, () => Array.from({ length: MAPA_ANCHO }, () => ({ c: ' ', k: 'fg' as Tinta })))
 
 const linea = (x1: number, y1: number, x2: number, y2: number): Punto[] => {
   const out: Punto[] = []
@@ -85,13 +87,13 @@ const put = (g: Celda[][], x: number, y: number, s: string, k: Tinta = 'fg') => 
   let col = x
   for (const ch of Array.from(s)) {
     if (EMOJI.test(ch)) {
-      if (col >= 0 && col + 1 < MAPA_ANCHO && y >= 0 && y < MAPA_ALTO) {
+      if (col >= 0 && col + 1 < MAPA_ANCHO && y >= 0 && y < g.length) {
         g[y][col] = { c: ch, k }
         g[y][col + 1] = { c: '', k, e: true }
       }
       col += 2
     } else {
-      if (col >= 0 && col < MAPA_ANCHO && y >= 0 && y < MAPA_ALTO) g[y][col] = { c: ch, k }
+      if (col >= 0 && col < MAPA_ANCHO && y >= 0 && y < g.length) g[y][col] = { c: ch, k }
       col++
     }
   }
@@ -159,8 +161,9 @@ const glifo = (t: TarjetaMapa, idx: number, tiempo: number): [string, Tinta, str
 
 /** Compone la rejilla de 100 × 42 para los datos y el instante `t` (segundos desde que empezó la animación). */
 export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
-  const g = crearRejilla()
   const N = d.tarjetas.length
+  const compacto = N <= 1
+  const g = crearRejilla(compacto ? MAPA_ALTO_COMPACTO : MAPA_ALTO)
   const enCurso = d.tarjetas.filter(x => x.estado === 'R' || x.estado === 'W').length
   const listos = d.tarjetas.filter(x => x.estado === 'D').length
   const enCola = d.tarjetas.filter(x => x.estado === 'Q').length
@@ -216,6 +219,42 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 48, 16, '┆ = umbral 0.80', 'mut')
   put(g, 36, 17, `${d.jev.decisiones} decisiones`, 'jev')
   put(g, 36, 18, 'sharp → código · split → claude', 'mut')
+
+  // Registro y barra de estado; en la versión compacta suben para cerrar la rejilla de 28 filas.
+  const pie = (yReg: number, yBarra: number) => {
+    caja(g, 2, yReg, 24, 6, 'REGISTRO', 'mut')
+    d.registro.slice(-4).forEach((s, i) => put(g, 4, yReg + 1 + i, recortar(s), 'fg'))
+    put(g, 2, yBarra, 'subagentes ', 'mut')
+    put(g, 13, yBarra, `[${d.barra.hechos}/${d.barra.total}]`, 'fg')
+    put(g, 23, yBarra, ' · asesor ', 'mut')
+    put(g, 34, yBarra, d.asesorActivo ? '[asesorando]' : '[de guardia]', 'ase')
+    put(g, 48, yBarra, ' · jev ', 'mut')
+    put(g, 55, yBarra, `[${d.jev.decisiones}]`, 'jev')
+    if (hayTrabajo) put(g, 70, yBarra, ` ${sp}`, 'enj')
+  }
+
+  if (compacto) {
+    // Con 0 o 1 tarea: la tarjeta va bajo el lead, en la mitad derecha, y no hay bus ni caja de abanico.
+    if (N === 1) {
+      const ag = d.tarjetas[0]
+      vl(g, 50, 20, 20, '│', 'mut')
+      paq(g, linea(50, 20, 50, 21), t, 7, 0.6, 0, 'jev')
+      const kc: Tinta = ag.estado === 'D' ? 'jev' : ag.estado === 'W' ? 'warn' : ag.estado === 'Q' ? 'mut' : 'enj'
+      caja(g, 34, 21, 40, 5, ag.nombre, kc)
+      const [gl, kg, txt] = glifo(ag, 0, t)
+      put(g, 36, 22, ag.nombre, 'fg')
+      put(g, 60, 22, ag.modelo, 'fg')
+      barraPasos(g, 36, 23, 16, ag.hechos, ag.total, kc)
+      put(g, 55, 23, `${Math.min(ag.hechos, ag.total)}/${ag.total}`, 'fg')
+      put(g, 36, 24, `${gl} ${txt}`, kg)
+      put(g, 36, 26, '▲ de vuelta al lead · revisar y verificar', 'lead')
+    } else {
+      caja(g, 34, 21, 40, 5, 'SIN TAREAS', 'mut')
+      put(g, 36, 23, 'el lead espera trabajo', 'mut')
+    }
+    pie(21, MAPA_ALTO_COMPACTO - 1)
+    return g
+  }
 
   if (N <= 3) {
     // Tarjetas: un bus de 14 a 85 y una caja por agente
@@ -294,17 +333,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 74, 3, '◀', 'lead')
   paq(g, poligono([[63, 34], [99, 34], [99, 3], [74, 3]]), t, 6, 0.2, 'lead')
 
-  // Registro (izquierda, debajo del estado)
-  caja(g, 2, 33, 24, 6, 'REGISTRO', 'mut')
-  d.registro.slice(-4).forEach((s, i) => put(g, 4, 34 + i, recortar(s), 'fg'))
-
-  // Barra de estado
-  put(g, 2, 40, 'subagentes ', 'mut')
-  put(g, 13, 40, `[${d.barra.hechos}/${d.barra.total}]`, 'fg')
-  put(g, 23, 40, ' · asesor ', 'mut')
-  put(g, 34, 40, d.asesorActivo ? '[asesorando]' : '[de guardia]', 'ase')
-  put(g, 48, 40, ' · jev ', 'mut')
-  put(g, 55, 40, `[${d.jev.decisiones}]`, 'jev')
-  if (hayTrabajo) put(g, 70, 40, ` ${sp}`, 'enj')
+  // Registro (izquierda, debajo del estado) y barra de estado
+  pie(33, 40)
   return g
 }

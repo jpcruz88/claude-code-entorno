@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { MAPA_ALTO, MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa } from '../hooks/mapa'
+import { MAPA_ALTO, MAPA_ALTO_COMPACTO, MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa } from '../hooks/mapa'
 
 // La disposición de la propuesta a 100 columnas: asesor y estado a la izquierda, lead, JEV y tarjetas a la derecha.
 
@@ -139,4 +139,46 @@ test('con trabajo en curso, el punto del lead sigue pulsando', () => {
   const activo = datos(3)
   expect(componerMapa(activo, 0)[3][70].c).toBe('●')
   expect(componerMapa(activo, 0.6)[3][70].c).toBe('○')
+})
+
+// Con 0 o 1 tarea el mapa es compacto: 28 filas, la tarjeta ocupa la mitad derecha y no sale «de vuelta al lead» sin tareas.
+
+const conTareas = (cards: number, estado: 'R' | 'D' = 'R'): DatosMapa => {
+  const d = datos(cards)
+  return { ...d, tarjetas: d.tarjetas.map(t => ({ ...t, estado })) }
+}
+
+test('con 0 o 1 tarea la rejilla es compacta: 28 filas; con 2 o más sigue en 42', () => {
+  expect(MAPA_ALTO_COMPACTO).toBe(28)
+  expect(componerMapa(datos(0), 0).length).toBe(MAPA_ALTO_COMPACTO)
+  expect(componerMapa(datos(1), 0).length).toBe(MAPA_ALTO_COMPACTO)
+  expect(componerMapa(datos(2), 0).length).toBe(MAPA_ALTO)
+})
+
+test('con 0 tareas no aparece «de vuelta al lead»', () => {
+  const g = componerMapa(datos(0), 0)
+  const texto = g.map(r => r.map(c => c.c).join('')).join('\n')
+  expect(texto).not.toContain('de vuelta al lead')
+})
+
+test('con 0 tareas la tarjeta dice que no hay tareas', () => {
+  const g = componerMapa(datos(0), 0)
+  expect(fila(g, 21)).toContain('SIN TAREAS')
+})
+
+test('con 1 tarea la tarjeta va bajo el lead, en la mitad derecha, con su flujo de vuelta', () => {
+  const g = componerMapa(conTareas(1, 'R'), 0)
+  expect(g[21][34].c).toBe('┌')
+  expect(g[21][73].c).toBe('┐')
+  expect(fila(g, 22)).toContain('tarea 1')
+  expect(fila(g, 26)).toContain('de vuelta al lead')
+})
+
+test('la barra de estado queda en la última fila de la rejilla compacta', () => {
+  const g = componerMapa(datos(1), 0)
+  expect(fila(g, MAPA_ALTO_COMPACTO - 1)).toContain('subagentes')
+})
+
+test('ninguna fila compacta se sale de las 100 columnas', () => {
+  for (const n of [0, 1]) for (const r of componerMapa(conTareas(n, 'D'), 0.4)) expect(r.length).toBe(MAPA_ANCHO)
 })
