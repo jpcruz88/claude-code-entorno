@@ -27,6 +27,7 @@
         "matcher": "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit"
       },
       "memoria-maestra.py": {},
+      "al-dia.py": {},
       "jev-reintento.py": {
         "matcher": "*"
       }

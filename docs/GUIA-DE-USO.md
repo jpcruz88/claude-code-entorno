@@ -225,7 +225,19 @@ queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real
 - Las skills de terceros no están auditadas. Revísalas antes de instalarlas (ver
   `SECURITY.md`).
 
-## 7. Comandos útiles dentro de Claude Code
+## 7. Al día
+
+- Al abrir Claude, si pasaron 24 horas desde la última revisión, el hook `al-dia.py`
+  actualiza en segundo plano tus skills, plugins de terceros y programas (`claude`,
+  `herdr`, `opencode`, `codebase-memory-mcp`, plugins de Neovim). No toca los mods de
+  este repo, `context7` ni Ghostty.
+- Si algo falla o queda en uso (el programa está abierto y no se puede reemplazar), se reintenta
+  solo eso pasada 1 hora, en la próxima sesión.
+- Cuando cambia el texto de una skill o plugin, el diff queda en
+  `~/.claude/al-dia/cambios/<AAAA-MM-DD>/<nombre>.diff`.
+- El tablero muestra un resumen en una caja. Reinicia Claude para usar lo nuevo.
+
+## 8. Comandos útiles dentro de Claude Code
 
 | Comando | Para qué |
 |---|---|
@@ -236,7 +248,7 @@ queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real
 | `/memory` | Ver y editar los archivos de memoria. |
 | `/help` | Lista de comandos disponibles. |
 
-## 8. Cuando algo falla
+## 9. Cuando algo falla
 
 - **Un MCP marca error:** revisa que la variable de entorno (por ejemplo
   `CONTEXT7_API_KEY`) esté definida en tu terminal y reinicia Claude Code.

@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import re
+import subprocess
 import tempfile
 import time
 import unittest
@@ -735,6 +736,172 @@ class PruebaRevision(unittest.TestCase):
         self.assertEqual(sorted(t), ["a.md", "ok.yml", str(Path("sub") / "b.py")])
         self.assertEqual(t["a.md"], "uno")
         self.assertEqual(cargar().textos(self.home / "no-existe"), {})
+
+
+HOOK = RAIZ / "claude" / "hooks" / "al-dia.py"
+
+
+def cargar_hook():
+    """Carga claude/hooks/al-dia.py (lleva guion: no se puede importar por nombre)."""
+    spec = importlib.util.spec_from_file_location("al_dia_hook", HOOK)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+class PruebaHook(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name)
+        self.t = 1_000_000.0
+        self.lanzados = []
+
+    def lanzar(self, cmd):
+        self.lanzados.append(cmd)
+
+    def estado(self, datos):
+        escribir = cargar().escribir_json
+        escribir(cargar().carpeta(self.home) / "ultima-revision.json", datos)
+
+    def test_sin_estado_lanza_revision_completa(self):
+        hook = cargar_hook()
+        self.assertEqual(hook.main([], self.home, self.t, self.lanzar), 0)
+        self.assertEqual(self.lanzados, [[sys.executable, str(HOOK.resolve()), "--revisar"]])
+
+    def test_revision_de_hace_2_horas_no_lanza(self):
+        self.estado({"inicio": self.t - 7200, "repetir": []})
+        self.assertEqual(cargar_hook().main([], self.home, self.t, self.lanzar), 0)
+        self.assertEqual(self.lanzados, [])
+
+    def test_con_pendientes_lanza_solo_pendientes(self):
+        self.estado({"inicio": self.t - 7200, "ultimo_intento": self.t - 7200,
+                     "repetir": ["skill:x"]})
+        cargar_hook().main([], self.home, self.t, self.lanzar)
+        self.assertEqual(self.lanzados, [[sys.executable, str(HOOK.resolve()),
+                                          "--revisar", "--solo-pendientes"]])
+
+    def test_estado_roto_lanza_revision_completa(self):
+        d = cargar().carpeta(self.home)
+        d.mkdir(parents=True)
+        (d / "ultima-revision.json").write_text("{roto", encoding="utf-8")
+        cargar_hook().main([], self.home, self.t, self.lanzar)
+        self.assertEqual(self.lanzados, [[sys.executable, str(HOOK.resolve()), "--revisar"]])
+
+    def test_si_lanzar_falla_devuelve_0(self):
+        def mal(cmd):
+            raise OSError("no se pudo")
+        self.assertEqual(cargar_hook().main([], self.home, self.t, mal), 0)
+
+    def test_revisar_toma_cerrojo_corre_y_lo_suelta(self):
+        hook = cargar_hook()
+        llamadas = []
+        with unittest.mock.patch.object(hook, "revisar",
+                                        lambda *a, **k: llamadas.append((a, k))):
+            self.assertEqual(hook.main(["--revisar"], self.home, self.t, self.lanzar), 0)
+        self.assertEqual(len(llamadas), 1)
+        self.assertFalse((cargar().carpeta(self.home) / "cerrojo").exists())
+
+    def test_revisar_con_cerrojo_vivo_sale_sin_revisar(self):
+        hook = cargar_hook()
+        self.assertTrue(cargar().tomar_cerrojo(cargar().carpeta(self.home), self.t))
+        with unittest.mock.patch.object(hook, "revisar") as rev:
+            self.assertEqual(hook.main(["--revisar"], self.home, self.t, self.lanzar), 0)
+        rev.assert_not_called()
+
+    def test_solo_pendientes_pasa_el_conjunto_de_repetir(self):
+        self.estado({"inicio": self.t - 7200, "repetir": ["skill:x", "plugin:y@z"]})
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook, "revisar") as rev:
+            hook.main(["--revisar", "--solo-pendientes"], self.home, self.t, self.lanzar)
+        self.assertEqual(rev.call_args.kwargs["solo"], {"skill:x", "plugin:y@z"})
+
+    # --- fallos de disco, estado previo al intento y banderas de lanzamiento ---
+
+    def test_oserror_en_cerrojo_devuelve_0_en_modo_trabajador(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook.al_dia, "tomar_cerrojo",
+                                        side_effect=OSError("mkdir")):
+            self.assertEqual(hook.main(["--revisar"], self.home, self.t, self.lanzar), 0)
+
+    def test_oserror_al_leer_estado_en_modo_hook_devuelve_0(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook.al_dia, "leer_json", side_effect=OSError("disco")):
+            self.assertEqual(hook.main([], self.home, self.t, self.lanzar), 0)
+
+    def test_oserror_en_escribir_json_devuelve_0_y_suelta_cerrojo(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook.al_dia, "escribir_json",
+                                        side_effect=OSError("disco lleno")):
+            self.assertEqual(hook.main(["--revisar"], self.home, self.t, self.lanzar), 0)
+        self.assertFalse((cargar().carpeta(self.home) / "cerrojo").exists())
+
+    def test_si_revisar_lanza_el_cerrojo_queda_suelto(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook, "revisar", side_effect=RuntimeError("boom")):
+            self.assertEqual(hook.main(["--revisar"], self.home, self.t, self.lanzar), 0)
+        self.assertFalse((cargar().carpeta(self.home) / "cerrojo").exists())
+
+    def test_revision_completa_que_truena_no_se_relanza_en_la_sesion_siguiente(self):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook, "revisar", side_effect=RuntimeError("boom")):
+            hook.main(["--revisar"], self.home, self.t, self.lanzar)
+        estado = cargar().leer_json(cargar().carpeta(self.home) / "ultima-revision.json")
+        self.assertEqual(estado, {"inicio": self.t, "repetir": [], "ultimo_intento": self.t})
+        self.assertIsNone(cargar().que_revisar(estado, self.t + 60))
+
+    def test_solo_pendientes_que_truena_solo_mueve_ultimo_intento(self):
+        self.estado({"inicio": self.t - 7200, "ultimo_intento": self.t - 7200,
+                     "repetir": ["skill:x"]})
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook, "revisar", side_effect=RuntimeError("boom")):
+            hook.main(["--revisar", "--solo-pendientes"], self.home, self.t, self.lanzar)
+        estado = cargar().leer_json(cargar().carpeta(self.home) / "ultima-revision.json")
+        self.assertEqual(estado, {"inicio": self.t - 7200, "ultimo_intento": self.t,
+                                  "repetir": ["skill:x"]})
+        self.assertIsNone(cargar().que_revisar(estado, self.t + 60))
+
+    def _banderas_de_lanzar(self, plataforma=None):
+        hook = cargar_hook()
+        with unittest.mock.patch.object(hook.subprocess, "Popen") as popen, \
+                unittest.mock.patch.dict(os.environ, {"AL_DIA_NO_LANZAR": ""}):
+            if plataforma:
+                with unittest.mock.patch.object(hook.sys, "platform", plataforma):
+                    hook.lanzar_separado(["x"])
+            else:
+                hook.lanzar_separado(["x"])
+        self.assertEqual(popen.call_args.args, (["x"],))
+        return popen.call_args.kwargs
+
+    def test_lanzar_en_mac_abre_sesion_nueva_y_desliga_todo(self):
+        k = self._banderas_de_lanzar("darwin")
+        self.assertIs(k["start_new_session"], True)
+        self.assertNotIn("creationflags", k)
+        self.assertIs(k["stdin"], subprocess.DEVNULL)
+        self.assertIs(k["stdout"], subprocess.DEVNULL)
+        self.assertIs(k["stderr"], subprocess.DEVNULL)
+        self.assertIs(k["close_fds"], True)
+
+    def test_lanzar_en_windows_usa_creationflags_y_desliga_todo(self):
+        k = self._banderas_de_lanzar("win32")
+        esperado = (getattr(subprocess, "DETACHED_PROCESS", 0x8)
+                    | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
+        self.assertEqual(k["creationflags"], esperado)
+        self.assertNotIn("start_new_session", k)
+        self.assertIs(k["stdin"], subprocess.DEVNULL)
+        self.assertIs(k["stdout"], subprocess.DEVNULL)
+        self.assertIs(k["stderr"], subprocess.DEVNULL)
+        self.assertIs(k["close_fds"], True)
+
+    def test_proceso_real_sale_0_sin_salida_y_rapido(self):
+        entorno = {**os.environ, "HOME": str(self.home), "USERPROFILE": str(self.home),
+                   "AL_DIA_NO_LANZAR": "1"}
+        t0 = time.monotonic()
+        r = subprocess.run([sys.executable, str(HOOK)], input="{}", env=entorno,
+                           capture_output=True, text=True, timeout=10)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, "")
+        self.assertLess(time.monotonic() - t0, 2)
 
 
 if __name__ == "__main__":

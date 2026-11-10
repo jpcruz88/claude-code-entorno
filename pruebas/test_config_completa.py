@@ -37,6 +37,15 @@ class ConfiguracionCompleta(unittest.TestCase):
                 self.assertTrue((RAIZ / "claude" / "hooks" / archivo).is_file())
         self.assertIn("jev-reintento.py", self.filtros["settings"]["hooks_permitidos"])
 
+    def test_al_dia_en_el_repo_registrado_y_exportado(self):
+        self.assertTrue((RAIZ / "claude" / "hooks" / "al-dia.py").is_file())
+        self.assertTrue((RAIZ / "claude" / "hooks" / "al_dia.py").is_file())
+        self.assertIn("al-dia.py", self.filtros["settings"]["hooks_permitidos"])
+        grupos = [g for g in self.base["hooks"]["SessionStart"] if g.get("matcher") == "startup"]
+        comandos = [(h["command"], h.get("timeout")) for g in grupos for h in g["hooks"]]
+        self.assertIn(("python3 ~/.claude/hooks/al-dia.py", 5), comandos)
+        self.assertIn(("~/.claude/hooks/cbm-session-reminder", None), comandos)
+
     def test_memoria_maestra_inicio_y_fin(self):
         eventos = {e: [h["command"] for g in self.base["hooks"][e] for h in g["hooks"]]
                    for e in ("SessionStart", "Stop")}
