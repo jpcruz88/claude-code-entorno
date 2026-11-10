@@ -115,7 +115,8 @@ export const sparkCosto = (porMinuto: number[]): string => {
   const celdas = v.map(x => (max > 0 ? SK[Math.round((Math.max(0, x) / max) * (SK.length - 1))] : SK[0]))
   return SK[0].repeat(SPARK_ANCHO - celdas.length) + celdas.join('')
 }
-const EMOJI = /\p{Extended_Pictographic}/u
+/** Emojis de dos columnas. ⚠ (U+26A0, sin selector de variación) se pinta con una columna en las terminales con wcwidth. */
+const EMOJI = /(?!\u26A0)\p{Extended_Pictographic}/u
 
 type Punto = [number, number]
 
@@ -294,6 +295,17 @@ export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO
 const AL_DIA_FILAS = 6
 /** Desde este ancho, cada fila dice el tipo y «⚠ cambió texto»; por debajo, solo ⚠. */
 const AL_DIA_ANCHO_TIPO = 66
+/** Columnas del nombre (con «…» si se recorta) y lo mínimo al que se achica para que quepan las versiones. */
+const AL_DIA_NOMBRE = 18
+const AL_DIA_NOMBRE_MIN = 6
+/** Los textos de un fallo y de un pendiente, del más largo al más corto; siempre se dice uno entero. */
+const AL_DIA_FALLO = ['no se pudo bajar · sigue la anterior', 'no se pudo bajar', 'falló']
+const AL_DIA_PENDIENTE = ['pendiente · se reintenta en la próxima sesión', 'pendiente · reintento luego', 'pendiente']
+/** El nombre en `n` columnas, rellenado con espacios; si no cabe, termina en «…». */
+const nombreEn = (nombre: string, n: number): string => {
+  const c = Array.from(nombre)
+  return (c.length <= n ? nombre : `${c.slice(0, n - 1).join('')}…`).padEnd(n)
+}
 const AL_DIA_MARCA: Record<AlDia['filas'][number]['marca'], Tinta> = { '↑': 'jev', '✗': 'warn', '…': 'amb' }
 
 /**
@@ -312,29 +324,35 @@ export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
   a.filas.slice(0, mostradas).forEach((f, i) => {
     const y = 1 + i
     put(g, 2, y, f.marca, AL_DIA_MARCA[f.marca])
-    // A la derecha: el tipo y el aviso; en poco ancho, solo ⚠ (y se recorta el nombre después, no antes).
+    // A la derecha: el tipo y el aviso; en poco ancho, solo ⚠ (y se achica el nombre después, no antes).
     const tipo = W >= AL_DIA_ANCHO_TIPO ? f.tipo : ''
     const aviso = f.aviso ? (W >= AL_DIA_ANCHO_TIPO ? '⚠ cambió texto' : '⚠') : ''
     const der = [tipo, aviso].filter(Boolean).join('  ')
     const xDer = W - 2 - columnas(der)
     if (tipo) put(g, xDer, y, tipo, 'box')
     if (aviso) put(g, W - 2 - columnas(aviso), y, aviso, 'amb')
-    const nw = Math.max(6, Math.min(18, xDer - 1 - 4 - 1 - 12))
-    put(g, 4, y, recortar(f.nombre, nw), 'fg')
-    // El detalle: «antes → después» en dos tintas; cualquier otro texto (fallo, pendiente) en gris.
-    const x = 4 + nw + 1
-    const libre = (der ? xDer - 1 : W - 2) - x
+    // Lo que queda a la izquierda, desde el nombre (x = 4) hasta antes del tipo, con una columna de aire.
+    const libre = (der ? xDer - 1 : W - 2) - 4
     const flecha = f.detalle.indexOf(' → ')
-    if (flecha < 0) put(g, x, y, recortar(f.detalle, libre), 'box')
-    else {
-      const antes = recortar(f.detalle.slice(0, flecha), libre)
-      put(g, x, y, antes, 'box')
-      const nAntes = Array.from(antes).length
-      put(g, x + nAntes, y, recortar(f.detalle.slice(flecha), libre - nAntes), 'fg')
+    if (f.marca === '↑' && flecha >= 0) {
+      // Las versiones nunca se recortan: si no caben, se achica el nombre (mínimo 6).
+      const nw = Math.max(AL_DIA_NOMBRE_MIN, Math.min(AL_DIA_NOMBRE, libre - 1 - columnas(f.detalle)))
+      put(g, 4, y, nombreEn(f.nombre, nw), 'fg')
+      const antes = f.detalle.slice(0, flecha)
+      put(g, 5 + nw, y, antes, 'box')
+      put(g, 5 + nw + columnas(antes), y, f.detalle.slice(flecha), 'fg')
+    } else {
+      // Fallo o pendiente: el nombre ocupa su columna entera y el detalle baja por tramos completos según el sitio.
+      const tramos = f.marca === '✗' ? AL_DIA_FALLO : f.marca === '…' ? AL_DIA_PENDIENTE : [f.detalle]
+      const sitio = libre - 1 - AL_DIA_NOMBRE
+      const detalle = tramos.find(t => columnas(t) <= sitio) ?? tramos[tramos.length - 1]
+      put(g, 4, y, nombreEn(f.nombre, AL_DIA_NOMBRE), 'fg')
+      put(g, 5 + AL_DIA_NOMBRE, y, detalle, 'box')
     }
   })
   if (extra) put(g, 4, 1 + mostradas, recortar(`+${hay - mostradas} más`, iw - 2), 'box')
-  put(g, 2, alto - 2, recortar(`${a.alDia} al día · reinicia Claude para usar lo nuevo`, iw), 'box')
+  const pies = [`${a.alDia} al día · reinicia Claude para usar lo nuevo`, `${a.alDia} al día · reinicia Claude`, `${a.alDia} al día`]
+  put(g, 2, alto - 2, pies.find(p => columnas(p) <= iw) ?? pies[2], 'box')
   return g
 }
 

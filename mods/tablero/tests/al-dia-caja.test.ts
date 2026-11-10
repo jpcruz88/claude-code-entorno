@@ -63,10 +63,10 @@ test('los colores: borde y título magenta, marcas, nombre, antes, flecha, despu
   expect(color(g, 10, '61 al día')).toBe('box')
 })
 
-test('el nombre se recorta a 18 columnas', () => {
+test('el nombre se recorta a 18 columnas y el recorte termina en «…»', () => {
   const g = componerMapa(conAlDia(alDia([cambio('un-nombre-larguisimo-de-plugin')])), 0)
-  expect(fila(g, 6)).toContain('un-nombre-larguisi ')
-  expect(fila(g, 6)).not.toContain('un-nombre-larguisim')
+  expect(fila(g, 6)).toContain('un-nombre-larguis… ')
+  expect(fila(g, 6)).not.toContain('un-nombre-larguisi')
 })
 
 test('con 9 cambios salen 5 filas y «+4 más»', () => {
@@ -108,6 +108,75 @@ test('por debajo de 66 columnas el tipo y «cambió texto» se acortan a ⚠ y e
   const ancho = componerMapa(conAlDia(alDia([cambio('superpowers', true)])), 0, 66)
   expect(fila(ancho, 6)).toContain('plugin')
   expect(fila(ancho, 6)).toContain('⚠ cambió texto')
+})
+
+// ---- Textos enteros y ⚠ de una columna ----
+
+const FALLO = ['no se pudo bajar · sigue la anterior', 'no se pudo bajar', 'falló']
+const PENDIENTE = ['pendiente · se reintenta en la próxima sesión', 'pendiente · reintento luego', 'pendiente']
+const PIE = ['61 al día · reinicia Claude para usar lo nuevo', '61 al día · reinicia Claude', '61 al día']
+const RESTOS = /sigue|pudo|bajar|pendiente|reintent|pr[oó]xima|sesi[oó]n|reinicia|nuevo|al d[ií]a/
+const variantesDe = (v: string[]) => [...v].sort((a, b) => b.length - a.length)
+
+test('a 40, 50, 66 y 100 columnas los detalles, las versiones y el pie salen enteros', () => {
+  const larga = alDia([
+    { marca: '✗', nombre: 'frontend-design', detalle: 'no se pudo bajar · sigue la anterior', tipo: 'skill', aviso: false },
+    cambio('un-nombre-larguisimo-de-plugin', true),
+    { ...cambio('otro'), detalle: '10.12.3 → 10.13.0' },
+    { marca: '…', nombre: 'opencode', detalle: 'pendiente · se reintenta en la próxima sesión', tipo: 'programa', aviso: false },
+  ])
+  for (const w of [40, 50, 66, 100]) {
+    const g = componerMapa(conAlDia(larga), 0.4, w)
+    for (const r of g) expect(r.length).toBe(w)
+    const medio = (y: number) => fila(g, y).slice(1, -1)
+    // Fallo: exactamente uno de sus tramos completos.
+    const fallo = medio(6)
+    const tramoF = variantesDe(FALLO).find(v => fallo.includes(v))
+    expect(tramoF).toBeDefined()
+    expect(fallo.replace(tramoF as string, '')).not.toMatch(RESTOS)
+    // Versiones enteras en las dos filas de cambios.
+    expect(medio(7)).toContain('1.0.0 → 1.1.0')
+    expect(medio(8)).toContain('10.12.3 → 10.13.0')
+    // Pendiente.
+    const pend = medio(9)
+    const tramoP = variantesDe(PENDIENTE).find(v => pend.includes(v))
+    expect(tramoP).toBeDefined()
+    expect(pend.replace(tramoP as string, '')).not.toMatch(RESTOS)
+    // Pie: una de las tres variantes, entera.
+    const pie = medio(10)
+    const tramoPie = variantesDe(PIE).find(v => pie.includes(v))
+    expect(tramoPie).toBeDefined()
+    expect(pie.replace(tramoPie as string, '').trim()).toBe('')
+    // Un nombre recortado termina en «…».
+    if (!fila(g, 7).includes('un-nombre-larguisimo-de-plugin')) expect(fila(g, 7)).toMatch(/un-nombre-[a-z-]*…/)
+  }
+})
+
+test('con sitio de sobra salen los textos más largos; con poco, los tramos cortos', () => {
+  const fallos = alDia([
+    { marca: '✗', nombre: 'a', detalle: 'no se pudo bajar · sigue la anterior', tipo: 'skill', aviso: false },
+    { marca: '…', nombre: 'b', detalle: 'pendiente · se reintenta en la próxima sesión', tipo: 'skill', aviso: false },
+  ])
+  const ancho = texto(componerMapa(conAlDia(fallos), 0, 100))
+  expect(ancho).toContain('no se pudo bajar · sigue la anterior')
+  expect(ancho).toContain('pendiente · se reintenta en la próxima sesión')
+  const corto = componerMapa(conAlDia(fallos), 0, 40)
+  expect(fila(corto, 6)).toContain('falló')
+  expect(fila(corto, 7)).toContain('pendiente')
+  expect(fila(corto, 8)).toContain('61 al día · reinicia Claude')
+  expect(fila(corto, 8)).not.toContain('lo nuevo')
+})
+
+test('⚠ ocupa una columna: la fila mide W celdas visibles y ninguna es la mitad de un emoji', () => {
+  for (const w of [40, 66, 100]) {
+    const g = componerMapa(conAlDia(alDia([cambio('superpowers', true)])), 0, w)
+    expect(fila(g, 6)).toContain('⚠')
+    expect(g[6].length).toBe(w)
+    expect(g[6].some(c => c.e)).toBe(false)
+    expect(Array.from(fila(g, 6)).length).toBe(w)
+    // El borde derecho queda en su sitio.
+    expect(g[6][w - 1].c).toBe('│')
+  }
 })
 
 test('«aldia» está entre los paneles por defecto', () => {
