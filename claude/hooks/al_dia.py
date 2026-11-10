@@ -296,6 +296,21 @@ def _foto_skills(home):
     return r
 
 
+MARKETPLACES_SIN_ACTUALIZAR = ("claude-code-entorno", "synced", "skills-dir")
+
+# Fórmula de Homebrew de cada programa, para actualizarlo con `brew upgrade` si se instaló así.
+FORMULAS_BREW = {"programa:herdr": "herdr", "MCP:codebase-memory": "codebase-memory-mcp",
+                 "programa:opencode": "opencode"}
+
+
+def _de_homebrew(ruta):
+    """True si la ruta (siguiendo enlaces) está dentro de un Cellar de Homebrew."""
+    try:
+        return "/Cellar/" in os.path.realpath(ruta)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
 def _foto_plugins(home, ejecutar, buscar_):
     datos = _json_de(_salida("claude", ["plugin", "list", "--json"], ejecutar, buscar_, home))
     if not isinstance(datos, list):
@@ -306,7 +321,9 @@ def _foto_plugins(home, ejecutar, buscar_):
             continue
         id_ = p["id"]
         version = _version_de(p)
-        if id_.endswith("@claude-code-entorno") or not version:
+        # Los mods de este repo, los sincronizados desde claude.ai (@synced) y los de carpeta
+        # (@skills-dir) no tienen marketplace que actualizar.
+        if id_.rpartition("@")[2] in MARKETPLACES_SIN_ACTUALIZAR or not version:
             continue
         r[f"plugin:{id_}"] = _entrada(id_.split("@")[0], "plugin",
                                       version, p.get("installPath"))
@@ -344,7 +361,12 @@ def _foto_programa(clave, nombre, tipo, programa, ejecutar, buscar_, home, extra
         version = extraer(texto) if texto else None
     except Exception:
         version = None
-    return {clave: _entrada(nombre, tipo, version)} if version else {}
+    if not version:
+        return {}
+    entrada = _entrada(nombre, tipo, version)
+    if clave in FORMULAS_BREW and _de_homebrew(buscar_(programa, home)):
+        entrada["instalador"] = "brew"
+    return {clave: entrada}
 
 
 def _foto_neovim(home):
@@ -451,9 +473,10 @@ def pasos(antes, cli_skills):
     ]
     for clave, cmd in programas:
         if clave in antes:
-            r.append((clave, cmd, TIEMPO_PROGRAMA))
+            r.append((clave, _con_brew(clave, cmd, antes), TIEMPO_PROGRAMA))
     if any(k.startswith("plugin:herdr/") for k in antes):
-        r.append(("plugin:herdr/*", ["herdr", "plugin", "update"], TIEMPO_PASO))
+        # Sin terminal, herdr exige --yes para actualizar plugins.
+        r.append(("plugin:herdr/*", ["herdr", "plugin", "update", "--yes"], TIEMPO_PASO))
     finales = [
         ("programa:opencode", ["opencode", "upgrade"]),
         ("programa:neovim-plugins", ["nvim", "--headless", "+Lazy! update", "+qa"]),
@@ -461,8 +484,15 @@ def pasos(antes, cli_skills):
     ]
     for clave, cmd in finales:
         if clave in antes:
-            r.append((clave, cmd, TIEMPO_PROGRAMA))
+            r.append((clave, _con_brew(clave, cmd, antes), TIEMPO_PROGRAMA))
     return r
+
+
+def _con_brew(clave, cmd, antes):
+    """`brew upgrade <fórmula>` si el programa se instaló con Homebrew (su propio actualizador se niega)."""
+    if antes.get(clave, {}).get("instalador") == "brew":
+        return ["brew", "upgrade", FORMULAS_BREW[clave]]
+    return cmd
 
 
 def textos(carpeta_):
