@@ -149,7 +149,7 @@ const spillsOf = (tree: unknown, columns: number) => {
 
 // ---------------------------------------------------------------- pruebas
 
-test('auto con 66 columnas usa diagrama', async ($, on) => {
+test('layout diagrama con 66 columnas usa diagrama', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D1' })
   await lanzar($, 'revisar auth', 'd1')
@@ -198,11 +198,25 @@ test('con 100 columnas y un agente en curso la franja grande dice TRABAJANDO', a
   await ui.unmount()
 })
 
-test('auto con 65 usa la disposición apilada', async ($, on) => {
+test('auto acoplado entre 40 y 99 columnas dibuja el mapa apilado al ancho del panel', async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'D4' })
+  await lanzar($, 'revisar auth', 'd4')
+  for (const cols of [40, 66, 99]) {
+    const ui = await $.ui.mount(pane(cols) as never)
+    expect(await ui.find({ text: /REGISTRO/ })).toBeDefined()
+    expect(await ui.find({ text: /AGENTES 1/ })).toBeDefined()
+    expect(await ui.find({ text: /delegar a subagentes/ })).toBeUndefined()
+    for (const s of spillsOf(await ui.drawn(), cols)) throw new Error(`${cols}: ${s}`)
+    await ui.unmount()
+  }
+})
+
+test('auto con menos de 40 columnas usa la disposición apilada de siempre', async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D2' })
   await lanzar($, 'revisar auth', 'd2')
-  const ui = await $.ui.mount(pane(65) as never)
+  const ui = await $.ui.mount(pane(39) as never)
   expect(await ui.find({ text: /delegar a subagentes/ })).toBeUndefined()
   expect(await ui.find({ text: /agentes ·/ })).toBeDefined()
   await ui.unmount()
@@ -354,7 +368,7 @@ const decisionesLlenas = [
 
 const TITULOS = ['Escribir las pruebas de regresión del cargador de configuración', 'Mapear cada llamada a la forma anterior', 'Revisar el camino de migración del estado guardado']
 
-test('asesor de guardia visible en el diagrama aunque no haya consultas', async ($, on) => {
+test('asesor de guardia visible en el diagrama aunque no haya consultas', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(66) as never)
   expect(await ui.find({ text: /^ASESOR · de guardia$/ })).toBeDefined()
@@ -383,7 +397,7 @@ test('con 66 y 90 columnas ninguna línea pasa del ancho, con títulos largos y 
   expect(failures).toEqual([])
 })
 
-test('con motion off el conector de la columna es texto │, sin módulo animado', { options: { motion: 'off' } }, async ($, on) => {
+test('con motion off el conector de la columna es texto │, sin módulo animado', { options: { motion: 'off', layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D3' })
   await lanzar($, 'revisar auth', 'd3')

@@ -314,35 +314,35 @@ test('/clear starts the pane fresh', async ($, on) => {
   await ui.unmount()
 })
 
-test('the neon palette is on by default, with no config', async ($, on) => {
+test('the neon palette is on by default, with no config', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
   await ui.unmount()
 })
 
-test('palette theme takes the theme colours', { options: { palette: 'theme' } }, async ($, on) => {
+test('palette theme takes the theme colours', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('claude')
   await ui.unmount()
 })
 
-test('pastel keeps the fixed dark-terminal colours', { options: { palette: 'pastel' } }, async ($, on) => {
+test('pastel keeps the fixed dark-terminal colours', { options: { layout: 'diagrama', palette: 'pastel' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#7dd3fc')
   await ui.unmount()
 })
 
-test('neon draws the box lines in saturated fixed colours', { options: { palette: 'neon' } }, async ($, on) => {
+test('neon draws the box lines in saturated fixed colours', { options: { layout: 'diagrama', palette: 'neon' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
   await ui.unmount()
 })
 
-test('subagents become cards, then swimlanes past the card limit; a card expands on its hotkey', async ($, on) => {
+test('subagents become cards, then swimlanes past the card limit; a card expands on its hotkey', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: `ag${++n}` }))
@@ -368,7 +368,7 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
   }
 })
 
-test('the server-side advisor is read from assistant rows: consulting, then on call', async ($, on) => {
+test('the server-side advisor is read from assistant rows: consulting, then on call', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   await $.turn.start({ text: 'plan it', turnId: 'T2' })
   const row = (content: unknown[]) =>
@@ -393,7 +393,7 @@ test('the server-side advisor is read from assistant rows: consulting, then on c
   await after.unmount()
 })
 
-test('the gate strip fills from checks and a row opens its redacted drill-down', async ($, on) => {
+test('the gate strip fills from checks and a row opens its redacted drill-down', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.check', (_$, e) => ({ decision: e.tool === 'Read' ? 'allow' : 'ask' }))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a/b.ts' }, tool_use_id: 'k1' })
@@ -407,7 +407,7 @@ test('the gate strip fills from checks and a row opens its redacted drill-down',
   await ui.unmount()
 })
 
-test('config changes labels, hides panels and turns the moments off', { options: { architectLabel: 'REVIEWER', panels: 'main,architect,agents,log', moments: false } }, async ($, on) => {
+test('config changes labels, hides panels and turns the moments off', { options: { layout: 'diagrama', architectLabel: 'REVIEWER', panels: 'main,architect,agents,log', moments: false } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-fable-5-1', agentId: `r${++n}` }))
@@ -420,7 +420,7 @@ test('config changes labels, hides panels and turns the moments off', { options:
   await ui.unmount()
 })
 
-test('a consult whose start and result share one row closes, and its review flag with it', async ($, on) => {
+test('a consult whose start and result share one row closes, and its review flag with it', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'go', turnId: 'T4' })
@@ -448,7 +448,7 @@ test('a consult whose start and result share one row closes, and its review flag
   await ui.unmount()
 })
 
-test('with no architect anywhere, the panel, legend entry and status field stay hidden', async ($, on) => {
+test('with no architect anywhere, the panel, legend entry and status field stay hidden', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect(await ui.find({ text: /ASESOR/ })).toBeUndefined()
@@ -456,7 +456,7 @@ test('with no architect anywhere, the panel, legend entry and status field stay 
   await ui.unmount()
 })
 
-test('cards that cannot fit the pane fall back to lanes', async ($, on) => {
+test('cards that cannot fit the pane fall back to lanes', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `w${++n}` }))
@@ -471,7 +471,7 @@ test('cards that cannot fit the pane fall back to lanes', async ($, on) => {
   await wide.unmount()
 })
 
-test("a background architect's advice is read from its hand-back", async ($, on) => {
+test("a background architect's advice is read from its hand-back", { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('agent.spawn', () => ({ model: 'claude-fable-5-1', agentId: 'fab1' }))
   await $.turn.start({ text: 'review it', turnId: 'H1' })
@@ -610,7 +610,7 @@ test('a draw that fails says why instead of leaving the pane empty', async ($, o
   }
 })
 
-test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane', async ($, on) => {
+test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane', { options: { layout: 'diagrama' } }, async ($, on) => {
   // engine(on), with a status line that keeps what it was told
   mock.clock(on)
   const status: (string | undefined)[] = []
@@ -750,7 +750,7 @@ const keepsModelWindow = (name: string, host: { compact: number | null; isEnable
 keepsModelWindow('a host that gives no breakdown keeps the model window and stops asking after 3 tries', { compact: null }, 3)
 keepsModelWindow('with auto-compaction off the gauge keeps the model window and is asked once', { compact: 400_000, isEnabled: false }, 1)
 
-test('a resumed session reads its compaction window at start, and /clear leaves the reading alone', async ($, on) => {
+test('a resumed session reads its compaction window at start, and /clear leaves the reading alone', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -776,7 +776,7 @@ test('a resumed session reads its compaction window at start, and /clear leaves 
   await cleared.unmount()
 })
 
-test('a compaction-window read that fails is asked again at the next measurement', async ($, on) => {
+test('a compaction-window read that fails is asked again at the next measurement', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -832,7 +832,7 @@ test("a surface module's fault key is the same for the hook's path, either separ
   expect(faultKey('terminal', 'hooks/elapsed.tsx')).not.toBe(faultKey('desktop', 'hooks/elapsed.tsx'))
 })
 
-test('switching to another model with the same window reads its compaction window afresh', async ($, on) => {
+test('switching to another model with the same window reads its compaction window afresh', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -870,7 +870,7 @@ test('switching to another model with the same window reads its compaction windo
   await ui.unmount()
 })
 
-test("a subagent's turn start does not reset the main turn's count", { options: { panels: 'main,receipt' } }, async ($, on) => {
+test("a subagent's turn start does not reset the main turn's count", { options: { layout: 'diagrama', panels: 'main,receipt' } }, async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'refactor it', turnId: 'T1' })
@@ -1046,7 +1046,7 @@ test('every panel fits the pane at every width from 24 columns, on every surface
   expect([...new Set(failures.map(f => f.replace(/ (terminal|desktop|vscode|mobile) /, ' ')))]).toEqual([])
 })
 
-test('a single agent card fits from 24 columns, and the time axis scales to the pane', async ($, on) => {
+test('a single agent card fits from 24 columns, and the time axis scales to the pane', { options: { layout: 'diagrama' } }, async ($, on) => {
   const clock = engine(on)
   await clock.advance(3_600_000)
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'one' }))
@@ -1068,7 +1068,7 @@ test('a single agent card fits from 24 columns, and the time axis scales to the 
   expect(failures).toEqual([])
 })
 
-test('a running connector keeps its length every frame: one face, clipped at its width, the dot still moving', async ($, on) => {
+test('a running connector keeps its length every frame: one face, clipped at its width, the dot still moving', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.check', () => ({ decision: 'allow' }))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a' }, tool_use_id: 'r1' })
