@@ -4,6 +4,7 @@ import { componerMapa, MAPA_ALTO_COMPACTO, type Celda, type DatosMapa } from '..
 import type { AlDia, FilaAlDia } from '../hooks/al-dia-modelo'
 import { PANELS_DEFECTO } from '../hooks/core'
 import { datos } from './datos-mapa'
+import { INSTANTANEAS_MAPA } from './instantaneas-mapa'
 
 // La caja AL DÍA: lo que se actualizó, justo bajo la franja de situación (filas 1 a 3), con todo lo demás más abajo.
 
@@ -42,6 +43,32 @@ test('sin alDia el mapa sale idéntico al de siempre', () => {
     expect(texto(componerMapa(conAlDia(null), 0, w))).toBe(texto(componerMapa(sinCampo as DatosMapa, 0, w)))
     expect(texto(componerMapa(conAlDia(null), 0, w))).not.toContain('AL DÍA')
   }
+})
+
+test('sin alDia el mapa es idéntico al de antes de la rama (instantánea de 2281d5e)', () => {
+  const claves = Object.keys(INSTANTANEAS_MAPA)
+  expect(claves.length).toBe(6)
+  for (const n of [0, 1, 3]) for (const w of [66, 100]) {
+    expect(texto(componerMapa(conAlDia(null, n), 0, w))).toBe(INSTANTANEAS_MAPA[`${n}@${w}`])
+  }
+})
+
+test('sin ninguna fila ↑ el pie es solo «N al día», sin «reinicia Claude»', () => {
+  const sinCambios = alDia([
+    { marca: '✗', nombre: 'skill-que-falla', detalle: 'no se pudo bajar · sigue la anterior', tipo: 'skill', aviso: false },
+    { marca: '…', nombre: 'pendiente-uno', detalle: 'pendiente · se reintenta en la próxima sesión', tipo: 'MCP', aviso: false },
+  ])
+  for (const w of [40, 66, 100]) {
+    const g = componerMapa(conAlDia(sinCambios), 0, w)
+    expect(fila(g, 8).slice(1, -1).trim()).toBe('61 al día')
+    // «reinicia» también sale en el cupo de ESTADO: se mira solo la caja AL DÍA (filas 5 a 9).
+    expect(g.slice(5, 10).map(r => r.map(c => c.c).join('')).join('\n')).not.toContain('reinicia')
+  }
+})
+
+test('con al menos una fila ↑ el pie sigue pidiendo reiniciar Claude', () => {
+  const g = componerMapa(conAlDia(alDia([cambio('caveman'), { marca: '✗', nombre: 'x', detalle: 'falló', tipo: 'skill', aviso: false }])), 0)
+  expect(texto(g)).toContain('61 al día · reinicia Claude para usar lo nuevo')
 })
 
 test('los colores: borde y título magenta, marcas, nombre, antes, flecha, después, tipo, aviso y resumen', () => {
@@ -156,6 +183,7 @@ test('con sitio de sobra salen los textos más largos; con poco, los tramos cort
   const fallos = alDia([
     { marca: '✗', nombre: 'a', detalle: 'no se pudo bajar · sigue la anterior', tipo: 'skill', aviso: false },
     { marca: '…', nombre: 'b', detalle: 'pendiente · se reintenta en la próxima sesión', tipo: 'skill', aviso: false },
+    cambio('c'),   // con una fila ↑ el pie pide reiniciar
   ])
   const ancho = texto(componerMapa(conAlDia(fallos), 0, 100))
   expect(ancho).toContain('no se pudo bajar · sigue la anterior')
@@ -163,8 +191,8 @@ test('con sitio de sobra salen los textos más largos; con poco, los tramos cort
   const corto = componerMapa(conAlDia(fallos), 0, 40)
   expect(fila(corto, 6)).toContain('falló')
   expect(fila(corto, 7)).toContain('pendiente')
-  expect(fila(corto, 8)).toContain('61 al día · reinicia Claude')
-  expect(fila(corto, 8)).not.toContain('lo nuevo')
+  expect(fila(corto, 9)).toContain('61 al día · reinicia Claude')
+  expect(fila(corto, 9)).not.toContain('lo nuevo')
 })
 
 test('⚠ ocupa una columna: la fila mide W celdas visibles y ninguna es la mitad de un emoji', () => {

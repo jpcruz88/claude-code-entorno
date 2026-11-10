@@ -351,8 +351,12 @@ export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
     }
   })
   if (extra) put(g, 4, 1 + mostradas, recortar(`+${hay - mostradas} más`, iw - 2), 'box')
-  const pies = [`${a.alDia} al día · reinicia Claude para usar lo nuevo`, `${a.alDia} al día · reinicia Claude`, `${a.alDia} al día`]
-  put(g, 2, alto - 2, pies.find(p => columnas(p) <= iw) ?? pies[2], 'box')
+  // «Reinicia Claude» solo tiene sentido si algo se actualizó (alguna fila ↑).
+  const hayCambios = a.filas.some(f => f.marca === '↑')
+  const pies = hayCambios
+    ? [`${a.alDia} al día · reinicia Claude para usar lo nuevo`, `${a.alDia} al día · reinicia Claude`, `${a.alDia} al día`]
+    : [`${a.alDia} al día`]
+  put(g, 2, alto - 2, pies.find(p => columnas(p) <= iw) ?? pies[pies.length - 1], 'box')
   return g
 }
 
