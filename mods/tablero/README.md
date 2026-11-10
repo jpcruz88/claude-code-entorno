@@ -4,6 +4,23 @@ Mod de Claude Code que dibuja un panel en español con la carpeta actual, el mod
 
 Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»).
 
+## Instalar
+
+En Claude Code 2.1.275 o posterior:
+
+```
+/plugin install tablero --marketplace jpcruz88/claude-code-entorno
+```
+
+O desde la terminal:
+
+```
+claude plugin marketplace add jpcruz88/claude-code-entorno
+claude plugin install tablero@claude-code-entorno --scope user
+```
+
+Reinicia Claude. El panel sale junto al chat y su pie dice `tablero v<versión>`. Para verlo en marcha, pide a Claude que lance dos o tres subagentes: la franja pasa a TRABAJANDO y cada agente sale en el mapa. La caja JEV solo se llena si usas los hooks de Jev de este repo (ver «Jev»), y la caja AL DÍA solo si usas el hook `al-dia.py`.
+
 ## Atribución
 
 Derivado de [Flightdeck](https://github.com/scasella/claude-flightdeck), de Stephen Casella (scasella), con licencia MIT. Hasta la 0.5.3 incluyó una adaptación de [savvy-progress](https://github.com/JohnnyVizz/claude-kit/tree/main/plugins/savvy-progress), de johnnyvizz, también MIT; desde la 0.6.0 esa parte la da el propio plugin savvy-progress. Los avisos de copyright originales se conservan en `LICENSE`.
