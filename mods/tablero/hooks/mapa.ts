@@ -7,6 +7,8 @@ export const MAPA_ANCHO = 100
 export const MAPA_ALTO = 49
 /** Con 0 o 1 tarea no hace falta el bus de tarjetas: el mapa baja a 32 filas. */
 export const MAPA_ALTO_COMPACTO = 32
+/** Desde este ancho el panel dibuja el mapa; entre este y MAPA_ANCHO, en una sola columna apilada. */
+export const MAPA_MIN = 40
 
 /** Color de una celda: se resuelve en el render contra la paleta de Tablero. */
 export type Tinta = 'fg' | 'mut' | 'lead' | 'jev' | 'enj' | 'ase' | 'warn' | 'box' | 'amb' | 'osc'
@@ -87,8 +89,8 @@ const EMOJI = /\p{Extended_Pictographic}/u
 
 type Punto = [number, number]
 
-const crearRejilla = (alto: number): Celda[][] =>
-  Array.from({ length: alto }, () => Array.from({ length: MAPA_ANCHO }, () => ({ c: ' ', k: 'fg' as Tinta })))
+const crearRejilla = (alto: number, ancho: number = MAPA_ANCHO): Celda[][] =>
+  Array.from({ length: alto }, () => Array.from({ length: ancho }, () => ({ c: ' ', k: 'fg' as Tinta })))
 
 const linea = (x1: number, y1: number, x2: number, y2: number): Punto[] => {
   const out: Punto[] = []
@@ -114,13 +116,13 @@ const put = (g: Celda[][], x: number, y: number, s: string, k: Tinta = 'fg', bg?
   let col = x
   for (const ch of Array.from(s)) {
     if (EMOJI.test(ch)) {
-      if (col >= 0 && col + 1 < MAPA_ANCHO && y >= 0 && y < g.length) {
+      if (y >= 0 && y < g.length && col >= 0 && col + 1 < g[y].length) {
         g[y][col] = bg ? { c: ch, k, bg } : { c: ch, k }
         g[y][col + 1] = bg ? { c: '', k, bg, e: true } : { c: '', k, e: true }
       }
       col += 2
     } else {
-      if (col >= 0 && col < MAPA_ANCHO && y >= 0 && y < g.length) g[y][col] = bg ? { c: ch, k, bg } : { c: ch, k }
+      if (y >= 0 && y < g.length && col >= 0 && col < g[y].length) g[y][col] = bg ? { c: ch, k, bg } : { c: ch, k }
       col++
     }
   }
@@ -195,8 +197,31 @@ const glifo = (t: TarjetaMapa, idx: number, tiempo: number): [string, Tinta, str
   return [LUNA[(Math.floor(tiempo * 4) + idx) % LUNA.length], 'enj', 'en curso']
 }
 
-/** Compone la rejilla de 100 columnas para los datos y el instante `t` (segundos desde que empezó la animación). */
-export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
+/** La franja de situación: tres filas (1 a 3) de fondo sólido y texto oscuro encima. Te espera y detenido parpadean. */
+const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean, sp: string) => {
+  const b = bannerDe(d.situacion, d.detalle)
+  const parpadea = d.situacion === 'espera' || d.situacion === 'detenido'
+  const encendido = !parpadea || vivo
+  const bg: Tinta | undefined = encendido ? b.tinta : undefined
+  const fg: Tinta = encendido ? 'osc' : b.tinta
+  for (let y = 1; y <= 3; y++) for (let x = 0; x < W; x++) g[y][x] = bg ? { c: ' ', k: fg, bg } : { c: ' ', k: fg }
+  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t / 0.6) % 2 === 0 ? '○' : '●') : b.glifo
+  // Con poco ancho, el rótulo va sin espaciar; el detalle se recorta al ancho.
+  const largo = `${gl}   ${espaciado(b.rotulo)}`
+  const titulo = Array.from(largo).length <= W - 4 ? largo : `${gl} ${b.rotulo}`
+  const detalle = recortar(b.detalle, W - 4)
+  put(g, Math.floor((W - Array.from(titulo).length) / 2), 2, titulo, fg, bg)
+  put(g, Math.floor((W - Array.from(detalle).length) / 2), 3, detalle, fg, bg)
+}
+
+/**
+ * Compone el mapa para los datos, el instante `t` (segundos desde que empezó la animación) y el ancho del panel.
+ * Desde 100 columnas, la rejilla de dos columnas de 100; por debajo, todo apilado al ancho del panel.
+ */
+export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO): Celda[][] =>
+  ancho >= MAPA_ANCHO ? componerAncho(d, t) : componerAngosto(d, t, Math.max(MAPA_MIN, Math.floor(ancho)))
+
+const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
   const N = d.tarjetas.length
   const compacto = N <= 1
   const alto = compacto ? MAPA_ALTO_COMPACTO : MAPA_ALTO
@@ -219,19 +244,7 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   put(g, 78, 0, `t ${d.tiempo}`, 'mut')
   put(g, 88, 0, d.reloj, 'mut')
 
-  // La franja de situación: tres filas de fondo sólido; el texto, oscuro encima. Te espera y detenido parpadean.
-  {
-    const b = bannerDe(d.situacion, d.detalle)
-    const parpadea = d.situacion === 'espera' || d.situacion === 'detenido'
-    const encendido = !parpadea || vivo
-    const bg: Tinta | undefined = encendido ? b.tinta : undefined
-    const fg: Tinta = encendido ? 'osc' : b.tinta
-    for (let y = 1; y <= 3; y++) for (let x = 0; x < MAPA_ANCHO; x++) g[y][x] = bg ? { c: ' ', k: fg, bg } : { c: ' ', k: fg }
-    const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t / 0.6) % 2 === 0 ? '○' : '●') : b.glifo
-    const titulo = `${gl}   ${espaciado(b.rotulo)}`
-    put(g, Math.floor((MAPA_ANCHO - Array.from(titulo).length) / 2), 2, titulo, fg, bg)
-    put(g, Math.floor((MAPA_ANCHO - Array.from(b.detalle).length) / 2), 3, b.detalle, fg, bg)
-  }
+  franja(g, d, t, MAPA_ANCHO, vivo, sp)
 
   // ESTADO a todo lo ancho: lo que cuesta, cuánto queda y qué pasa con los permisos y los errores.
   const e = d.estado
@@ -429,4 +442,224 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   P(40, 34, 'de vuelta al lead', 'lead')
   P(40, 35, 'revisar y verificar', 'fg')
   return g
+}
+
+// ---- Disposición apilada (de MAPA_MIN a 99 columnas) ----
+
+/** Un trozo que no se parte: texto de un color o una barra de `w` celdas. */
+type Pieza = { t: string; k: Tinta } | { barra: number; w: number; k: Tinta }
+const largoPieza = (p: Pieza) => ('t' in p ? Array.from(p.t).length : p.w)
+const largoTrozo = (tr: Pieza[]) => tr.reduce((n, p) => n + largoPieza(p), 0)
+
+/**
+ * Coloca los trozos uno tras otro desde `x0`, separados por tres espacios, y pasa a la fila siguiente cuando el
+ * próximo no cabe antes de `xMax`. Un trozo más largo que la fila entera se recorta. Devuelve las filas usadas.
+ */
+const fluir = (g: Celda[][], x0: number, y0: number, xMax: number, trozos: Pieza[][]): number => {
+  const ancho = xMax - x0 + 1
+  let x = x0
+  let y = y0
+  for (const tr of trozos) {
+    const n = largoTrozo(tr)
+    if (x > x0 && x + 3 + n - 1 > xMax) {
+      x = x0
+      y++
+    } else if (x > x0) x += 3
+    for (const p of tr) {
+      const libre = xMax - x + 1
+      if (libre <= 0) break
+      if ('t' in p) {
+        const s = recortar(p.t, libre)
+        put(g, x, y, s, p.k)
+        x += Array.from(s).length
+      } else {
+        const w = Math.min(p.w, libre)
+        barra(g, x, y, w, p.barra, p.k)
+        x += w
+      }
+    }
+    if (n > ancho) x = xMax + 1
+  }
+  return y - y0 + 1
+}
+
+/** Etiqueta a la izquierda y valor pegado al borde derecho; con poco sitio, el valor se recorta. */
+const parAjustado = (g: Celda[][], W: number, y: number, etiqueta: string, valor: string, k: Tinta = 'fg') => {
+  put(g, 2, y, etiqueta, 'mut')
+  const libre = W - 3 - (2 + Array.from(etiqueta).length + 1)
+  const v = recortar(valor, Math.max(0, libre))
+  put(g, W - 2 - Array.from(v).length, y, v, k)
+}
+
+const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
+  const N = d.tarjetas.length
+  const g = crearRejilla(120, W)
+  const enCurso = d.tarjetas.filter(x => x.estado === 'R' || x.estado === 'W').length
+  const listos = d.tarjetas.filter(x => x.estado === 'D').length
+  const enCola = d.tarjetas.filter(x => x.estado === 'Q').length
+  const sp = SPIN[Math.floor(t * 10) % SPIN.length]
+  const vivo = Math.floor(t * 1.7) % 2 === 0
+  const hayTrabajo = enCurso > 0 || d.asesorActivo || d.situacion === 'trabajando'
+  const xMax = W - 3
+  const iw = W - 4
+
+  // Cabecera: TABLERO, la rama si cabe y el reloj a la derecha.
+  const derecha = W >= 56 ? `t ${d.tiempo}  ${d.reloj}` : d.reloj
+  put(g, W - 2 - Array.from(derecha).length, 0, derecha, 'mut')
+  put(g, 2, 0, 'TABLERO', 'fg')
+  const libreRama = W - 2 - Array.from(derecha).length - 2 - 12
+  if (d.rama && libreRama >= 10) put(g, 12, 0, recortar(`rama ${d.rama}`, libreRama), 'mut')
+
+  franja(g, d, t, W, vivo, sp)
+  let y = 5
+
+  // ESTADO: los mismos datos que a 100 columnas, en trozos que bajan de fila cuando no caben.
+  const e = d.estado
+  const trozos: Pieza[][] = [[{ t: 'costo ', k: 'mut' }, { t: e.costo, k: 'fg' }]]
+  if (e.ultimoTurno) trozos.push([{ t: 'último turno ', k: 'mut' }, { t: e.ultimoTurno, k: 'fg' }])
+  for (const l of e.limites.slice(0, 2)) {
+    const tr: Pieza[] = [{ t: `cupo ${l.etiqueta} `, k: 'mut' }, { barra: l.valor, w: 8, k: l.valor >= 0.8 ? 'warn' : 'enj' }, { t: ` ${l.texto}`, k: 'fg' }]
+    if (l.ritmo) tr.push({ t: ' ritmo ', k: 'mut' }, { t: l.ritmo.texto, k: l.ritmo.k })
+    else if (l.reinicio) tr.push({ t: ' reinicia ', k: 'mut' }, { t: l.reinicio, k: 'fg' })
+    trozos.push(tr)
+  }
+  trozos.push([
+    { t: 'permisos ', k: 'mut' },
+    { t: `${e.permisos.pendientes} pend.`, k: e.permisos.pendientes > 0 ? 'amb' : 'fg' },
+    { t: ' ', k: 'mut' },
+    { t: `${e.permisos.denegados} den.`, k: e.permisos.denegados > 0 ? 'warn' : 'fg' },
+    { t: ` ${e.permisos.modo}`, k: 'mut' },
+  ])
+  trozos.push([{ t: 'bucles ', k: 'mut' }, { t: String(e.bucles), k: 'fg' }])
+  trozos.push([{ t: 'racha errores ', k: 'mut' }, { t: String(e.errores), k: e.errores > 0 ? 'warn' : 'fg' }])
+  trozos.push([{ t: 'ediciones turno ', k: 'mut' }, { t: String(e.ediciones), k: 'fg' }])
+  // Skills y MCP van cada uno en su fila: son listas largas.
+  const estadoFilas = fluir(g, 2, y + 1, xMax, trozos)
+  let yIn = y + 1 + estadoFilas
+  if (e.skills) {
+    put(g, 2, yIn, 'skills ', 'mut')
+    put(g, 9, yIn++, recortar(e.skills, iw - 7), 'fg')
+  }
+  if (e.mcp) {
+    put(g, 2, yIn, 'mcp ', 'mut')
+    put(g, 6, yIn++, recortar(e.mcp, iw - 4), 'fg')
+  }
+  caja(g, 0, y, W, yIn - y + 1, 'ESTADO', 'mut')
+  y = yIn + 2
+
+  // LEAD: el borde respira con trabajo y el spinner gira; en reposo, ○ fijo.
+  const trabajaLead = d.lead.delegando || d.situacion === 'trabajando'
+  const yLead = y
+  caja(g, 0, yLead, W, 7, '', hayTrabajo && !vivo ? 'box' : 'lead')
+  put(g, 2, yLead, ` LEAD · principal ${trabajaLead ? sp : '○'} `, 'lead')
+  put(g, 2, yLead + 1, d.lead.delegando ? 'delegando' : d.situacion === 'trabajando' ? 'trabajando' : 'a la espera', 'lead')
+  if (d.lead.turno) {
+    const tt = `turno ${d.lead.turno}`
+    put(g, W - 2 - tt.length, yLead + 1, tt, 'mut')
+  }
+  parAjustado(g, W, yLead + 2, 'modelo', d.lead.modelo)
+  put(g, 2, yLead + 3, 'contexto', 'mut')
+  if (d.lead.ctx === null) put(g, W - 3, yLead + 3, '—', 'mut')
+  else {
+    const pct = `${Math.round(d.lead.ctx * 100)}%`
+    put(g, W - 2 - pct.length, yLead + 3, pct, 'fg')
+    const bw = Math.min(12, W - 2 - pct.length - 1 - 12)
+    barra(g, W - 2 - pct.length - 1 - bw, yLead + 3, bw, d.lead.ctx, d.lead.ctx >= 0.8 ? 'warn' : 'enj')
+  }
+  put(g, 2, yLead + 4, 'líneas', 'mut')
+  const mas = `+${d.lead.mas}`
+  const menos = `−${d.lead.menos}`
+  const xMenos = W - 2 - Array.from(menos).length
+  put(g, xMenos, yLead + 4, menos, 'warn')
+  put(g, xMenos - 1 - mas.length, yLead + 4, mas, 'jev')
+  parAjustado(g, W, yLead + 5, 'respuestas', String(d.lead.respuestas))
+  y = yLead + 7
+
+  // Conector lead → JEV, en el centro.
+  const cx = Math.floor(W / 2)
+  put(g, cx, y, '▼', 'mut')
+  if (hayTrabajo) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'lead')
+  y += 1
+
+  // JEV: etiqueta a la izquierda, texto pegado a la derecha y la barra en el hueco que quede.
+  const yJev = y
+  const filasJev = d.jev.filas.slice(0, 3)
+  const altoJev = 2 + 1 + filasJev.length + (d.jev.tope ? 1 : 0) + 1
+  caja(g, 0, yJev, W, altoJev, 'JEV · decisiones', 'jev')
+  put(g, 2, yJev + 1, `${d.jev.decisiones} decisiones`, 'jev')
+  if (W >= 50) put(g, W - 2 - 11, yJev + 1, 'umbral 0.80', 'mut')
+  filasJev.forEach((f, i) => {
+    const yy = yJev + 2 + i
+    const txt = f.texto
+    const xTxt = W - 2 - Array.from(txt).length
+    put(g, 2, yy, recortar(f.etiqueta, 13), 'fg')
+    const bw = Math.min(12, xTxt - 1 - 16)
+    if (bw >= 3) barra(g, xTxt - 1 - bw, yy, bw, f.valor, f.color)
+    put(g, xTxt, yy, txt, f.color)
+  })
+  let yj = yJev + 2 + filasJev.length
+  if (d.jev.tope) put(g, 2, yj++, recortar(d.jev.tope, iw), 'warn')
+  put(g, 2, yj, recortar('sharp → código · split → claude', iw), 'mut')
+  y = yJev + altoJev + 1
+
+  // ASESOR
+  const kAs: Tinta = d.asesorActivo && !vivo ? 'box' : 'ase'
+  caja(g, 0, y, W, 5, recortar(`ASESOR · ${d.asesor.estado}`, W - 6), kAs)
+  parAjustado(g, W, y + 1, 'consultas', String(d.asesor.consultas))
+  parAjustado(g, W, y + 2, 'permisos', `${d.asesor.permisos} pend.`)
+  put(g, 2, y + 3, recortar(`última consulta ${d.asesor.ultima ?? '—'}`, iw), 'mut')
+  y += 6
+
+  // REGISTRO: tantas filas como entradas, hasta 4.
+  const reg = d.registro.slice(-4)
+  caja(g, 0, y, W, Math.max(3, reg.length + 2), 'REGISTRO', 'mut')
+  reg.forEach((s, i) => put(g, 2, y + 1 + i, recortar(s, iw), 'fg'))
+  y += Math.max(3, reg.length + 2) + 1
+
+  // AGENTES: una fila por tarea, hasta siete, con «+N más» si hay más de ocho.
+  if (N > 0) {
+    const filas = N > 8 ? 7 : N
+    const alto = filas + 2 + (N > 8 ? 1 : 0)
+    caja(g, 0, y, W, alto, '', 'enj')
+    // El título más largo que quepa entero, sin cortar una palabra contra el borde.
+    const titulos = [`AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok`, `AGENTES ${N}`]
+    const tituloAg = titulos.find(x => Array.from(x).length + 2 <= W - 4) ?? `AGENTES ${N}`
+    put(g, 2, y, ` ${tituloAg} `, 'enj')
+    for (let i = 0; i < filas; i++) {
+      const ag = d.tarjetas[i]
+      const yy = y + 1 + i
+      const [gl, kg, txt] = glifo(ag, i, t)
+      const pasos = `${Math.min(ag.hechos, ag.total)}/${ag.total}`
+      const der = W >= 60 ? `${pasos} ${txt}` : pasos
+      const xDer = W - 2 - Array.from(der).length
+      put(g, xDer, yy, pasos, 'fg')
+      if (W >= 60) put(g, xDer + pasos.length + 1, yy, txt, kg)
+      put(g, 2, yy, gl, kg)
+      const nombreW = Math.min(18, xDer - 1 - 5)
+      put(g, 5, yy, recortar(ag.nombre, nombreW), 'fg')
+      const xBarra = 5 + nombreW + 1
+      const bw = Math.min(12, xDer - 1 - xBarra)
+      if (bw >= 4) {
+        const kb: Tinta = ag.estado === 'D' ? 'jev' : ag.estado === 'W' ? 'warn' : 'enj'
+        barra(g, xBarra, yy, bw, Math.min(ag.hechos, ag.total) / Math.max(1, ag.total), kb)
+      }
+    }
+    if (N > 8) put(g, 5, y + 1 + filas, recortar(`+${N - 7} más · ${enCola} en cola`, iw - 3), 'mut')
+    y += alto + 1
+  }
+
+  // Pie: el estado de las tareas (si hay) y, en la última fila, la versión y el autor a la derecha.
+  if (N === 0) put(g, 2, y++, recortar('SIN TAREAS · el lead espera trabajo', iw), 'mut')
+  else {
+    fluir(g, 2, y, xMax, [
+      [{ t: 'subagentes ', k: 'mut' }, { t: `[${d.barra.hechos}/${d.barra.total}]`, k: 'fg' }],
+      [{ t: 'asesor ', k: 'mut' }, { t: d.asesorActivo ? '[asesorando]' : '[de guardia]', k: 'ase' }],
+      [{ t: 'jev ', k: 'mut' }, { t: `[${d.jev.decisiones}]`, k: 'jev' }],
+    ])
+    y = g.findLastIndex(r => r.some(c => c.c.trim() !== '')) + 1
+  }
+  const firma = W >= 50 ? `tablero v${d.version} · desarrollado por ` : `v${d.version} · `
+  put(g, W - 2 - Array.from(firma).length - 2, y, firma, 'mut')
+  put(g, W - 4, y, 'JP', 'lead')
+  return g.slice(0, y + 1)
 }

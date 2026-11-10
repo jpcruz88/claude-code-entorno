@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 (tablero)
+
+- The map is responsive. Docked beside the transcript, `auto` draws it from 40 columns and fits the pane's real width: from 100 columns, the two-column layout of 0.4.0; from 40 to 99, everything stacked at full width (header, status band, ESTADO, LEAD, JEV, ASESOR, REGISTRO, AGENTES, footer). Before, the map only showed at 100 columns or more, and the pane asks for 66 (Claude Code caps it at 45 % of the terminal), so most terminals kept the old diagram.
+- In the stacked layout, ESTADO pieces wrap to the next row when they don't fit; bars shrink to the space left; long texts are cut before the box border; the band uses plain letters when the spaced title doesn't fit; the AGENTES title drops parts instead of cutting a word.
+- Inline above the prompt the map is too tall: there `auto` keeps the diagram and the summary, as before. Below 40 columns, the old stacked column. `layout: diagrama` and `compact` keep their views.
+- Tests: `tests/mapa-responsivo.test.ts` (widths 40 to 99, boxes never overrun their border, 100+ unchanged), `tests/diagrama.test.tsx` covers the stacked map on the mounted pane at 40, 66 and 99 columns. Tests of the old diagram now ask for `layout: diagrama`.
+
 ## 0.4.0 (tablero)
 
 - New status band at the top of the map (100 columns or more): three rows of solid colour that say at a glance what the agent is doing. Cyan `T R A B A J A N D O` with a spinner, amber `T E   E S P E R A` when a permission is pending, red `D E T E N I D O` after 3 errors in a row (`UMBRAL_ERRORES`), grey `E N   E S P E R A` when idle. The amber and red bands blink; the idle one beats slowly.

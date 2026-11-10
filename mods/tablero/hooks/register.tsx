@@ -89,7 +89,7 @@ import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
 import { situacionDe } from './situacion'
-import { MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
+import { MAPA_ANCHO, MAPA_MIN, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
 import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
 const PANE = 'tablero'
@@ -795,8 +795,10 @@ export const register: Register = (on, options) => {
     const layout = v.layout ?? cfg.layout
     // El diagrama: `auto` y `diagrama` desde 66 columnas; por debajo, la columna de siempre.
     const enDiagramaPosible = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
-    // Desde 100 columnas, `auto` dibuja la rejilla de la propuesta (ver mapa.ts); `diagrama` conserva el diagrama de siempre.
-    const enMapa = enDiagramaPosible && W >= MAPA_ANCHO && layout === 'auto'
+    // `auto` acoplado dibuja el mapa desde 40 columnas y se adapta al ancho (ver mapa.ts): dos columnas desde 100,
+    // apilado por debajo. Sobre el prompt (inline) el mapa es demasiado alto: ahí siguen el diagrama y el resumen.
+    // `diagrama` conserva el diagrama de siempre.
+    const enMapa = layout === 'auto' && W >= MAPA_MIN && (W >= MAPA_ANCHO || e.props.placement !== 'inline')
     const enDiagrama = enDiagramaPosible && !enMapa
     const isWide = layout === 'wide'
     const colW = isWide ? Math.floor((W - 2) / 2) : W
@@ -1607,8 +1609,8 @@ export const register: Register = (on, options) => {
       barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
     }
     const mapaBody = enMapa ? (
-      <Box flexDirection="column" width={MAPA_ANCHO}>
-        {filasDeMapa(componerMapa(mapaDatos, now / 1000)).map((tramos, y) => (
+      <Box flexDirection="column" width={Math.min(W, MAPA_ANCHO)}>
+        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W)).map((tramos, y) => (
           <Text key={y}>
             {tramos.map((tr, i) => (
               <Text key={i} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>

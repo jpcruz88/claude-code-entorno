@@ -73,7 +73,7 @@ test('el panel principal muestra la carpeta actual, solo el nombre final', { opt
   }
 })
 
-test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', async ($, on) => {
+test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, 'C:\\p\\una-carpeta-con-un-nombre-larguisimo-que-no-cabe')
   const ui = await $.ui.mount(pane(40))
   expect(await ui.find({ text: /una-carpeta-con-un-nombre-larguisimo-que-no-cabe/ })).toBeUndefined()
@@ -81,7 +81,7 @@ test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', asyn
   await ui.unmount()
 })
 
-test('sin carpeta conocida el panel se dibuja igual', async ($, on) => {
+test('sin carpeta conocida el panel se dibuja igual', { options: { layout: 'diagrama' } }, async ($, on) => {
   const reloj = mock.clock(on)
   void reloj
   on('ui.status', () => ({ value: undefined }))
