@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -131,17 +132,83 @@ Ejecutar = Callable[[list, int], tuple]
 TIEMPO_CONSULTA = 60  # las consultas de versión son rápidas
 
 
-def ejecutar_real(cmd, timeout):
-    """Corre `cmd` sin entrada y con tiempo límite. (124, "tiempo agotado") si se acaba."""
+def _sin_ventana():
+    return getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
+
+def _entorno(cmd, home):
+    """Entorno del hijo con PATH ampliado.
+
+    Claude abierto desde el Dock no hereda el PATH de la terminal: `npx` necesita `node`
+    (`#!/usr/bin/env node`) y sin él sale con 127. Orden: carpeta del programa, carpetas
+    habituales y el PATH actual, sin duplicados.
+    """
+    carpetas = []
+    donde = os.path.dirname(str(cmd[0])) if cmd else ""
+    if donde:
+        carpetas.append(donde)
+    carpetas += [str(c) for c in _carpetas_de_programas(home)]
+    carpetas += os.environ.get("PATH", "").split(os.pathsep)
+    vistas, unicas = set(), []
+    for c in carpetas:
+        if c and c not in vistas:
+            vistas.add(c)
+            unicas.append(c)
+    return {**os.environ, "PATH": os.pathsep.join(unicas)}
+
+
+def _matar_arbol(proc):
+    """Mata el proceso y sus descendientes, siempre por el PID concreto."""
     try:
-        r = subprocess.run(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, text=True, timeout=timeout,
-                           errors="replace")
-    except subprocess.TimeoutExpired:
-        return 124, "tiempo agotado"
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=15,
+                           creationflags=_sin_ventana())
+        else:
+            os.killpg(proc.pid, getattr(signal, "SIGKILL", 9))
+    except Exception:
+        pass
+    try:
+        proc.kill()   # por si lo anterior no alcanzó al proceso principal
+    except Exception:
+        pass
+
+
+def ejecutar_real(cmd, timeout, home=None):
+    """Corre `cmd` sin entrada y con tiempo límite. (124, "tiempo agotado") si se acaba.
+
+    Corre en `home` (no hereda la carpeta del proyecto abierto) y, al agotarse el tiempo,
+    mata todo el árbol de procesos, no solo el primero.
+    """
+    home = Path(home) if home is not None else Path.home()
+    opciones = {"stdin": subprocess.DEVNULL, "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT, "text": True, "errors": "replace",
+                "cwd": str(home), "env": _entorno(cmd, home)}
+    if sys.platform == "win32":
+        opciones["creationflags"] = (_sin_ventana()
+                                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200))
+    else:
+        opciones["start_new_session"] = True
+    try:
+        proc = subprocess.Popen(cmd, **opciones)
     except OSError as e:
         return 127, str(e)
-    return r.returncode, r.stdout or ""
+    try:
+        salida, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _matar_arbol(proc)
+        try:
+            proc.communicate(timeout=5)   # corto: un nieto fuera del grupo no nos retiene
+        except Exception:
+            pass
+        for tuberia in (proc.stdout, proc.stdin, proc.stderr):
+            try:
+                tuberia.close()
+            except Exception:
+                pass
+        return 124, "tiempo agotado"
+    return proc.returncode, salida or ""
 
 
 def _carpetas_de_programas(home):
@@ -181,16 +248,24 @@ def _salida(programa, args, ejecutar, buscar_, home):
 
 
 def _json_de(texto):
-    """JSON desde el primer `[` o `{`: stderr va mezclado y un aviso antes lo rompería."""
+    """Primer JSON (lista u objeto) del texto.
+
+    stderr va mezclado: un aviso antes (`(node:1) [DEP0040] …`) trae corchetes que no son
+    JSON. Se prueba cada `[` o `{` en orden hasta que uno decodifique a lista o dict.
+    """
     if not isinstance(texto, str):
         return None
-    inicios = [i for i in (texto.find("["), texto.find("{")) if i >= 0]
-    if not inicios:
-        return None
-    try:
-        return json.JSONDecoder().raw_decode(texto, min(inicios))[0]
-    except ValueError:
-        return None
+    decodificador = json.JSONDecoder()
+    for i, c in enumerate(texto):
+        if c not in "[{":
+            continue
+        try:
+            dato = decodificador.raw_decode(texto, i)[0]
+        except ValueError:
+            continue
+        if isinstance(dato, (list, dict)):
+            return dato
+    return None
 
 
 def _version_de(p):
@@ -512,11 +587,14 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
         if clave in textos_antes and d.get("carpeta"):
             texto = _diff(textos_antes[clave], textos(d["carpeta"]))
             if texto:
-                destino = _ruta_diff(home, ahora, d["nombre"], d["tipo"], usadas)
-                destino.parent.mkdir(parents=True, exist_ok=True)
-                destino.write_text(texto, encoding="utf-8")
                 cambio["cambio_texto"] = True
-                cambio["diff"] = str(destino)
+                destino = _ruta_diff(home, ahora, d["nombre"], d["tipo"], usadas)
+                try:
+                    destino.parent.mkdir(parents=True, exist_ok=True)
+                    destino.write_text(texto, encoding="utf-8")
+                    cambio["diff"] = str(destino)
+                except OSError:
+                    pass   # sin diff guardado; la revisión sigue y deja el resultado
         cambios.append(cambio)
 
     ts, inicio = int(ahora), ahora
