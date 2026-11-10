@@ -188,3 +188,14 @@ test('en la caja JEV hay un hueco entre la etiqueta y la barra: «qué esfuerzo�
   expect(fila(g, 14)).toContain('qué esfuerzo')
   expect(g[14][48].c).toBe(' ')
 })
+
+test('la caja ESTADO se ajusta a su contenido: sin límites acaba en la fila 17', () => {
+  const g = componerMapa(datos(1), 0)
+  expect(g[17][2].c).toBe('└')
+})
+
+test('la caja REGISTRO se ajusta a sus líneas: con 2 entradas acaba en la fila 24 (compacto)', () => {
+  const g = componerMapa(datos(1), 0)
+  expect(g[24][2].c).toBe('└')
+  expect(g[25][2].c).toBe(' ')
+})

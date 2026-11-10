@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.3.16'
+export const MOD_VERSION = '0.3.17'
 
 // ---------------------------------------------------------------- defaults
 
