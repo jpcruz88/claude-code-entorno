@@ -22,7 +22,7 @@ export const datos = (cards: number): DatosMapa => ({
     skills: 'tdd×2 caveman×1',
     mcp: 'codebase×3 ctx7×1',
   },
-  asesor: { estado: 'de guardia', consultas: 2, permisos: 0, ultima: 'hace 2m' },
+  asesor: { estado: '2 consultas', consultas: 2, ultima: 'hace 2m' },
   lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
   jev: {
     filas: [

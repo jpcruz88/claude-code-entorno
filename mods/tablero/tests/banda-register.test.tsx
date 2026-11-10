@@ -39,7 +39,7 @@ const medir = ($: { session: { measure: (e: never) => Promise<unknown> } }) =>
     changed: ['context'],
   } as never)
 
-test('nada sale sobre el prompt: la banda de abajo ya no existe', { options: { banda: true } }, async ($, on) => {
+test('nada sale sobre el prompt: la banda de abajo ya no existe', async ($, on) => {
   motor(on)
   motorDibuja(on)
   await medir($)
@@ -50,7 +50,7 @@ test('nada sale sobre el prompt: la banda de abajo ya no existe', { options: { b
   await ui.unmount()
 })
 
-test('el footer nativo no muestra datos aunque la opción statusLine esté encendida', { options: { statusLine: true } }, async ($, on) => {
+test('el footer nativo no muestra datos del mod', async ($, on) => {
   mock.clock(on)
   const estados: string[] = []
   on('ui.status', (_$, e) => {
@@ -64,7 +64,7 @@ test('el footer nativo no muestra datos aunque la opción statusLine esté encen
   expect(estados.some(s => /ctx|\$1\.20/.test(s))).toBe(false)
 })
 
-test('con la opción banda apagada no dibuja nada', { options: { banda: false } }, async ($, on) => {
+test('con la opción banda apagada no dibuja nada', async ($, on) => {
   motor(on)
   motorDibuja(on)
   const ui = await $.ui.mount(BANDA())
@@ -73,7 +73,7 @@ test('con la opción banda apagada no dibuja nada', { options: { banda: false } 
   await ui.unmount()
 })
 
-test('cede el lugar a una encuesta', { options: { banda: true } }, async ($, on) => {
+test('cede el lugar a una encuesta', async ($, on) => {
   motor(on)
   motorDibuja(on)
   const ui = await $.ui.mount(BANDA({ hasSurvey: true }))
@@ -82,7 +82,7 @@ test('cede el lugar a una encuesta', { options: { banda: true } }, async ($, on)
   await ui.unmount()
 })
 
-test('con animación apagada no pide redibujar cada segundo', { options: { banda: true, animacion: false } }, async ($, on) => {
+test('con animación apagada no pide redibujar cada segundo', { options: { animacion: false } }, async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -102,7 +102,7 @@ test('con animación apagada no pide redibujar cada segundo', { options: { banda
   expect(invalidaciones).toBe(alPrincipio)
 })
 
-test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada cambia', { options: { banda: true } }, async ($, on) => {
+test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada cambia', async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -128,7 +128,7 @@ test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada ca
   expect(invalidaciones - tras).toBeLessThanOrEqual(10)
 })
 
-test('al terminar la sesión, el reloj de la banda deja de pedir redibujos', { options: { banda: true } }, async ($, on) => {
+test('al terminar la sesión, el reloj de la banda deja de pedir redibujos', async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))

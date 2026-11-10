@@ -60,7 +60,7 @@ const lunaDe = (arbol: unknown): string | undefined => {
   return busca(arbol)
 }
 
-test('con animación apagada, la luna del agente no cambia mientras trabaja', { options: { banda: true, animacion: false } }, async ($, on) => {
+test('con animación apagada, la luna del agente no cambia mientras trabaja', { options: { animacion: false } }, async ($, on) => {
   const reloj = engine(on)
   await $.turn.start({ text: 'go', turnId: 'P1' })
   await $.agent.spawn(encargo as never)
@@ -75,7 +75,7 @@ test('con animación apagada, la luna del agente no cambia mientras trabaja', { 
   await ui.unmount()
 })
 
-test('control: con animación encendida, la luna sí gira', { options: { banda: true } }, async ($, on) => {
+test('control: con animación encendida, la luna sí gira', async ($, on) => {
   const reloj = engine(on)
   await $.turn.start({ text: 'go', turnId: 'P2' })
   await $.agent.spawn(encargo as never)

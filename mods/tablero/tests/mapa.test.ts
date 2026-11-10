@@ -26,7 +26,7 @@ const datos = (cards: number): DatosMapa => ({
     skills: 'tdd×2 caveman×1',
     mcp: 'codebase×3 ctx7×1',
   },
-  asesor: { estado: 'de guardia', consultas: 2, permisos: 0, ultima: 'hace 2m' },
+  asesor: { estado: '2 consultas', consultas: 2, ultima: 'hace 2m' },
   lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
   jev: {
     filas: [
@@ -132,10 +132,10 @@ test('ESTADO va bajo la franja, de la columna 0 a la 99', () => {
   expect(g[10][99].c).toBe('┘')
 })
 
-test('ESTADO junta costo, cupos, permisos, bucles, errores, ediciones, skills y MCP', () => {
+test('ESTADO junta costo, cupos, permisos, errores, ediciones, skills y MCP', () => {
   const g = componerMapa(datos(0), 0)
   const todo = [6, 7, 8, 9].map(y => fila(g, y)).join('\n')
-  for (const s of ['$1.42', 'último turno', '$0.08', 'cupo 5 h', '31%', 'reinicia', '3h10m', 'cupo 7 d', '62%', '2 pend.', '1 den.', 'acceptEdits', 'bucles', 'racha errores', 'ediciones turno', 'tdd×2 caveman×1', 'codebase×3 ctx7×1'])
+  for (const s of ['$1.42', 'costo turno', '$0.08', 'cupo 5 h', '31%', 'reinicia', '3h10m', 'cupo 7 d', '62%', '2 pend.', '1 den.', 'acceptEdits', 'racha errores', 'ediciones turno', 'tdd×2 caveman×1', 'codebase×3 ctx7×1'])
     expect(todo).toContain(s)
   expect(fila(g, 6)).toContain('█')
 })
@@ -161,9 +161,9 @@ test('sin skills ni MCP la fila no muestra rótulos vacíos', () => {
 test('el asesor va a la izquierda, bajo ESTADO, con su estado en el título', () => {
   const g = componerMapa(datos(0), 0)
   expect(g[12][0].c).toBe('┌')
-  expect(fila(g, 12)).toContain('ASESOR · de guardia')
+  expect(fila(g, 12)).toContain('ASESOR · 2 consultas')
   expect(fila(g, 13)).toContain('consultas')
-  expect(fila(g, 15)).toContain('última consulta hace 2m')
+  expect(fila(g, 14)).toContain('última consulta hace 2m')
 })
 
 test('la flecha asesor → lead cruza la fila 14 hasta el ▶ en la columna 50', () => {
@@ -234,10 +234,10 @@ test('el REGISTRO va a la izquierda bajo el asesor y se ajusta a sus líneas', (
 test('un texto largo del asesor o del registro se corta antes del borde de su caja', () => {
   const d = datos(0)
   d.registro = ['21:52 jev una línea larguísima que no cabe en la caja del registro']
-  d.asesor.ultima = 'hace un rato larguísimo sin fin'
+  d.asesor = { ...d.asesor!, ultima: 'hace un rato larguísimo sin fin' }
   const g = componerMapa(d, 0)
   expect(g[18][43].c).toBe('│')
-  expect(g[15][43].c).toBe('│')
+  expect(g[14][43].c).toBe('│')
 })
 
 test('los paquetes avanzan con t entre el asesor y el lead cuando hay trabajo', () => {

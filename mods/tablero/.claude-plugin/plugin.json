@@ -1,7 +1,7 @@
 {
   "name": "tablero",
-  "version": "0.5.3",
-  "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
+  "version": "0.6.0",
+  "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
     "url": "https://github.com/scasella"
@@ -21,13 +21,13 @@
   "userConfig": {
     "architectPattern": {
       "title": "Patrón del arquitecto",
-      "description": "Expresión regular (sin distinguir mayúsculas) de los tipos de agente y herramientas de servidor que cuentan como arquitecto de guardia, por ejemplo advisor|architect",
+      "description": "Expresión regular (sin distinguir mayúsculas) de los tipos de agente y herramientas de servidor que cuentan como asesor, por ejemplo advisor|architect. La caja ASESOR solo aparece cuando hubo consultas",
       "type": "string",
       "default": "advisor|architect"
     },
     "architectLabel": {
       "title": "Etiqueta del asesor",
-      "description": "Nombre que se muestra para el rol de asesor (el asesor de guardia que consulta al modelo más capaz)",
+      "description": "Nombre que se muestra para el rol de asesor",
       "type": "string",
       "default": "ASESOR"
     },
@@ -103,27 +103,15 @@
     },
     "openOnStart": {
       "title": "Abrir al iniciar",
-      "description": "Abre el panel completo de Tablero al iniciar la sesión. Si lo apagas, se abre con /tablero; la banda sobre el prompt queda de respaldo",
-      "type": "boolean",
-      "default": true
-    },
-    "banda": {
-      "title": "Banda",
-      "description": "Muestra la banda de Tablero sobre el prompt: carpeta, modelo, costo, contexto, subagentes, permisos y uso",
+      "description": "Abre el panel de Tablero al iniciar la sesión. Si lo apagas, se abre con /tablero",
       "type": "boolean",
       "default": true
     },
     "animacion": {
       "title": "Animación",
-      "description": "Anima la banda: barras que se llenan, indicador que pulsa y cuenta regresiva. Apagarla evita redibujar cada segundo",
+      "description": "Anima el panel: spinner, paquetes que recorren las líneas y bordes que respiran. Apagarla evita redibujar a cada momento",
       "type": "boolean",
       "default": true
-    },
-    "statusLine": {
-      "title": "Línea de estado",
-      "description": "Muestra contexto, agentes, permisos y uso en el footer",
-      "type": "boolean",
-      "default": false
     }
   }
 }

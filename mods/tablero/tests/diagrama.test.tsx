@@ -370,11 +370,11 @@ const decisionesLlenas = [
 
 const TITULOS = ['Escribir las pruebas de regresión del cargador de configuración', 'Mapear cada llamada a la forma anterior', 'Revisar el camino de migración del estado guardado']
 
-test('asesor de guardia visible en el diagrama aunque no haya consultas', { options: { layout: 'diagrama' } }, async ($, on) => {
+test('sin consultas el diagrama no dibuja la caja del asesor', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(66) as never)
-  expect(await ui.find({ text: /^ASESOR · de guardia$/ })).toBeDefined()
-  expect(await ui.find({ text: /aún sin consultas/ })).toBeDefined()
+  expect(await ui.find({ text: /^ASESOR/ })).toBeUndefined()
+  expect(await ui.find({ text: /aún sin consultas/ })).toBeUndefined()
   await ui.unmount()
 })
 

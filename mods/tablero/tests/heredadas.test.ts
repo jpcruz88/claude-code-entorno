@@ -388,7 +388,7 @@ test('the server-side advisor is read from assistant rows: consulting, then on c
 
   await row([{ type: 'advisor_tool_result', tool_use_id: 'srv1', content: { type: 'advisor_redacted_result' } }])
   const after = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await after.find({ text: /ASESOR · de guardia/ })).toBeDefined()
+  expect(await after.find({ text: /ASESOR · 1 consulta$/ })).toBeDefined()
   expect(await after.find({ text: /^1$/ })).toBeDefined()
   await after.unmount()
 })
@@ -442,7 +442,7 @@ test('a consult whose start and result share one row closes, and its review flag
     })
     .catch(() => undefined)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /ASESOR · de guardia/ })).toBeDefined()
+  expect(await ui.find({ text: /ASESOR · 1 consulta$/ })).toBeDefined()
   expect(await ui.find({ text: /◆ antes de terminar/ })).toBeDefined()
   expect(await ui.find({ text: /revisando antes de terminar/ })).toBeUndefined()
   await ui.unmount()
