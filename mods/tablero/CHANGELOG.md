@@ -5,9 +5,10 @@
 Caja AL DÍA en el mapa: lo que la revisión diaria actualizó, justo bajo la franja de situación.
 
 - La caja `AL DÍA · hoy 09:12` sale en la fila 5, con una fila en blanco debajo; todo lo demás baja y nada se tapa. Una fila por cosa: `↑` (verde) actualizada, `✗` (rojo) que no se pudo bajar y `…` (ámbar) pendiente, con el nombre (máximo 18), `antes → después`, el tipo (skill, plugin, MCP, programa) y `⚠ cambió texto` si cambiaron sus instrucciones.
-- Máximo 6 filas; con más, 5 y `+N más`. Al pie: `N al día · reinicia Claude para usar lo nuevo`.
+- Máximo 6 filas; con más, 5 y `+N más`. Al pie: `N al día · reinicia Claude para usar lo nuevo`; si no hay ninguna fila `↑` (nada se actualizó), solo `N al día`.
 - Por debajo de 66 columnas, el tipo y `⚠ cambió texto` se acortan a `⚠` antes de recortar el nombre.
 - Lee `~/.claude/al-dia/resultado.json` al abrir la sesión y en cada relectura de Jev. Ausente, roto o de hace más de 24 h: no hay caja y el mapa sale igual que antes.
+- Al abrir la sesión, el tablero ya lee las decisiones y los límites de Jev, así que JEV y el ritmo salen desde el primer cuadro.
 - Panel nuevo `aldia` en la opción `panels`, activo por defecto. Quítalo de la lista para ocultar la caja.
 
 ## 0.7.0 (tablero)
