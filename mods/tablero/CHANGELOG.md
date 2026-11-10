@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.16 (tablero)
+
+- The JEV box leaves a free column between the label and the bar, so «qué esfuerzo» no longer touches `█`. The bar starts at column 49 and the text at 62.
+- The threshold line in the JEV box is `| = umbral 0.80` in ASCII: `┆` came out wider in some terminals and pushed the box border.
+- Tests: `tests/mapa.test.ts` covers the gap before the bar.
+
 ## 0.3.15 (tablero)
 
 - With 0 or 1 task the map is compact: 28 rows instead of 42. The task card sits under the lead, in the right half, with its «de vuelta al lead» line. The registro and the status bar move up with it. With 0 tasks the card reads «SIN TAREAS · el lead espera trabajo».

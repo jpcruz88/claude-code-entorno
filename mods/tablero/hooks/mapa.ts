@@ -213,10 +213,12 @@ export const componerMapa = (d: DatosMapa, t: number): Celda[][] => {
   caja(g, 34, 11, 40, 9, 'JEV · decisiones', 'jev')
   d.jev.filas.slice(0, 3).forEach((f, i) => {
     put(g, 36, 13 + i, f.etiqueta, 'fg')
-    barra(g, 48, 13 + i, 12, f.valor, f.color)
-    put(g, 61, 13 + i, f.texto, f.color)
+    // Una columna libre entre la etiqueta (hasta la 47) y la barra, que empieza en la 49.
+    barra(g, 49, 13 + i, 12, f.valor, f.color)
+    put(g, 62, 13 + i, f.texto, f.color)
   })
-  put(g, 48, 16, '┆ = umbral 0.80', 'mut')
+  // ASCII a propósito: «┆» sale más ancho en algunas terminales y empuja el borde de la caja.
+  put(g, 49, 16, '| = umbral 0.80', 'mut')
   put(g, 36, 17, `${d.jev.decisiones} decisiones`, 'jev')
   put(g, 36, 18, 'sharp → código · split → claude', 'mut')
 
