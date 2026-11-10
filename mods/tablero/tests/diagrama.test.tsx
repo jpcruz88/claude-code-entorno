@@ -178,6 +178,26 @@ test('con 100 columnas o más se dibuja la rejilla de la propuesta: con REGISTRO
   await ui.unmount()
 })
 
+test('con 100 columnas y sin trabajo la franja grande dice EN ESPERA y el pie lleva versión y autor', async ($, on) => {
+  motor(on, null)
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /E N   E S P E R A/ })).toBeDefined()
+  expect(await ui.find({ text: /sin trabajo · el lead espera/ })).toBeDefined()
+  expect(await ui.find({ text: /tablero v\d+\.\d+\.\d+ · desarrollado por/ })).toBeDefined()
+  expect(await ui.find({ text: /SIN TAREAS/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('con 100 columnas y un agente en curso la franja grande dice TRABAJANDO', async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'F1' })
+  await lanzar($, 'revisar auth', 'f1')
+  const ui = await $.ui.mount(pane(100) as never)
+  expect(await ui.find({ text: /T R A B A J A N D O/ })).toBeDefined()
+  expect(await ui.find({ text: /E N   E S P E R A/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('auto con 65 usa la disposición apilada', async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D2' })

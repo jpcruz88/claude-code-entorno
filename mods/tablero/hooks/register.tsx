@@ -82,12 +82,13 @@ import { nombreDeTipo } from './savvy-core'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
-import { lineasDeEdicion } from './resumen-modelo'
+import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
 import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
+import { situacionDe } from './situacion'
 import { MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
 import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
 
@@ -1531,27 +1532,56 @@ export const register: Register = (on, options) => {
     // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
     mapaVivo = enMapa && cfg.animacion
     const colorDeTinta = (k: Tinta): string =>
-      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim })[k]
-    const pctCtx = ctxFill.pct === null ? '—' : `${Math.round(ctxFill.pct)}%`
+      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
+    const rit = ritmoSemana(jevs.limites, now / 1000)
+    const nivelRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)?.nivel
+    const ritmoMapa = rit && nivelRit
+      ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: (nivelRit === 'verde' ? 'jev' : nivelRit === 'ambar' ? 'amb' : 'warn') as Tinta }
+      : undefined
+    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
+    const ultimoTope = jevs.decisiones.filter(x => x.tipo === 'tope').at(-1)
+    const juntar = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ')
     const mapaDatos: DatosMapa = {
       tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
       reloj: fmtClock(now).slice(0, 5),
-      asesor: [advising ? 'asesorando' : 'de guardia', `consultas   ${a.consults.length}`, `permisos   ${s.ask} pend.`],
-      limites: [
-        { kind: 'five_hour', etiqueta: '5 h' },
-        { kind: 'seven_day', etiqueta: '7 d' },
-      ].flatMap(({ kind, etiqueta }) => {
-        const l = u.limits.find(x => x.kind === kind)
-        return l ? [{ etiqueta, valor: l.pct / 100, texto: `${Math.round(l.pct)}%` }] : []
-      }),
-      estado: [
-        `costo  $${(u.cost?.usd ?? 0).toFixed(2)}`,
-        `permisos ${s.cleared} ok · ${s.ask} pend.`,
-        `bucles   ${lp.length}`,
-        `ctx      ${pctCtx}`,
-        `turno    ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`,
-      ],
-      lead: { modelo: modelName, turno: `ctx ${pctCtx} · ${m.steps} respuestas`, delegando: running.length > 0 },
+      rama: branchNow || null,
+      version: MOD_VERSION,
+      situacion,
+      detalle: { turno: t.startedAt ? fmtTimer(now - t.startedAt) : undefined, permisos: s.ask, errores: t.errorStreak },
+      estado: {
+        costo: `$${(u.cost?.usd ?? 0).toFixed(2)}`,
+        ultimoTurno: r?.costDelta != null ? fmtUsd(r.costDelta) : null,
+        limites: [
+          { kind: 'five_hour', etiqueta: '5 h' },
+          { kind: 'seven_day', etiqueta: '7 d' },
+        ].flatMap(({ kind, etiqueta }) => {
+          const l = u.limits.find(x => x.kind === kind)
+          return l
+            ? [{ etiqueta, valor: l.pct / 100, texto: `${Math.round(l.pct)}%`, reinicio: restoCompacto(l.resetsAt ?? null, now) || undefined, ritmo: kind === 'seven_day' ? ritmoMapa : undefined }]
+            : []
+        }),
+        permisos: { pendientes: s.ask, denegados: s.deny, modo: m.mode },
+        bucles: lp.length,
+        errores: t.errorStreak,
+        ediciones: t.edits,
+        skills: juntar(usosNow.skills),
+        mcp: juntar(usosNow.mcp),
+      },
+      asesor: {
+        estado: advising ? 'asesorando' : 'de guardia',
+        consultas: a.consults.length,
+        permisos: s.ask,
+        ultima: lastConsult ? `hace ${fmtDuration(now - lastConsult.at)}` : null,
+      },
+      lead: {
+        modelo: modelName,
+        turno: t.startedAt ? fmtTimer(now - t.startedAt) : null,
+        ctx: ctxFill.pct === null ? null : ctxFill.pct / 100,
+        mas: u.linesAdded ?? 0,
+        menos: u.linesRemoved ?? 0,
+        respuestas: m.steps,
+        delegando: running.length > 0,
+      },
       jev: {
         filas: resumenJevs.filas
           .slice(0, 3)
@@ -1563,6 +1593,7 @@ export const register: Register = (on, options) => {
             color: (f.sharp ? 'jev' : 'warn') as Tinta,
           })),
         decisiones: jevN,
+        tope: ultimoTope?.motivo || null,
       },
       tarjetas: cards.map((c): TarjetaMapa => ({
         nombre: nombreDeTipo(c.type),
@@ -1580,7 +1611,7 @@ export const register: Register = (on, options) => {
         {filasDeMapa(componerMapa(mapaDatos, now / 1000)).map((tramos, y) => (
           <Text key={y}>
             {tramos.map((tr, i) => (
-              <Text key={i} color={colorDeTinta(tr.k)}>
+              <Text key={i} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
                 {tr.c}
               </Text>
             ))}

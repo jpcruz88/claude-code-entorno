@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 (tablero)
+
+- New status band at the top of the map (100 columns or more): three rows of solid colour that say at a glance what the agent is doing. Cyan `T R A B A J A N D O` with a spinner, amber `T E   E S P E R A` when a permission is pending, red `D E T E N I D O` after 3 errors in a row (`UMBRAL_ERRORES`), grey `E N   E S P E R A` when idle. The amber and red bands blink; the idle one beats slowly.
+- ESTADO moves to the top, full width, and gathers cost, last turn cost, the 5 h and 7 d limits (with time to reset and the weekly pace), permissions (pending, denied, mode), loops, error streak, edits of the turn, skills and MCP servers used.
+- The map is reorganised: ASESOR and REGISTRO on the left, LEAD and JEV on the right, task cards below. The lead shows model, context bar, lines added and removed, and answers. JEV shows decisions, threshold, the last cap and its reason. The «EN CURSO» label is gone (the band says it). The header shows the git branch.
+- The footer carries the version and «desarrollado por JP» on the right.
+- Animation, all in text cells: the LEAD border breathes while it works, the spinner turns, packets cross the connectors, the idle band beats between ○ and ●.
+- Heights: 32 rows with 0 or 1 task, 49 with 2 or more. The long «de vuelta al lead» line on the right edge is gone; its box stays at the bottom.
+- Tests: `tests/situacion.test.ts` (rule, threshold and texts), `tests/mapa.test.ts` rewritten for the new layout, `tests/diagrama.test.tsx` covers the band and the footer on the mounted panel.
+
 ## 0.3.17 (tablero)
 
 - The ESTADO box fits its lines: without limits it ends at row 17 instead of leaving three empty rows. The REGISTRO box has one row per entry (up to 4), so no blank rows under the entries.
