@@ -520,6 +520,39 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   franja(g, d, t, W, vivo, sp)
   let y = 5
 
+  // AGENTES, justo bajo la franja: una fila por tarea, hasta siete, con «+N más» si hay más de ocho. Va arriba porque es
+  // lo que más cambia y, al pie de un mapa alto, el panel lo cortaba.
+  if (N > 0) {
+    const filas = N > 8 ? 7 : N
+    const alto = filas + 2 + (N > 8 ? 1 : 0)
+    caja(g, 0, y, W, alto, '', 'enj')
+    // El título más largo que quepa entero, sin cortar una palabra contra el borde.
+    const titulos = [`AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok`, `AGENTES ${N}`]
+    const tituloAg = titulos.find(x => Array.from(x).length + 2 <= W - 4) ?? `AGENTES ${N}`
+    put(g, 2, y, ` ${tituloAg} `, 'enj')
+    for (let i = 0; i < filas; i++) {
+      const ag = d.tarjetas[i]
+      const yy = y + 1 + i
+      const [gl, kg, txt] = glifo(ag, i, t)
+      const pasos = `${Math.min(ag.hechos, ag.total)}/${ag.total}`
+      const der = W >= 60 ? `${pasos} ${txt}` : pasos
+      const xDer = W - 2 - Array.from(der).length
+      put(g, xDer, yy, pasos, 'fg')
+      if (W >= 60) put(g, xDer + pasos.length + 1, yy, txt, kg)
+      put(g, 2, yy, gl, kg)
+      const nombreW = Math.min(18, xDer - 1 - 5)
+      put(g, 5, yy, recortar(ag.nombre, nombreW), 'fg')
+      const xBarra = 5 + nombreW + 1
+      const bw = Math.min(12, xDer - 1 - xBarra)
+      if (bw >= 4) {
+        const kb: Tinta = ag.estado === 'D' ? 'jev' : ag.estado === 'W' ? 'warn' : 'enj'
+        barra(g, xBarra, yy, bw, Math.min(ag.hechos, ag.total) / Math.max(1, ag.total), kb)
+      }
+    }
+    if (N > 8) put(g, 5, y + 1 + filas, recortar(`+${N - 7} más · ${enCola} en cola`, iw - 3), 'mut')
+    y += alto + 1
+  }
+
   // ESTADO: los mismos datos que a 100 columnas, en trozos que bajan de fila cuando no caben.
   const e = d.estado
   const trozos: Pieza[][] = [[{ t: 'costo ', k: 'mut' }, { t: e.costo, k: 'fg' }]]
@@ -624,38 +657,6 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   caja(g, 0, y, W, Math.max(3, reg.length + 2), REGISTRO_TITULO, 'mut')
   reg.forEach((s, i) => put(g, 2, y + 1 + i, recortar(s, iw), 'fg'))
   y += Math.max(3, reg.length + 2) + 1
-
-  // AGENTES: una fila por tarea, hasta siete, con «+N más» si hay más de ocho.
-  if (N > 0) {
-    const filas = N > 8 ? 7 : N
-    const alto = filas + 2 + (N > 8 ? 1 : 0)
-    caja(g, 0, y, W, alto, '', 'enj')
-    // El título más largo que quepa entero, sin cortar una palabra contra el borde.
-    const titulos = [`AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok`, `AGENTES ${N}`]
-    const tituloAg = titulos.find(x => Array.from(x).length + 2 <= W - 4) ?? `AGENTES ${N}`
-    put(g, 2, y, ` ${tituloAg} `, 'enj')
-    for (let i = 0; i < filas; i++) {
-      const ag = d.tarjetas[i]
-      const yy = y + 1 + i
-      const [gl, kg, txt] = glifo(ag, i, t)
-      const pasos = `${Math.min(ag.hechos, ag.total)}/${ag.total}`
-      const der = W >= 60 ? `${pasos} ${txt}` : pasos
-      const xDer = W - 2 - Array.from(der).length
-      put(g, xDer, yy, pasos, 'fg')
-      if (W >= 60) put(g, xDer + pasos.length + 1, yy, txt, kg)
-      put(g, 2, yy, gl, kg)
-      const nombreW = Math.min(18, xDer - 1 - 5)
-      put(g, 5, yy, recortar(ag.nombre, nombreW), 'fg')
-      const xBarra = 5 + nombreW + 1
-      const bw = Math.min(12, xDer - 1 - xBarra)
-      if (bw >= 4) {
-        const kb: Tinta = ag.estado === 'D' ? 'jev' : ag.estado === 'W' ? 'warn' : 'enj'
-        barra(g, xBarra, yy, bw, Math.min(ag.hechos, ag.total) / Math.max(1, ag.total), kb)
-      }
-    }
-    if (N > 8) put(g, 5, y + 1 + filas, recortar(`+${N - 7} más · ${enCola} en cola`, iw - 3), 'mut')
-    y += alto + 1
-  }
 
   // Pie: el estado de las tareas (si hay) y, en la última fila, la versión y el autor a la derecha.
   if (N === 0) put(g, 2, y++, recortar('SIN TAREAS · el lead espera trabajo', iw), 'mut')
