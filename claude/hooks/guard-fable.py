@@ -4,8 +4,13 @@
 Regla general del usuario (~/.claude/rules/nunca-fable.md): Claude nunca usa Fable por su
 cuenta; solo si el usuario lo pide de forma explícita y lo confirma.
 
+Excepción: los subagentes. En Agent y Task, Fable lo decide guard-subagentes.py, que lo
+baja según el uso de la cuenta (jev_limites). Este hook lo deja pasar ahí solo si ese
+guardián está instalado a su lado; si falta, lo bloquea como antes.
+
 Qué revisa:
-- Agent / Task: el parámetro `model` (por ejemplo "fable" o "claude-fable-5-1").
+- Agent / Task: el parámetro `model` (por ejemplo "fable" o "claude-fable-5-1"), solo si
+  falta guard-subagentes.py.
 - Workflow: el script (inline, o el archivo de `scriptPath`) con `model: 'fable'` en algún agent().
 - Bash / PowerShell: `--model fable`, `--fallback-model fable`, `ANTHROPIC_MODEL=…fable` y
   `model="claude-fable-…"` dentro de un comando (llamadas a la API, scripts de una línea).
@@ -55,9 +60,18 @@ def texto(valor):
     return valor if isinstance(valor, str) else ""
 
 
+def hay_guardian_de_topes():
+    """¿Está guard-subagentes.py junto a este hook? Es quien baja Fable según el uso."""
+    try:
+        aqui = os.path.dirname(os.path.abspath(__file__))
+        return os.path.isfile(os.path.join(aqui, "guard-subagentes.py"))
+    except Exception:
+        return False
+
+
 def revisar_agente(entrada):
     modelo = texto(entrada.get("model"))
-    if "fable" in modelo.lower():
+    if "fable" in modelo.lower() and not hay_guardian_de_topes():
         deny("El agente pide model=%r." % modelo)
 
 

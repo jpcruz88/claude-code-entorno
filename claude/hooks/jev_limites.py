@@ -15,7 +15,8 @@ import json
 import re
 from pathlib import Path
 
-MODELOS = ["haiku", "sonnet", "opus"]
+MODELOS = ["haiku", "sonnet", "opus", "fable"]  # de menor a mayor gasto
+TECHO = ("fable", "xhigh")  # lo más alto que puede permitir una ventana
 ESFUERZOS = ["low", "medium", "high", "xhigh"]  # `max` queda bloqueado siempre
 
 DEFAULTS_LIMITES = {
@@ -23,19 +24,21 @@ DEFAULTS_LIMITES = {
     "final": 97,
     # [umbral, modelo, esfuerzo]: el primer escalón cuyo umbral alcanza el valor.
     # Semana: se compara el exceso (<=). Por encima del último: haiku/medium.
-    "semana_escalones": [[-10, "opus", "xhigh"], [5, "opus", "high"], [10, "opus", "medium"],
-                         [15, "sonnet", "high"], [25, "sonnet", "medium"]],
+    "semana_escalones": [[-20, "fable", "xhigh"], [-10, "opus", "xhigh"], [5, "opus", "high"],
+                         [10, "opus", "medium"], [15, "sonnet", "high"], [25, "sonnet", "medium"]],
     # 5 h: se compara el uso (<). Desde el último umbral: haiku/medium.
     # xhigh solo pasa con la semana por debajo del ritmo y la ventana de 5 h bajo 60 %
-    # (o sin ventana de 5 h en la cuenta).
-    "h5_escalones": [[60, "opus", "xhigh"], [75, "opus", "medium"], [85, "sonnet", "medium"]],
+    # (o sin ventana de 5 h en la cuenta). Fable pide más margen: la semana 20 puntos bajo
+    # el ritmo y la ventana de 5 h bajo 40 %.
+    "h5_escalones": [[40, "fable", "xhigh"], [60, "opus", "xhigh"], [75, "opus", "medium"],
+                     [85, "sonnet", "medium"]],
     "h5_gracia_min": 15,
     "corte_dia": 3,  # jueves, con lunes = 0
     "corte_hora": 23,
     "max_antiguedad_h": 6,
 }
 
-_FAMILIA = re.compile(r"claude-(haiku|sonnet|opus)(-.*)?")
+_FAMILIA = re.compile(r"claude-(haiku|sonnet|opus|fable)(-.*)?")
 
 
 def _config_limites(config):
@@ -104,6 +107,11 @@ def _etiqueta(modelo, esfuerzo):
     return modelo if modelo != "opus" else "esfuerzo " + esfuerzo
 
 
+def _sin_recorte(modelo, esfuerzo):
+    """Opus o Fable con esfuerzo alto: la ventana no recorta nada que haya que explicar."""
+    return MODELOS.index(modelo) >= MODELOS.index("opus") and esfuerzo in ("high", "xhigh")
+
+
 def _tope_semana(ventana, ahora, cfg, tz):
     """(modelo, esfuerzo, motivo, resumen) de la semana. Resumen: usado, ritmo, exceso."""
     usado = float(ventana["usado"])
@@ -122,14 +130,14 @@ def _tope_semana(ventana, ahora, cfg, tz):
     if ahora >= corte:
         if usado >= float(cfg["final"]):
             return "haiku", "medium", "tope semana %.0f%% → haiku" % usado, resumen
-        return "opus", "xhigh", None, resumen
+        return TECHO[0], TECHO[1], None, resumen
     modelo, esfuerzo = "haiku", "medium"
     if usado < meta:
         for umbral, m, e in cfg["semana_escalones"]:
             if exceso <= float(umbral):
                 modelo, esfuerzo = m, e
                 break
-    if modelo == "opus" and esfuerzo in ("high", "xhigh"):
+    if _sin_recorte(modelo, esfuerzo):
         return modelo, esfuerzo, None, resumen
     if usado >= meta:  # con la meta ya cumplida el exceso sobre el ritmo no explica el tope
         return modelo, esfuerzo, "tope semana %.0f%% → %s" % (usado, _etiqueta(modelo, esfuerzo)), resumen
@@ -139,19 +147,19 @@ def _tope_semana(ventana, ahora, cfg, tz):
 def _tope_5h(ventana, ahora, cfg):
     usado = float(ventana["usado"])
     if float(ventana["reinicio"]) - ahora < float(cfg["h5_gracia_min"]) * 60:
-        return "opus", "xhigh", None  # la gracia no pone ningún tope
+        return TECHO[0], TECHO[1], None  # la gracia no pone ningún tope
     modelo, esfuerzo = "haiku", "medium"
     for umbral, m, e in cfg["h5_escalones"]:
         if usado < float(umbral):
             modelo, esfuerzo = m, e
             break
-    if modelo == "opus" and esfuerzo in ("high", "xhigh"):
+    if _sin_recorte(modelo, esfuerzo):
         return modelo, esfuerzo, None
     return modelo, esfuerzo, "tope 5h %.0f%% → %s" % (usado, _etiqueta(modelo, esfuerzo))
 
 
 def calcular_tope(limites, ahora, config, tz=None):
-    """Tope vigente: {modelo_max, esfuerzo_max, motivo, semana}. Sin tope: opus y high.
+    """Tope vigente: {modelo_max, esfuerzo_max, motivo, semana}. Sin dato: opus y high.
 
     `tz=None` es la hora local del sistema. Nunca lanza excepciones.
     """
@@ -176,8 +184,11 @@ def calcular_tope(limites, ahora, config, tz=None):
             return libre
         modelo = min((c[0] for c in candidatos), key=MODELOS.index)
         esfuerzo = min((c[1] for c in candidatos), key=ESFUERZOS.index)
-        if not completo and ESFUERZOS.index(esfuerzo) > ESFUERZOS.index("high"):
-            esfuerzo = "high"  # xhigh exige conocer la semana y, si la cuenta la tiene, la de 5 h
+        if not completo:  # xhigh y Fable exigen conocer la semana y, si la cuenta la tiene, la de 5 h
+            if ESFUERZOS.index(esfuerzo) > ESFUERZOS.index("high"):
+                esfuerzo = "high"
+            if MODELOS.index(modelo) > MODELOS.index("opus"):
+                modelo = "opus"
         # Pone el motivo la ventana que baja el modelo; si ninguna, la que baja el esfuerzo.
         manda = min(candidatos, key=lambda c: (MODELOS.index(c[0]), ESFUERZOS.index(c[1])))
         motivo = manda[2]

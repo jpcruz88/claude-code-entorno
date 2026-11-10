@@ -89,6 +89,7 @@ Antes del corte, el exceso marca el escalón:
 
 | Exceso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
+| ≤ −20 | fable | xhigh |
 | ≤ −10 | opus | xhigh |
 | ≤ 5 | opus | high |
 | ≤ 10 | opus | medium |
@@ -96,13 +97,14 @@ Antes del corte, el exceso marca el escalón:
 | ≤ 25 | sonnet | medium |
 | > 25, o uso ≥ 90 % | haiku | medium |
 
-Después del corte, la semana no baja nada hasta llegar a 97 % de uso: queda opus con xhigh y decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
+Después del corte, la semana no baja nada hasta llegar a 97 % de uso: queda fable con xhigh y decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
 
 **Ventana de 5 horas.** El uso de la ventana marca el escalón:
 
 | Uso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
-| < 60 % | opus | xhigh |
+| < 40 % | fable | xhigh |
+| 40 % a 60 % | opus | xhigh |
 | 60 % a 75 % | opus | medium |
 | 75 % a 85 % | sonnet | medium |
 | ≥ 85 % | haiku | medium |
@@ -119,9 +121,11 @@ Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su re
 
 En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas, `xhigh` baja a `high`, porque `xhigh` exige conocer las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado siempre. Un Workflow con `xhigh` se bloquea, porque un Workflow no se puede bajar; el tope no lo toca.
 
+**Fable con mucho margen.** Un subagente de Agent o Task puede pedir `fable` para una tarea muy pesada. Solo pasa si se cumplen todas estas condiciones: hay dato de la semana y, si la cuenta trae ventana de 5 horas, también de esa; la ventana de 5 horas va por debajo de 40 % o está en gracia; y, antes del corte, la semana va al menos 20 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro caso baja a `opus` o a lo que marque su escalón, y la línea `tope` lo anota (`tope: fable → opus`). Sin ningún dato de uso baja a `opus`. En un Workflow, `fable` se bloquea, porque un Workflow no se puede bajar. Fuera de los subagentes sigue prohibido (regla `nunca-fable.md`).
+
 **Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. Los topes no cuentan en el total de decisiones de Jev.
 
-**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
+**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· fable ok` cuando el tope dejaría pasar Fable, y `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
 
 **La fila usa los valores por defecto.** El mod no lee `~/.claude/jev/config.json`: calcula la fila con los valores de `DEFAULTS_LIMITES`. Si cambias `limites`, el tope real del guardián puede no coincidir con lo que muestra la fila (el ritmo, el corte y `xhigh ok`).
 

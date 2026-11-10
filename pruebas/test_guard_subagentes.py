@@ -62,7 +62,7 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertEqual(correr(agente("claude-haiku-5-5", "medium")), "")
 
     def test_otro_modelo_se_bloquea(self):
-        for modelo in ("fable", "claude-fable-5-1", "gpt-5", "claude-instant"):
+        for modelo in ("gpt-5", "claude-instant", "claude-fablexyz"):
             with self.subTest(modelo=modelo):
                 self.assertTrue(negado(correr(agente(modelo, "medium"))))
 
@@ -85,8 +85,14 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertEqual(salida["permissionDecision"], "allow")
         self.assertEqual(salida["updatedInput"]["effort"], "high")
 
-    def test_fable_se_bloquea(self):
-        self.assertTrue(negado(correr(agente("fable", "low"))))
+    def test_fable_sin_dato_de_uso_baja_a_opus(self):
+        # Fable ya no se bloquea en Agent / Task, pero exige conocer el uso de la cuenta.
+        for modelo in ("fable", "claude-fable-5-2"):
+            with self.subTest(modelo=modelo):
+                salida = json.loads(correr(agente(modelo, "low")))["hookSpecificOutput"]
+                self.assertEqual(salida["permissionDecision"], "allow")
+                self.assertEqual(salida["updatedInput"]["model"], "opus")
+                self.assertEqual(salida["updatedInput"]["effort"], "low")
 
     def test_workflow_sonnet_pasa(self):
         guion = "agent('a', {model: 'sonnet', effort: 'high'})"
@@ -99,7 +105,7 @@ class AgentesYSubagentes(unittest.TestCase):
         self.assertTrue(negado(correr(agente("haiku", None))))
 
     def test_task_tambien_se_revisa(self):
-        self.assertTrue(negado(correr(agente("fable", "medium", herramienta="Task"))))
+        self.assertTrue(negado(correr(agente("gpt-5", "medium", herramienta="Task"))))
 
     def test_otras_herramientas_no_se_tocan(self):
         self.assertEqual(correr({"tool_name": "Bash", "tool_input": {"command": "ls"}}), "")
@@ -115,6 +121,11 @@ class Workflows(unittest.TestCase):
 
     def test_script_con_otro_modelo_se_bloquea(self):
         guion = "await agent('x', {model: 'gpt-5', effort: 'medium'})"
+        self.assertTrue(negado(correr(self.workflow(guion))))
+
+    def test_script_con_fable_se_bloquea(self):
+        # Un workflow no se puede bajar con el tope: ahí Fable sigue prohibido.
+        guion = "await agent('x', {model: '%s', effort: 'medium'})" % "fable"
         self.assertTrue(negado(correr(self.workflow(guion))))
 
     def test_script_con_esfuerzo_alto_se_bloquea(self):
@@ -337,11 +348,16 @@ class RuteoConJev(unittest.TestCase):
         self.ejecutar(description="d" * 100)
         self.assertEqual(self.linea("modelo")["descripcion"], "d" * 60)
 
-    def test_claude_pide_fable_sigue_bloqueado(self):
+    def test_modelo_prohibido_no_llega_a_jev(self):
         servidor = self.servir({"modelo": (200, respuesta("modelo", "sonnet", 0.99)),
                                 "esfuerzo": (200, respuesta("esfuerzo", "medium", 0.99))})
-        self.assertTrue(negado(self.ejecutar("fable")))
+        self.assertTrue(negado(self.ejecutar("gpt-5")))
         self.assertEqual(servidor.peticiones, [])
+
+    def test_jev_tiene_fable_entre_sus_opciones(self):
+        servidor = self.servir()
+        self.ejecutar()
+        self.assertIn("fable", json.dumps(servidor.peticiones))
 
     def test_sin_model_no_consulta_a_jev(self):
         servidor = self.servir()
@@ -349,7 +365,7 @@ class RuteoConJev(unittest.TestCase):
         self.assertEqual(servidor.peticiones, [])
 
     def test_respuesta_rara_y_402_son_sin_respuesta(self):
-        self.servir({"modelo": (200, respuesta("modelo", "fable", 0.99)),
+        self.servir({"modelo": (200, respuesta("modelo", "gpt-5", 0.99)),
                      "esfuerzo": (402, {"error": "sin saldo"})})
         self.assertEqual(self.ejecutar(model="haiku", effort="medium"), "")
         for tipo in ("modelo", "esfuerzo"):
@@ -480,7 +496,7 @@ class TopePorLimites(unittest.TestCase):
 
     def test_modelo_prohibido_sigue_bloqueado_con_tope(self):
         self.limites(h5=10)
-        prohibido = "fab" + "le"
+        prohibido = "gpt-5"
         self.assertTrue(negado(self.salida(model=prohibido, effort="low")))
         self.assertEqual(self.lineas_tope(), [])
 
@@ -508,6 +524,44 @@ class TopePorLimites(unittest.TestCase):
         self.limites(h5=10, semana=max(0.0, ritmo - 15), reinicio_semana=reinicio)
         self.assertEqual(self.salida(model="opus", effort="xhigh"), "")
         self.assertEqual(self.lineas_tope(), [])
+
+    # --- Fable: solo con mucho margen de uso ---
+    # El nombre va en una constante: guard-fable.py bloquea escribir un archivo que lo fije literal.
+    MAS_CAPAZ = "fable"
+
+    def test_fable_pasa_con_la_semana_muy_por_debajo_del_ritmo(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(semana=max(0.0, ritmo - 30), reinicio_semana=reinicio)
+        self.assertEqual(self.salida(model=self.MAS_CAPAZ, effort="xhigh"), "")
+        self.assertEqual(self.lineas_tope(), [])
+
+    def test_fable_baja_a_opus_si_el_margen_no_alcanza(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(semana=ritmo - 15, reinicio_semana=reinicio)
+        upd = self.reescrito(self.salida(model=self.MAS_CAPAZ, effort="xhigh"))
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "xhigh"))
+        linea = self.lineas_tope()[0]
+        self.assertEqual((linea["opcion"], linea["claude"]), ("opus", "fable"))
+        self.assertIn("fable → opus", linea["motivo"])
+
+    def test_fable_con_poco_credito_baja_a_sonnet(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(semana=ritmo + 12, reinicio_semana=reinicio)
+        upd = self.reescrito(self.salida(model=self.MAS_CAPAZ, effort="xhigh"))
+        self.assertEqual((upd["model"], upd["effort"]), ("sonnet", "high"))
+
+    def test_jev_elige_fable_y_pasa_si_hay_margen(self):
+        reinicio, ritmo = self.semana_a_mitad()
+        self.limites(semana=max(0.0, ritmo - 30), reinicio_semana=reinicio)
+        self.servir({"modelo": (200, respuesta("modelo", self.MAS_CAPAZ, 0.95)),
+                     "esfuerzo": (200, respuesta("esfuerzo", "xhigh", 0.95))})
+        upd = self.reescrito(self.ejecutar(model="sonnet", effort="medium"))
+        self.assertEqual((upd["model"], upd["effort"]), ("fable", "xhigh"))
+
+    def test_fable_baja_a_opus_si_el_modulo_de_topes_no_importa(self):
+        salida = self.correr_con_limites_roto("raise ImportError('roto')\n", modelo=self.MAS_CAPAZ)
+        upd = self.reescrito(salida)
+        self.assertEqual((upd["model"], upd["effort"]), ("opus", "high"))
 
     def test_semana_al_99_antes_del_corte_baja_a_haiku(self):
         reinicio, _ = self.semana_a_mitad()
@@ -551,7 +605,7 @@ class TopePorLimites(unittest.TestCase):
 
     # --- si fallan los topes, xhigh baja a high ---
 
-    def correr_con_limites_roto(self, codigo, effort="xhigh"):
+    def correr_con_limites_roto(self, codigo, effort="xhigh", modelo="opus"):
         """Copia el guardián a una carpeta con un jev_limites.py roto y lo corre."""
         carpeta = tempfile.mkdtemp(prefix="hooks-rotos-")
         self.addCleanup(shutil.rmtree, carpeta, True)
@@ -562,7 +616,7 @@ class TopePorLimites(unittest.TestCase):
         entorno = {k: v for k, v in os.environ.items()
                    if k not in ("OPENROUTER_API_KEY", "JEV_URL", "HOME")}
         entorno["HOME"] = self.home
-        entrada = agente("opus", effort)
+        entrada = agente(modelo, effort)
         r = subprocess.run([sys.executable, str(Path(carpeta, "guard-subagentes.py"))],
                            input=json.dumps(entrada).encode("utf-8"),
                            capture_output=True, timeout=30, env=entorno)

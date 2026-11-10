@@ -301,25 +301,29 @@ export const ritmoSemana = (limites: LimitesJev | null, ahora: number, cfg: Part
 export type NivelRitmo = 'verde' | 'ambar' | 'rojo'
 /** Con este margen bajo el ritmo (antes del corte), el tope deja pasar xhigh. */
 const MARGEN_XHIGH = -10
+/** Con este margen bajo el ritmo (antes del corte), el tope deja pasar Fable. */
+const MARGEN_FABLE = -20
 /** Después del corte, desde este uso de la semana el tope baja a haiku. */
 const FINAL_SEMANA = 97
 /** Con la ventana de 5 h por debajo de este uso, el tope deja pasar xhigh. */
 const H5_XHIGH = 60
+/** Con la ventana de 5 h por debajo de este uso, el tope deja pasar Fable. */
+const H5_FABLE = 40
 /** Si la ventana de 5 h se reinicia en menos de estos minutos, no pone tope. */
 const H5_GRACIA_MIN = 15
 
-type ModeloTope = 'haiku' | 'sonnet' | 'opus'
+type ModeloTope = 'haiku' | 'sonnet' | 'opus' | 'fable'
 type EsfuerzoTope = 'low' | 'medium' | 'high' | 'xhigh'
-const MODELOS_TOPE: ModeloTope[] = ['haiku', 'sonnet', 'opus']
+const MODELOS_TOPE: ModeloTope[] = ['haiku', 'sonnet', 'opus', 'fable']
 const ESFUERZOS_TOPE: EsfuerzoTope[] = ['low', 'medium', 'high', 'xhigh']
 /** Lo que permite una ventana y por qué: `causa` es lo que se le dice a quien mira el panel. */
 type Candidato = { modelo: ModeloTope; esfuerzo: EsfuerzoTope; causa: string }
 /** Escalones de la semana por exceso sobre el ritmo (≤). Por encima del último: haiku medium. */
 const SEMANA_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [
-  [MARGEN_XHIGH, 'opus', 'xhigh'], [5, 'opus', 'high'], [10, 'opus', 'medium'], [15, 'sonnet', 'high'], [25, 'sonnet', 'medium'],
+  [MARGEN_FABLE, 'fable', 'xhigh'], [MARGEN_XHIGH, 'opus', 'xhigh'], [5, 'opus', 'high'], [10, 'opus', 'medium'], [15, 'sonnet', 'high'], [25, 'sonnet', 'medium'],
 ]
 /** Escalones de la ventana de 5 h por uso (<). Desde el último: haiku medium. */
-const H5_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [[H5_XHIGH, 'opus', 'xhigh'], [75, 'opus', 'medium'], [85, 'sonnet', 'medium']]
+const H5_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [[H5_FABLE, 'fable', 'xhigh'], [H5_XHIGH, 'opus', 'xhigh'], [75, 'opus', 'medium'], [85, 'sonnet', 'medium']]
 
 const pts = (exceso: number): string => {
   const n = Math.round(exceso)
@@ -329,7 +333,7 @@ const pts = (exceso: number): string => {
 /** Lo que permite la semana; igual que `_tope_semana` de jev_limites.py con los valores por defecto. */
 const topeSemana = (r: RitmoSemana): Candidato => {
   const uso = `semana ${Math.round(r.usado)}%`
-  if (r.despuesDelCorte) return r.usado >= FINAL_SEMANA ? { modelo: 'haiku', esfuerzo: 'medium', causa: uso } : { modelo: 'opus', esfuerzo: 'xhigh', causa: uso }
+  if (r.despuesDelCorte) return r.usado >= FINAL_SEMANA ? { modelo: 'haiku', esfuerzo: 'medium', causa: uso } : { modelo: 'fable', esfuerzo: 'xhigh', causa: uso }
   if (r.usado >= CFG_RITMO.metaCorte) return { modelo: 'haiku', esfuerzo: 'medium', causa: uso }
   const [, modelo, esfuerzo] = SEMANA_ESCALONES.find(([umbral]) => r.exceso <= umbral) ?? [0, 'haiku' as const, 'medium' as const]
   return { modelo, esfuerzo, causa: `semana ${pts(r.exceso)}` }
@@ -338,15 +342,15 @@ const topeSemana = (r: RitmoSemana): Candidato => {
 /** Lo que permite la ventana de 5 h; igual que `_tope_5h`. En gracia (reinicia en menos de 15 min) no recorta. */
 const tope5h = (cinco: VentanaLimite, ahora: number): Candidato => {
   const causa = `5h ${Math.round(cinco.usado)}%`
-  if (cinco.reinicio - ahora < H5_GRACIA_MIN * 60) return { modelo: 'opus', esfuerzo: 'xhigh', causa }
+  if (cinco.reinicio - ahora < H5_GRACIA_MIN * 60) return { modelo: 'fable', esfuerzo: 'xhigh', causa }
   const [, modelo, esfuerzo] = H5_ESCALONES.find(([umbral]) => cinco.usado < umbral) ?? [0, 'haiku' as const, 'medium' as const]
   return { modelo, esfuerzo, causa }
 }
 
 /**
  * El tope vigente, igual que `calcular_tope` de jev_limites.py con los valores por defecto (no lee config.json):
- * de cada ventana vigente sale un máximo y gana el más bajo. xhigh solo pasa si se conoce la semana y, cuando
- * la cuenta trae ventana de 5 h, también esa; una cuenta sin ventana de 5 h decide solo con la semana.
+ * de cada ventana vigente sale un máximo y gana el más bajo. xhigh y Fable solo pasan si se conoce la semana y,
+ * cuando la cuenta trae ventana de 5 h, también esa; una cuenta sin ventana de 5 h decide solo con la semana.
  * `r` es el ritmo de la semana (null sin dato vigente); `sinDato` dice que limites.json falta o es viejo.
  */
 const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ahora: number, sinDato = false): Candidato => {
@@ -357,36 +361,42 @@ const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ah
   const manda = candidatos.reduce((a, b) => (rango(b) < rango(a) ? b : a))
   const modelo = candidatos.map(c => c.modelo).reduce((a, b) => (MODELOS_TOPE.indexOf(b) < MODELOS_TOPE.indexOf(a) ? b : a))
   const esfuerzo = candidatos.map(c => c.esfuerzo).reduce((a, b) => (ESFUERZOS_TOPE.indexOf(b) < ESFUERZOS_TOPE.indexOf(a) ? b : a))
-  if (esfuerzo !== 'xhigh') return { modelo, esfuerzo, causa: manda.causa }
-  if (!r) return { modelo, esfuerzo: 'high', causa: 'falta dato de semana' }
-  if (cinco && !cincoVigente) return { modelo, esfuerzo: 'high', causa: 'falta dato de 5h' }
-  return { modelo, esfuerzo, causa: 'sin recorte' }
+  if (esfuerzo !== 'xhigh' && modelo !== 'fable') return { modelo, esfuerzo, causa: manda.causa }
+  const sinFable: ModeloTope = modelo === 'fable' ? 'opus' : modelo
+  const sinXhigh: EsfuerzoTope = esfuerzo === 'xhigh' ? 'high' : esfuerzo
+  if (!r) return { modelo: sinFable, esfuerzo: sinXhigh, causa: 'falta dato de semana' }
+  if (cinco && !cincoVigente) return { modelo: sinFable, esfuerzo: sinXhigh, causa: 'falta dato de 5h' }
+  // Solo Fable con xhigh es «sin recorte»: opus xhigh ya es un recorte y dice qué ventana lo pone.
+  return { modelo, esfuerzo, causa: modelo === 'fable' && esfuerzo === 'xhigh' ? 'sin recorte' : manda.causa }
 }
 
-/** ¿El tope de jev_limites.py dejaría pasar xhigh ahora? */
-const xhighOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): boolean => topeVigente(r, cinco, ahora).esfuerzo === 'xhigh'
+/** Lo más alto que el tope de jev_limites.py dejaría pasar ahora: ` · fable ok`, ` · xhigh ok` o nada. */
+const margenOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): string => {
+  const t = topeVigente(r, cinco, ahora)
+  return t.modelo === 'fable' ? ' · fable ok' : t.esfuerzo === 'xhigh' ? ' · xhigh ok' : ''
+}
 
 /**
  * La línea del tope que rige ahora para los subagentes: `tope ahora: sonnet high · semana +12 pts`.
- * Verde si deja pasar Opus con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
+ * Verde si deja pasar Opus o Fable con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
  * `ahora` y los datos van en segundos epoch.
  */
 export const topeAhora = (limites: LimitesJev | null, ahora: number, zona: Zona = zonaDelSistema): { texto: string; nivel: NivelRitmo } => {
   const sinDato = !limites || ahora - limites.actualizado > CFG_RITMO.maxAntiguedadH * 3600
   const t = topeVigente(ritmoSemana(limites, ahora, undefined, zona), limites?.five_hour, ahora, sinDato)
-  const libre = t.modelo === 'opus' && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
+  const libre = (t.modelo === 'opus' || t.modelo === 'fable') && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
   return { texto: `tope ahora: ${t.modelo} ${t.esfuerzo} · ${t.causa}`, nivel: libre ? 'verde' : t.modelo === 'haiku' ? 'rojo' : 'ambar' }
 }
 
 /**
  * La fila de la caja JEV: `semana 52% · ritmo 40% · +12`, con su nivel de color; null si no hay ritmo.
- * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok`.
+ * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok` o el `· fable ok`.
  */
 export const filaRitmo = (r: RitmoSemana | null, cinco?: VentanaLimite, ahora = 0): { texto: string; nivel: NivelRitmo } | null => {
   if (!r) return null
   const exceso = Math.round(r.exceso)
   const signo = exceso < 0 ? `−${-exceso}` : `+${exceso}`
-  const margen = xhighOk(r, cinco, ahora) ? ' · xhigh ok' : ''
+  const margen = margenOk(r, cinco, ahora)
   const nivel: NivelRitmo = r.exceso <= 5 ? 'verde' : r.exceso <= 15 ? 'ambar' : 'rojo'
   return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel }
 }

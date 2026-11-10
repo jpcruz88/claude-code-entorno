@@ -25,7 +25,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
 | Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
-| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet` u `opus`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
+| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet`, `opus` o `fable`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
 | Hook `jev-reintento.py` | Después de un fallo de herramienta | Al segundo fallo seguido con el mismo error, pregunta a Jev si reintentar, cambiar de enfoque o parar. Su sugerencia llega como nota. |
 | Memoria persistente | Al empezar y al guardar un dato | Ver §5. |
 
@@ -39,15 +39,17 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
   `claude/rules/modelo.md`.
 - Para otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o usa
   `/model`. Vale solo para esa tarea.
-- Fable no se usa por omisión; solo si lo pides de forma explícita.
-- **Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-  `low`, `medium`, `high` o `xhigh`. `xhigh` es para tareas muy difíciles (causa
-  raíz poco clara, diseño delicado o razonamiento largo) y solo pasa si el tope de
-  uso lo permite (ver «Tope por uso de la cuenta», más abajo). Fable y `max` se
-  bloquean siempre. El hook `guard-subagentes.py` aplica esa regla a Agent, Task y
-  Workflow. En un workflow, cada `agent()` debe fijar un `model` permitido, y ningún
-  `effort` puede pasar de `high`: un `xhigh` en un workflow se bloquea, porque el tope
-  no puede bajarlo. Jev no elige modelos dentro de los workflows.
+- En la sesión principal, Fable no se usa por omisión; solo si lo pides de forma
+  explícita.
+- **Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
+  esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide el modelo según el tamaño
+  de la tarea, y el tope de uso lo baja si el crédito no alcanza (ver «Tope por uso
+  de la cuenta», más abajo). `xhigh` es para tareas muy difíciles y `fable` para las
+  muy pesadas; los dos solo pasan con margen de uso. `max` se bloquea siempre. El
+  hook `guard-subagentes.py` aplica esa regla a Agent, Task y Workflow. En un
+  workflow, cada `agent()` debe fijar `haiku`, `sonnet` u `opus`, y ningún `effort`
+  puede pasar de `high`: `fable` y `xhigh` se bloquean ahí, porque el tope no puede
+  bajarlos. Jev no elige modelos dentro de los workflows.
 
 ### Jev: decisiones de modelo y de reintento
 
@@ -118,6 +120,7 @@ el escalón:
 
 | Exceso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
+| ≤ −20 | fable | xhigh |
 | ≤ −10 | opus | xhigh |
 | ≤ 5 | opus | high |
 | ≤ 10 | opus | medium |
@@ -125,14 +128,15 @@ el escalón:
 | ≤ 25 | sonnet | medium |
 | > 25, o uso ≥ 90 % | haiku | medium |
 
-Después del corte, la semana no baja nada hasta 97 % de uso: queda opus con xhigh y
+Después del corte, la semana no baja nada hasta 97 % de uso: queda fable con xhigh y
 decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
 
 **Ventana de 5 horas.** El uso de la ventana marca el escalón:
 
 | Uso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
-| < 60 % | opus | xhigh |
+| < 40 % | fable | xhigh |
+| 40 % a 60 % | opus | xhigh |
 | 60 % a 75 % | opus | medium |
 | 75 % a 85 % | sonnet | medium |
 | ≥ 85 % | haiku | medium |
@@ -152,12 +156,14 @@ caso baja a `high` o a lo que marque su escalón. Si falta una de las dos ventan
 baja a `high`, porque necesita conocer las dos. Sin ningún dato, el esfuerzo máximo
 es `high`. `max` sigue bloqueado.
 
+**Fable con mucho margen.** Un subagente de Agent o Task puede pedir `fable` para una tarea muy pesada. Solo pasa si se cumplen todas estas condiciones: hay dato de la semana y, si la cuenta trae ventana de 5 horas, también de esa; la ventana de 5 horas va por debajo de 40 % o está en gracia; y, antes del corte, la semana va al menos 20 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro caso baja a `opus` o a lo que marque su escalón, y la línea `tope` lo anota (`tope: fable → opus`). Sin ningún dato de uso baja a `opus`. En un Workflow, `fable` se bloquea, porque un Workflow no se puede bajar. Fuera de los subagentes sigue prohibido (regla `nunca-fable.md`).
+
 **Qué ves.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`,
 con lo que quedó y lo que había, y el tablero la muestra en el log como
 `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de
 Jev. Con dato, la caja JEV del tablero muestra además la fila de ritmo, por ejemplo
 `semana 52% · ritmo 40% · +12`: verde hasta +5, ámbar de +5 a +15 y rojo por encima.
-Añade `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
+Añade `fable ok` cuando el tope dejaría pasar Fable y `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
 arriba (las dos ventanas con dato, la de 5 horas bajo 60 % o en gracia, y la semana a
 −10 o menos antes del corte, o bajo 97 % después). Si vas por debajo del ritmo, el
 tope solo quita límites: no sube modelos para gastar más. Eso lo decides tú.
@@ -186,8 +192,8 @@ entera. Ejemplo:
 |---|---|---|
 | `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
 | `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
-| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. |
-| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. |
+| `semana_escalones` | `[[-20,"fable","xhigh"],[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. |
+| `h5_escalones` | `[[40,"fable","xhigh"],[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. |
 | `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana no pone tope. |
 | `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
 | `corte_hora` | `23` | Hora local del corte. |
