@@ -67,3 +67,19 @@ test('angosto: no deja filas vacías al final', () => {
   const g = componerMapa(datos(0), 0, 60)
   expect(g.at(-1)!.some(c => c.c.trim() !== '')).toBe(true)
 })
+
+// Con tareas, AGENTES va justo bajo la franja: es lo que más cambia y no debe quedar cortado al pie de un panel bajo.
+const filaDe = (g: Celda[][], s: string) => g.findIndex(r => r.map(c => c.c).join('').includes(s))
+
+test('angosto: con tareas, AGENTES va justo bajo la franja, antes de ESTADO', () => {
+  for (const w of ANCHOS) {
+    const g = componerMapa(datos(4), 0, w)
+    expect(filaDe(g, 'AGENTES 4')).toBe(5)
+    expect(filaDe(g, 'tarea 4')).toBe(9)
+    expect(filaDe(g, 'ESTADO')).toBeGreaterThan(filaDe(g, 'tarea 4'))
+  }
+})
+
+test('angosto: sin tareas, ESTADO sigue bajo la franja', () => {
+  for (const w of ANCHOS) expect(filaDe(componerMapa(datos(0), 0, w), 'ESTADO')).toBe(5)
+})

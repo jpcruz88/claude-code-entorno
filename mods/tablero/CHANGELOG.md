@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.2 (tablero)
+
+- In the stacked map (40 to 99 columns), AGENTES goes right under the status band, before ESTADO, when there are tasks. At the bottom of a 53-row map a short pane cut it off and only the first agent showed. Without tasks the order is unchanged.
+- Tests: two new cases in `tests/mapa-responsivo.test.ts`.
+
 ## 0.5.1 (tablero)
 
 - Jev's texts read without a glossary. The JEV box is titled `JEV · elige modelo y esfuerzo`; each row says how sure Jev was and what happened in its last decision: `97% seguro · lo cambió Jev`, `igual a Claude`, `lo eligió Jev` (Claude gave no choice) or `decide Claude` (Jev was under 80 %). The bottom line states the rule: `Jev cambia lo de Claude si está ≥80% seguro`. Gone: `sharp`, `split`, `umbral 0.80` and `p=0.97`.
