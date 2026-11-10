@@ -191,6 +191,38 @@ export const lineaLog = (d: DecisionJev): string => {
   return `Jev cambió ${objeto} ${legible(d.claude ?? '')}→${legible(d.opcion)}${seguro}`
 }
 
+/** Los esfuerzos como se dicen en el mapa: `medium` → `medio`. */
+const ESFUERZO_ES: Record<string, string> = { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'extra', max: 'máximo' }
+
+/** `21:52`, en la hora local. */
+const hhmm = (ms: number) => {
+  const f = new Date(ms)
+  return `${String(f.getHours()).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')}`
+}
+
+/** `modelo → sonnet`, `esfuerzo → medio`, `reintentar → sí`. */
+const queDecidio = (d: DecisionJev): string => {
+  const objeto = d.tipo === 'tope' ? 'tope' : OBJETO[d.tipo]
+  if (d.opcion === null) return `${objeto} → —`
+  const v = d.tipo === 'esfuerzo' ? (ESFUERZO_ES[d.opcion] ?? legible(d.opcion)) : legible(d.opcion)
+  return `${objeto} → ${v}`
+}
+
+/** Las tres últimas decisiones con confianza (sin topes), la más nueva primero, como filas de la caja JEV del mapa. */
+export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] =>
+  ds
+    .filter((d): d is DecisionJev & { confianza: number } => d.tipo !== 'tope' && d.confianza !== null)
+    .slice(-3)
+    .reverse()
+    .map(d => ({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza }))
+
+/** La línea del REGISTRO del mapa para una decisión: `{ hora: '21:52', rol: 'jev', txt: 'modelo → sonnet (0.91)' }`. */
+export const lineaRegistroJev = (d: DecisionJev): { hora: string; rol: 'jev'; txt: string } => ({
+  hora: hhmm(d.hora),
+  rol: 'jev',
+  txt: d.tipo === 'tope' ? lineaTope(d) : d.confianza === null ? queDecidio(d) : `${queDecidio(d)} (${d.confianza.toFixed(2)})`,
+})
+
 /** `jev ↑ sonnet` o `jev ↓ haiku` si Jev cambió lo que eligió Claude; null si no se aplicó o no se puede comparar. */
 export const marcaTarjeta = (d: DecisionJev | undefined): string | null => {
   if (!d || !d.aplicada || d.opcion === null || d.claude === null) return null

@@ -29,22 +29,24 @@ for (const ancho of [66, 100]) {
     expect(s.match(/pend\./g)?.length).toBe(1)
   })
 
-  test(`${ancho} col: «bucles» solo sale cuando hay alguno`, () => {
-    expect(texto(datos(0), ancho)).not.toContain('bucles')
+  test(`${ancho} col: «bucles» sale siempre, también en 0, como en la maqueta`, () => {
+    expect(texto(datos(0), ancho)).toMatch(/bucles\s+0/)
     const d = datos(0)
     expect(texto({ ...d, estado: { ...d.estado, bucles: 2 } }, ancho)).toMatch(/bucles\s+2/)
   })
 
-  test(`${ancho} col: el costo del último turno se rotula «costo turno»`, () => {
+  test(`${ancho} col: el costo del último turno se rotula «último turno», como en la maqueta`, () => {
     const s = texto(datos(0), ancho)
-    expect(s).not.toContain('último turno')
-    expect(s).toMatch(/costo turno\s+\$0\.08/)
+    expect(s).not.toContain('costo turno')
+    expect(s).toMatch(/último turno\s+\$0\.08/)
   })
 
   test(`${ancho} col: una tarea sin total de pasos no dibuja barra ni n/n, solo los pasos dados`, () => {
     const d = datos(2)
     const s = texto({ ...d, tarjetas: d.tarjetas.map(t => ({ ...t, hechos: 3, total: null })) }, ancho)
-    expect(s).not.toMatch(/\d+\/\d+ /)
+    // El pie cuenta los subagentes (`subagentes 1/2`): eso no es una tarea.
+    const tareas = s.split('\n').filter(l => !l.includes('subagentes')).join('\n')
+    expect(tareas).not.toMatch(/\d+\/\d+ /)
     expect(s).toContain('3 pasos')
   })
 

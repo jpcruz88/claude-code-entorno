@@ -1,53 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
 import { MAPA_ALTO, MAPA_ALTO_COMPACTO, MAPA_ANCHO, componerMapa, filasDeMapa, type DatosMapa } from '../hooks/mapa'
+import { datos } from './datos-mapa'
 
 // La disposición a 100 columnas: franja de situación arriba, ESTADO a todo lo ancho, asesor y registro a la
 // izquierda, lead y JEV a la derecha, y las tarjetas de tareas debajo.
-
-const datos = (cards: number): DatosMapa => ({
-  tiempo: '04:12',
-  reloj: '21:40',
-  rama: 'feat/tablero',
-  version: '0.4.0',
-  situacion: 'trabajando',
-  detalle: { turno: '0:42' },
-  estado: {
-    costo: '$1.42',
-    ultimoTurno: '$0.08',
-    limites: [
-      { etiqueta: '5 h', valor: 0.31, texto: '31%', reinicio: '3h10m' },
-      { etiqueta: '7 d', valor: 0.62, texto: '62%', reinicio: '4d2h' },
-    ],
-    permisos: { pendientes: 2, denegados: 1, modo: 'acceptEdits' },
-    bucles: 0,
-    errores: 1,
-    ediciones: 4,
-    skills: 'tdd×2 caveman×1',
-    mcp: 'codebase×3 ctx7×1',
-  },
-  asesor: { estado: '2 consultas', consultas: 2, ultima: 'hace 2m' },
-  lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
-  jev: {
-    filas: [
-      { etiqueta: 'qué modelo', valor: 0.94, texto: '94% seguro · lo cambió Jev', corto: '94% · lo cambió Jev', color: 'jev' },
-      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '86% seguro · igual a Claude', corto: '86% · igual a Claude', color: 'jev' },
-      { etiqueta: 'reintentar', valor: 0.64, texto: '64% seguro · decide Claude', corto: '64% · decide Claude', color: 'warn' },
-    ],
-    decisiones: 1382,
-    tope: 'tope semana +12 pts → sonnet',
-  },
-  tarjetas: Array.from({ length: cards }, (_, i) => ({
-    nombre: `tarea ${i + 1}`,
-    modelo: 'haiku · low',
-    hechos: 2,
-    total: 4,
-    estado: i % 2 === 0 ? ('R' as const) : ('D' as const),
-  })),
-  registro: ['21:52 jev haiku   ·91', '21:54 jev sonnet  ·94'],
-  asesorActivo: false,
-  barra: { hechos: 1, total: cards },
-})
 
 const fila = (g: { c: string }[][], y: number) => g[y].map(c => c.c).join('')
 
@@ -135,25 +92,25 @@ test('ESTADO va bajo la franja, de la columna 0 a la 99', () => {
 test('ESTADO junta costo, cupos, permisos, errores, ediciones, skills y MCP', () => {
   const g = componerMapa(datos(0), 0)
   const todo = [6, 7, 8, 9].map(y => fila(g, y)).join('\n')
-  for (const s of ['$1.42', 'costo turno', '$0.08', 'cupo 5 h', '31%', 'reinicia', '3h10m', 'cupo 7 d', '62%', '2 pend.', '1 den.', 'acceptEdits', 'racha errores', 'ediciones turno', 'tdd×2 caveman×1', 'codebase×3 ctx7×1'])
+  for (const s of ['$1.42', 'último turno', '$0.08', 'cupo 5h', '31%', 'reinicia', '3h10m', 'cupo 7d', '62%', '2 pend.', '1 den.', 'acceptEdits', 'racha errores', 'ediciones turno', 'tdd×2 caveman×1', 'codebase×3 ctx7×1'])
     expect(todo).toContain(s)
-  expect(fila(g, 6)).toContain('█')
+  expect(fila(g, 6)).toContain('▓')
 })
 
-test('si el uso de un cupo pasa del 80 % su barra se pinta en aviso', () => {
+test('la barra de un cupo va en magenta (▓) aunque pase del 80 %, como en la maqueta', () => {
   const d = datos(0)
-  d.estado.limites = [{ etiqueta: '5 h', valor: 0.85, texto: '85%', reinicio: '1h' }]
+  d.estado.limites = [{ etiqueta: '5h', valor: 0.85, texto: '85%', reinicio: '1h' }]
   const g = componerMapa(d, 0)
-  expect(g[6].find(c => c.c === '█')?.k).toBe('warn')
+  expect(g[6].find(c => c.c === '▓')?.k).toBe('enj')
 })
 
-test('sin skills ni MCP la fila no muestra rótulos vacíos', () => {
+test('sin skills ni MCP la fila los rotula igual, con —, como en la maqueta', () => {
   const d = datos(0)
   d.estado.skills = ''
   d.estado.mcp = ''
   const g = componerMapa(d, 0)
-  expect(fila(g, 9)).not.toContain('skills')
-  expect(fila(g, 9)).not.toContain('mcp')
+  expect(fila(g, 9)).toMatch(/skills —/)
+  expect(fila(g, 9)).toMatch(/mcp —/)
 })
 
 // ---- Asesor, lead, JEV y registro ----
@@ -181,11 +138,11 @@ test('el lead va a la derecha con modelo, contexto, líneas y respuestas', () =>
 })
 
 test('el spinner del lead gira con trabajo; en reposo queda ○ fijo', () => {
-  expect(componerMapa(datos(0), 0)[12][72].c).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/)
-  expect(componerMapa(datos(0), 0.1)[12][72].c).not.toBe(componerMapa(datos(0), 0)[12][72].c)
+  expect(componerMapa(datos(0), 0)[12][70].c).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/)
+  expect(componerMapa(datos(0), 0.1)[12][70].c).not.toBe(componerMapa(datos(0), 0)[12][70].c)
   const reposo: DatosMapa = { ...datos(0), situacion: 'inactivo', lead: { ...datos(0).lead, delegando: false } }
-  expect(componerMapa(reposo, 0)[12][72].c).toBe('○')
-  expect(componerMapa(reposo, 0.7)[12][72].c).toBe('○')
+  expect(componerMapa(reposo, 0)[12][70].c).toBe('○')
+  expect(componerMapa(reposo, 0.7)[12][70].c).toBe('○')
 })
 
 test('el borde del lead respira con trabajo: alterna entre vivo y tenue', () => {
@@ -200,40 +157,30 @@ test('en reposo el borde del lead no respira', () => {
   expect(componerMapa(reposo, 0)[12][51].k).toBe(componerMapa(reposo, 0.6)[12][51].k)
 })
 
-test('el conector lead → JEV baja por la columna 75 hasta la ▼ de la fila 21', () => {
+test('el conector lead → JEV baja por la columna 75 hasta la ▾ de la fila 21', () => {
   const g = componerMapa(datos(0), 0)
   expect(g[19][75].c).toMatch(/[│●•·]/)
-  expect(g[21][75].c).toBe('▼')
+  expect(g[21][75].c).toMatch(/[▾●•·]/)
 })
 
-test('JEV va bajo el lead con sus decisiones, la regla del 80% y el tope', () => {
+test('JEV va bajo el lead: siete filas, de la 22 a la 28, como en la maqueta', () => {
   const g = componerMapa(datos(0), 0)
   expect(g[22][51].c).toBe('┌')
-  expect(fila(g, 22)).toContain('JEV · elige modelo y esfuerzo')
-  expect(fila(g, 23)).toContain('1382 decisiones')
-  expect(fila(g, 28)).toContain('Jev cambia lo de Claude si está ≥80% seguro')
-  expect(fila(g, 24)).toContain('qué modelo')
-  expect(fila(g, 27)).toContain('tope semana +12 pts → sonnet')
-  expect(g[29][51].c).toBe('└')
+  expect(g[28][51].c).toBe('└')
 })
 
-test('en la caja JEV hay un hueco entre la etiqueta y la barra: «qué esfuerzo» no pega con █', () => {
-  const g = componerMapa(datos(0), 0)
-  expect(fila(g, 25)).toContain('qué esfuerzo')
-  expect(g[25][65].c).toBe(' ')
-})
 
 test('el REGISTRO va a la izquierda bajo el asesor y se ajusta a sus líneas', () => {
   const g = componerMapa(datos(0), 0)
   expect(g[17][0].c).toBe('┌')
   expect(fila(g, 17)).toContain('REGISTRO')
-  expect(fila(g, 18)).toContain('21:52 jev haiku')
-  expect(g[20][0].c).toBe('└')
+  expect(fila(g, 18)).toContain('21:54 jev    esfuerzo → medio (0.84)')
+  expect(g[23][0].c).toBe('└')
 })
 
 test('un texto largo del asesor o del registro se corta antes del borde de su caja', () => {
   const d = datos(0)
-  d.registro = ['21:52 jev una línea larguísima que no cabe en la caja del registro']
+  d.registro = [{ hora: '21:52', rol: 'jev', txt: 'una línea larguísima que no cabe en la caja del registro' }]
   d.asesor = { ...d.asesor!, ultima: 'hace un rato larguísimo sin fin' }
   const g = componerMapa(d, 0)
   expect(g[18][43].c).toBe('│')
@@ -255,10 +202,9 @@ test('el pie lleva el estado de tareas a la izquierda y «tablero vX · desarrol
   expect(g[MAPA_ALTO_COMPACTO - 1].filter(c => c.k === 'lead').map(c => c.c).join('')).toContain('JP')
 })
 
-test('con tareas el pie cuenta los subagentes y a Jev', () => {
+test('con tareas el pie cuenta las tareas y los subagentes, como en la maqueta', () => {
   const g = componerMapa(datos(3), 0)
-  expect(fila(g, MAPA_ALTO - 1)).toContain('subagentes [1/3]')
-  expect(fila(g, MAPA_ALTO - 1)).toContain('[1382]')
+  expect(fila(g, MAPA_ALTO - 1)).toContain('3 tareas · subagentes 1/3')
 })
 
 // ---- Tarjetas de tareas ----

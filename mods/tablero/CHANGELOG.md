@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 (tablero)
+
+El mapa se dibuja como la maqueta aprobada (`docs/tablero-maquetas/tablero-terminal.html`), a 100 columnas y apilado.
+
+- ESTADO: barras de cupo `▓░` en magenta, «último turno», «bucles» siempre (también en 0) y la gráfica `costo/min ▁▂▃` con lo gastado en cada uno de los últimos 24 minutos. Skills y MCP se rotulan siempre (con `—` si no hay).
+- JEV · decisiones: `umbral 0.80` y las tres últimas decisiones en filas `21:52 modelo → sonnet ▮▮▮▮▮▮▮▮▮▯ 0.91`, con el tope en ámbar. Los esfuerzos se dicen en español (`medio`, `alto`).
+- REGISTRO: filas `hora · rol · texto` con el rol de color, la más nueva arriba, en una caja de cinco filas.
+- LEAD: barra de contexto `▓░` en magenta y conector `▾` hacia JEV.
+- Pie: `SIN TAREAS · el lead espera trabajo · subagentes 0/0` o `3 tareas · subagentes 1/3`.
+- Cabecera y grises (etiquetas en gris medio, bordes en gris oscuro) como en la maqueta.
+- Aún no está, por falta de datos: las filas «permisos» y «modelo» del asesor, y las líneas del lead y del asesor en el registro.
+
 ## 0.6.1 (tablero)
 
 - Se borran 40 archivos `.js` viejos del 6-nov que quedaban en `hooks/` y `tests/` sin seguimiento en git. Se copiaban a la caché del plugin, y como los imports van sin extensión, el cargador podía tomar código antiguo en lugar de los `.ts` actuales.
