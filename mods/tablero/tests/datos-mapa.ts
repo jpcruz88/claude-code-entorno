@@ -12,23 +12,24 @@ export const datos = (cards: number): DatosMapa => ({
     costo: '$1.42',
     ultimoTurno: '$0.08',
     limites: [
-      { etiqueta: '5 h', valor: 0.31, texto: '31%', reinicio: '3h10m' },
-      { etiqueta: '7 d', valor: 0.62, texto: '62%', reinicio: '4d2h' },
+      { etiqueta: '5h', valor: 0.31, texto: '31%', reinicio: '3h10m' },
+      { etiqueta: '7d', valor: 0.62, texto: '62%', reinicio: '4d2h', ritmo: { texto: 'ámbar +9 pts', k: 'amb' } },
     ],
     permisos: { pendientes: 2, denegados: 1, modo: 'acceptEdits' },
     bucles: 0,
     errores: 1,
     ediciones: 4,
+    costoMin: [0, 0, 0.01, 0.02, 0.04, 0.08, 0.02, 0],
     skills: 'tdd×2 caveman×1',
     mcp: 'codebase×3 ctx7×1',
   },
   asesor: { estado: '2 consultas', consultas: 2, ultima: 'hace 2m' },
   lead: { modelo: 'Sonnet 5.5 · high', turno: '0:42', ctx: 0.38, mas: 128, menos: 34, respuestas: 17, delegando: true },
   jev: {
-    filas: [
-      { etiqueta: 'qué modelo', valor: 0.94, texto: '94% seguro · lo cambió Jev', corto: '94% · lo cambió Jev', color: 'jev' },
-      { etiqueta: 'qué esfuerzo', valor: 0.86, texto: '86% seguro · igual a Claude', corto: '86% · igual a Claude', color: 'jev' },
-      { etiqueta: 'reintentar', valor: 0.64, texto: '64% seguro · decide Claude', corto: '64% · decide Claude', color: 'warn' },
+    umbral: 0.8,
+    recientes: [
+      { hora: '21:54', txt: 'esfuerzo → medio', conf: 0.84 },
+      { hora: '21:52', txt: 'modelo → sonnet', conf: 0.91 },
     ],
     decisiones: 1382,
     tope: 'tope semana +12 pts → sonnet',
@@ -40,7 +41,10 @@ export const datos = (cards: number): DatosMapa => ({
     total: 4,
     estado: i % 2 === 0 ? ('R' as const) : ('D' as const),
   })),
-  registro: ['21:52 jev haiku   ·91', '21:54 jev sonnet  ·94'],
+  registro: [
+    { hora: '21:54', rol: 'jev', txt: 'esfuerzo → medio (0.84)' },
+    { hora: '21:52', rol: 'jev', txt: 'modelo → sonnet (0.91)' },
+  ],
   asesorActivo: false,
-  barra: { hechos: 1, total: cards },
+  barra: { hechos: Math.min(1, cards), total: cards },
 })

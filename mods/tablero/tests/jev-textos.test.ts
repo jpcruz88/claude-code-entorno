@@ -68,21 +68,12 @@ test('fila de la caja JEV: porcentaje de seguridad y qué pasó, largo y corto',
   expect(textoFilaJev(0.62, 'claude').largo).toBe('62% seguro · decide Claude')
 })
 
-test('mapa ancho: JEV se explica sin sharp, split ni umbral', () => {
-  const s = texto(componerMapa(datos(0), 0))
-  expect(s).toContain('JEV · elige modelo y esfuerzo')
-  expect(s).toContain('Jev cambia lo de Claude si está ≥80% seguro')
-  expect(s).toContain('94% seguro · lo cambió Jev')
-  expect(s).toContain('REGISTRO · decisiones de Jev')
-  for (const palabra of ['sharp', 'split', 'umbral']) expect(s).not.toContain(palabra)
-})
-
-test('mapa apilado: la explicación y el estado de cada fila caben de 40 a 99', () => {
-  for (const w of [40, 52, 66, 80, 99]) {
+test('mapa (ancho y apilado): JEV como la maqueta, con umbral y sin sharp ni split', () => {
+  for (const w of [40, 52, 66, 80, 99, 100]) {
     const s = texto(componerMapa(datos(0), 0, w))
-    expect(s).toMatch(/cambia lo de Claude si (está )?≥80% seguro/)
-    expect(s).toContain('lo cambió Jev')
-    expect(s).toContain('decide Claude')
-    for (const palabra of ['sharp', 'split', 'umbral']) expect(s).not.toContain(palabra)
+    expect(s).toContain('JEV · decisiones')
+    expect(s).toContain('umbral')
+    expect(s).toContain('0.80')
+    for (const palabra of ['sharp', 'split']) expect(s).not.toContain(palabra)
   }
 })

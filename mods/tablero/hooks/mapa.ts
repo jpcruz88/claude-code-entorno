@@ -11,18 +11,20 @@ export const MAPA_ALTO_COMPACTO = 32
 export const MAPA_MIN = 40
 
 /** Color de una celda: se resuelve en el render contra la paleta de Tablero. */
-export type Tinta = 'fg' | 'mut' | 'lead' | 'jev' | 'enj' | 'ase' | 'warn' | 'box' | 'amb' | 'osc'
+export type Tinta = 'fg' | 'mut' | 'lead' | 'jev' | 'jevd' | 'enj' | 'ase' | 'warn' | 'box' | 'amb' | 'osc'
 
 /** Una celda de la rejilla. `bg` es el color de fondo (la franja de situación). `e` marca la segunda mitad de un emoji de dos columnas: no se dibuja. */
 export type Celda = { c: string; k: Tinta; bg?: Tinta; e?: boolean }
 
-/** Los títulos y la regla de Jev, dichos para leerse sin glosario. La regla va de la forma larga a la corta. */
-const JEV_TITULO = 'JEV · elige modelo y esfuerzo'
-const JEV_REGLA = ['Jev cambia lo de Claude si está ≥80% seguro', 'cambia lo de Claude si ≥80% seguro']
-const REGISTRO_TITULO = 'REGISTRO · decisiones de Jev'
+/** Los títulos de las cajas, como en la maqueta aprobada (docs/tablero-maquetas/tablero-terminal.html). */
+const JEV_TITULO = 'JEV · decisiones'
+const REGISTRO_TITULO = 'REGISTRO'
 
-/** `texto`: `97% seguro · lo cambió Jev`; `corto`: lo mismo sin «seguro», para paneles angostos. */
-export type FilaJev = { etiqueta: string; valor: number; texto: string; corto?: string; color: Tinta }
+/** Una decisión reciente de Jev: `21:52`, `modelo → sonnet` y la confianza (0..1). */
+export type DecisionReciente = { hora: string; txt: string; conf: number }
+
+/** Una línea del registro: hora, quién (con su color) y qué pasó. */
+export type LineaRegistro = { hora: string; rol: 'jev' | 'lead' | 'asesor'; txt: string }
 
 export type TarjetaMapa = {
   nombre: string
@@ -53,6 +55,8 @@ export type EstadoMapa = {
   bucles: number
   errores: number
   ediciones: number
+  /** Lo gastado en cada minuto, del más viejo al más reciente; la gráfica usa los últimos 24. */
+  costoMin: number[]
   skills: string
   mcp: string
 }
@@ -69,9 +73,11 @@ export type DatosMapa = {
   /** Solo si hubo consultas al asesor (o hay una en curso); sin consultas, la caja no se dibuja. */
   asesor: { estado: string; consultas: number; ultima: string | null } | null
   lead: { modelo: string; turno: string | null; ctx: number | null; mas: number; menos: number; respuestas: number; delegando: boolean }
-  jev: { filas: FilaJev[]; decisiones: number; tope: string | null }
+  /** `umbral`: la confianza desde la que Jev cambia lo de Claude. `recientes`: la más nueva primero. */
+  jev: { umbral: number; recientes: DecisionReciente[]; decisiones: number; tope: string | null }
   tarjetas: TarjetaMapa[]
-  registro: string[]
+  /** La más nueva primero. */
+  registro: LineaRegistro[]
   asesorActivo: boolean
   barra: { hechos: number; total: number }
 }
@@ -95,6 +101,17 @@ export const filasDeMapa = (g: Celda[][]): Tramo[][] =>
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 const LUNA = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘']
 const BL = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█']
+const SK = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
+/** Celdas de la gráfica costo/min. */
+export const SPARK_ANCHO = 24
+
+/** La gráfica costo/min: los últimos 24 minutos, cada uno escalado al minuto más caro; sin gasto, todo ▁. */
+export const sparkCosto = (porMinuto: number[]): string => {
+  const v = porMinuto.slice(-SPARK_ANCHO)
+  const max = Math.max(0, ...v)
+  const celdas = v.map(x => (max > 0 ? SK[Math.round((Math.max(0, x) / max) * (SK.length - 1))] : SK[0]))
+  return SK[0].repeat(SPARK_ANCHO - celdas.length) + celdas.join('')
+}
 const EMOJI = /\p{Extended_Pictographic}/u
 
 type Punto = [number, number]
@@ -146,8 +163,8 @@ const espaciado = (s: string): string => s.split(' ').map(p => Array.from(p).joi
 
 /** Un par etiqueta/valor en una caja que empieza en `x` y mide `w`: la etiqueta a la izquierda y el valor pegado al borde derecho. */
 const par = (g: Celda[][], x: number, y: number, w: number, etiqueta: string, valor: string, k: Tinta = 'fg') => {
-  put(g, x + 2, y, etiqueta, 'mut')
-  put(g, x + w - 3 - Array.from(valor).length, y, valor, k)
+  put(g, x + 2, y, etiqueta, 'box')
+  put(g, x + w - 2 - Array.from(valor).length, y, valor, k)
 }
 
 /** Un paquete ● con su cola • y · que recorre el camino; `t` en segundos. */
@@ -194,6 +211,26 @@ const barra = (g: Celda[][], x: number, y: number, ancho: number, v: number, k: 
     else put(g, x + i, y, '·', 'mut')
   }
 }
+
+/** La barra de la maqueta para cupos y contexto: `▓` lleno en magenta y `░` vacío, redondeado a celdas enteras. */
+const barraMaqueta = (g: Celda[][], x: number, y: number, ancho: number, v: number) => {
+  const lleno = Math.round(Math.max(0, Math.min(1, v)) * ancho)
+  for (let i = 0; i < ancho; i++) put(g, x + i, y, i < lleno ? '▓' : '░', i < lleno ? 'enj' : 'mut')
+}
+
+/** La confianza de una decisión de Jev: 10 celdas `▮` (verde) y `▯` (verde tenue). */
+const barraConfianza = (g: Celda[][], x: number, y: number, conf: number) => {
+  const n = Math.round(Math.max(0, Math.min(1, conf)) * 10)
+  for (let i = 0; i < 10; i++) put(g, x + i, y, i < n ? '▮' : '▯', i < n ? 'jev' : 'jevd')
+}
+
+const TINTA_ROL: Record<LineaRegistro['rol'], Tinta> = { jev: 'jev', lead: 'lead', asesor: 'ase' }
+
+/** El pie izquierdo de la maqueta: `SIN TAREAS · el lead espera trabajo · subagentes 0/0` o `3 tareas · subagentes 1/3`. */
+const textoPie = (d: DatosMapa): string =>
+  d.tarjetas.length === 0
+    ? `SIN TAREAS · el lead espera trabajo · subagentes ${d.barra.hechos}/${d.barra.total}`
+    : `${d.tarjetas.length} ${d.tarjetas.length === 1 ? 'tarea' : 'tareas'} · subagentes ${d.barra.hechos}/${d.barra.total}`
 
 const barraPasos = (g: Celda[][], x: number, y: number, ancho: number, hechos: number, total: number, k: Tinta) => {
   const lleno = Math.round((Math.min(hechos, total) / Math.max(1, total)) * ancho)
@@ -256,55 +293,49 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
     if (hayTrabajo) paquete(...a)
   }
 
-  // Cabecera
-  put(g, 2, 0, 'TABLERO', 'fg')
-  if (d.rama) put(g, 12, 0, `rama ${recortar(d.rama, 40)}`, 'mut')
-  put(g, 78, 0, `t ${d.tiempo}`, 'mut')
-  put(g, 88, 0, d.reloj, 'mut')
+  // Cabecera, en las columnas de la maqueta.
+  put(g, 0, 0, 'TABLERO', 'fg')
+  if (d.rama) put(g, 22, 0, `rama ${recortar(d.rama, 50)}`, 'box')
+  put(g, 80, 0, `t ${d.tiempo}  ${d.reloj}`, 'box')
 
   franja(g, d, t, MAPA_ANCHO, vivo, sp)
 
-  // ESTADO a todo lo ancho: lo que cuesta, cuánto queda y qué pasa con los permisos y los errores.
+  // ESTADO a todo lo ancho: cuatro filas, cada dato en la columna de la maqueta.
   const e = d.estado
   caja(g, 0, 5, 100, 6, 'ESTADO', 'mut')
-  put(g, 2, 6, 'costo', 'mut')
-  put(g, 8, 6, e.costo, 'fg')
-  put(g, 2, 7, 'costo turno', 'mut')
-  put(g, 14, 7, e.ultimoTurno ?? '—', 'fg')
+  put(g, 2, 6, 'costo', 'box')
+  put(g, 12, 6, e.costo, 'fg')
+  put(g, 2, 7, 'último turno', 'box')
+  put(g, 15, 7, e.ultimoTurno ?? '—', 'box')
   e.limites.slice(0, 2).forEach((l, i) => {
     const x0 = 26 + i * 26
     put(g, x0, 6, `cupo ${l.etiqueta}`, 'mut')
-    barra(g, x0 + 9, 6, 8, l.valor, l.valor >= 0.8 ? 'warn' : 'enj')
-    put(g, x0 + 18, 6, l.texto, 'fg')
+    barraMaqueta(g, x0 + 8, 6, 8, l.valor)
+    put(g, x0 + 16, 6, ` ${l.texto}`, 'fg')
     if (l.ritmo) {
-      put(g, x0, 7, 'ritmo', 'mut')
-      put(g, x0 + 6, 7, recortar(l.ritmo.texto, 18), l.ritmo.k)
+      put(g, x0, 7, 'ritmo', 'box')
+      put(g, x0 + 6, 7, recortar(l.ritmo.texto, 19), l.ritmo.k)
     } else if (l.reinicio) {
-      put(g, x0, 7, 'reinicia', 'mut')
-      put(g, x0 + 9, 7, l.reinicio, 'fg')
+      put(g, x0, 7, 'reinicia', 'box')
+      put(g, x0 + 9, 7, l.reinicio, 'box')
     }
   })
-  put(g, 78, 6, 'permisos', 'mut')
+  put(g, 78, 6, 'permisos', 'box')
   put(g, 87, 6, `${e.permisos.pendientes} pend.`, e.permisos.pendientes > 0 ? 'amb' : 'fg')
-  put(g, 78, 7, `${e.permisos.denegados} den.`, e.permisos.denegados > 0 ? 'warn' : 'fg')
-  put(g, 85, 7, recortar(e.permisos.modo, 12), 'mut')
-  put(g, 2, 8, 'racha errores', 'mut')
-  put(g, 16, 8, String(e.errores), e.errores > 0 ? 'warn' : 'fg')
-  put(g, 21, 8, 'ediciones turno', 'mut')
-  put(g, 37, 8, String(e.ediciones), 'fg')
-  // Bucles ajenos (forks, compactación, workflows): solo si hubo alguno.
-  if (e.bucles > 0) {
-    put(g, 42, 8, 'bucles', 'mut')
-    put(g, 49, 8, String(e.bucles), 'fg')
-  }
-  if (e.skills) {
-    put(g, 2, 9, 'skills', 'mut')
-    put(g, 9, 9, recortar(e.skills, 28), 'fg')
-  }
-  if (e.mcp) {
-    put(g, 40, 9, 'mcp', 'mut')
-    put(g, 44, 9, recortar(e.mcp, 52), 'fg')
-  }
+  put(g, 78, 7, `${e.permisos.denegados} den.`, e.permisos.denegados > 0 ? 'amb' : 'fg')
+  put(g, 85, 7, recortar(e.permisos.modo, 13), 'box')
+  put(g, 2, 8, 'bucles', 'box')
+  put(g, 9, 8, String(e.bucles), 'fg')
+  put(g, 14, 8, 'racha errores', 'box')
+  put(g, 28, 8, String(e.errores), e.errores > 0 ? 'warn' : 'fg')
+  put(g, 33, 8, 'ediciones turno', 'box')
+  put(g, 49, 8, String(e.ediciones), 'fg')
+  put(g, 56, 8, 'costo/min', 'box')
+  put(g, 66, 8, sparkCosto(e.costoMin), 'lead')
+  put(g, 2, 9, 'skills', 'box')
+  put(g, 9, 9, recortar(e.skills || '—', 29), 'fg')
+  put(g, 40, 9, 'mcp', 'box')
+  put(g, 44, 9, recortar(e.mcp || '—', 54), 'fg')
 
   // Asesor (izquierda), con la línea hasta el lead; solo si hubo consultas. Sin él, el registro sube a su sitio.
   const yReg = d.asesor ? 17 : 12
@@ -312,74 +343,64 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
     const kAs: Tinta = d.asesorActivo && !vivo ? 'box' : 'ase'
     caja(g, 0, 12, 44, 4, `ASESOR · ${d.asesor.estado}`, kAs)
     par(g, 0, 13, 44, 'consultas', String(d.asesor.consultas))
-    put(g, 2, 14, recortar(`última consulta ${d.asesor.ultima ?? '—'}`, 40), 'mut')
-    hl(g, 44, 49, 14, '─', 'mut')
-    put(g, 50, 14, '▶', 'ase')
-    if (d.asesorActivo) paq(g, linea(44, 14, 50, 14), t, 6, 0, 'ase')
+    put(g, 2, 14, recortar(`última consulta ${d.asesor.ultima ?? '—'}`, 40), 'box')
+    put(g, 44, 14, '──────▶', 'mut')
+    if (d.asesorActivo) paq(g, linea(44, 14, 49, 14), t, 6, 0, 'ase')
   }
 
   // Lead (derecha): el borde respira con trabajo y el spinner gira; en reposo, ○ fijo.
   const trabajaLead = d.lead.delegando || d.situacion === 'trabajando'
   caja(g, 51, 12, 49, 7, 'LEAD · principal', hayTrabajo && !vivo ? 'box' : 'lead')
-  put(g, 72, 12, trabajaLead ? sp : '○', 'lead')
+  put(g, 70, 12, trabajaLead ? sp : '○', trabajaLead ? 'lead' : 'box')
   put(g, 53, 13, d.lead.delegando ? 'delegando' : d.situacion === 'trabajando' ? 'trabajando' : 'a la espera', 'lead')
   if (d.lead.turno) put(g, 65, 13, `turno ${d.lead.turno}`, 'mut')
   par(g, 51, 14, 49, 'modelo', recortar(d.lead.modelo, 30))
-  put(g, 53, 15, 'contexto', 'mut')
-  if (d.lead.ctx === null) put(g, 94, 15, '—', 'mut')
+  put(g, 53, 15, 'contexto', 'box')
+  if (d.lead.ctx === null) put(g, 96, 15, '—', 'box')
   else {
-    barra(g, 83, 15, 8, d.lead.ctx, d.lead.ctx >= 0.8 ? 'warn' : 'enj')
-    put(g, 92, 15, `${Math.round(d.lead.ctx * 100)}%`, 'fg')
+    const pct = `${Math.round(d.lead.ctx * 100)}%`
+    const x = 100 - 3 - 8 - 1 - pct.length
+    barraMaqueta(g, x, 15, 8, d.lead.ctx)
+    put(g, 100 - 3 - pct.length, 15, pct, 'fg')
   }
-  put(g, 53, 16, 'líneas', 'mut')
-  const mas = `+${d.lead.mas}`
-  put(g, 83, 16, mas, 'jev')
-  put(g, 83 + mas.length + 1, 16, `−${d.lead.menos}`, 'warn')
+  put(g, 53, 16, 'líneas', 'box')
+  const menos = String(d.lead.menos)
+  const mas = String(d.lead.mas)
+  put(g, 100 - 3 - menos.length - mas.length - 4, 16, `+${mas}`, 'jev')
+  put(g, 100 - 3 - menos.length, 16, `−${menos}`, 'amb')
   par(g, 51, 17, 49, 'respuestas', String(d.lead.respuestas))
 
   // Conector lead → JEV
   vl(g, 75, 19, 20, '│', 'mut')
-  put(g, 75, 21, '▼', 'mut')
-  paq(g, linea(75, 19, 75, 21), t, 7, 0.3, 'lead')
+  put(g, 75, 21, '▾', 'mut')
+  paq(g, linea(75, 19, 75, 21), t, 7, 0.3, 'jev')
 
-  // JEV (derecha, bajo el lead)
-  caja(g, 51, 22, 49, 8, JEV_TITULO, 'jev')
-  put(g, 53, 23, `${d.jev.decisiones} decisiones`, 'jev')
-  d.jev.filas.slice(0, 3).forEach((f, i) => {
-    put(g, 53, 24 + i, f.etiqueta, 'fg')
-    // El texto va pegado a la derecha; la barra, entre la etiqueta (hasta la 64) y el texto, con un hueco a cada lado.
-    const xTxt = 98 - Array.from(f.texto).length
-    const bw = Math.min(12, xTxt - 1 - 66)
-    if (bw >= 3) barra(g, 66, 24 + i, bw, f.valor, f.color)
-    put(g, xTxt, 24 + i, f.texto, f.color)
+  // JEV (derecha, bajo el lead): el umbral, las tres últimas decisiones y el tope.
+  caja(g, 51, 22, 49, 7, JEV_TITULO, 'jev')
+  par(g, 51, 23, 49, 'umbral', d.jev.umbral.toFixed(2))
+  d.jev.recientes.slice(0, 3).forEach((r, i) => {
+    put(g, 53, 24 + i, r.hora, 'box')
+    put(g, 59, 24 + i, recortar(r.txt, 16), 'fg')
+    barraConfianza(g, 76, 24 + i, r.conf)
+    put(g, 87, 24 + i, r.conf.toFixed(2), 'box')
   })
-  if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 44), 'warn')
-  put(g, 53, 28, JEV_REGLA[0], 'mut')
+  if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 45), 'amb')
 
-  // Registro (izquierda, bajo el asesor): tantas filas como entradas, hasta 4.
-  caja(g, 0, yReg, 44, Math.max(3, Math.min(4, d.registro.length) + 2), REGISTRO_TITULO, 'mut')
-  d.registro.slice(-4).forEach((s, i) => put(g, 2, yReg + 1 + i, recortar(s, 40), 'fg'))
+  // Registro (izquierda, bajo el asesor): cinco filas, la más nueva arriba.
+  caja(g, 0, yReg, 44, 7, REGISTRO_TITULO, 'mut')
+  d.registro.slice(0, 5).forEach((r, i) => {
+    put(g, 2, yReg + 1 + i, r.hora, 'box')
+    put(g, 8, yReg + 1 + i, r.rol, TINTA_ROL[r.rol])
+    put(g, 15, yReg + 1 + i, recortar(r.txt, 27), 'box')
+  })
 
-  // Pie: a la izquierda el estado de las tareas; a la derecha, la versión y el autor.
+  // Pie: a la izquierda las tareas y los subagentes; a la derecha, la versión y el autor.
   const yPie = alto - 1
-  if (N === 0) put(g, 2, yPie, 'SIN TAREAS · el lead espera trabajo', 'mut')
-  else {
-    put(g, 2, yPie, 'subagentes ', 'mut')
-    put(g, 13, yPie, `[${d.barra.hechos}/${d.barra.total}]`, 'fg')
-    let xp = 13 + `[${d.barra.hechos}/${d.barra.total}]`.length
-    if (d.asesor) {
-      put(g, xp, yPie, ' · asesor ', 'mut')
-      const ta = d.asesorActivo ? '[asesorando]' : `[${d.asesor.consultas}]`
-      put(g, xp + 10, yPie, ta, 'ase')
-      xp += 10 + ta.length
-    }
-    put(g, xp, yPie, ' · jev ', 'mut')
-    put(g, xp + 7, yPie, `[${d.jev.decisiones}]`, 'jev')
-    if (hayTrabajo) put(g, xp + 7 + `[${d.jev.decisiones}]`.length, yPie, ` ${sp}`, 'enj')
-  }
+  put(g, 0, yPie, recortar(textoPie(d), 60), 'box')
+  if (hayTrabajo && N > 0) put(g, Array.from(textoPie(d)).length + 1, yPie, sp, 'enj')
   const firma = `tablero v${d.version} · desarrollado por `
-  put(g, MAPA_ANCHO - 2 - Array.from(firma).length - 2, yPie, firma, 'mut')
-  put(g, MAPA_ANCHO - 4, yPie, 'JP', 'lead')
+  put(g, MAPA_ANCHO - 2 - Array.from(firma).length, yPie, firma, 'mut')
+  put(g, MAPA_ANCHO - 2, yPie, 'JP', 'lead')
 
   if (N === 1) {
     // Con una tarea la tarjeta va a la izquierda, bajo el registro.
@@ -506,7 +527,7 @@ const fluir = (g: Celda[][], x0: number, y0: number, xMax: number, trozos: Pieza
         x += Array.from(s).length
       } else {
         const w = Math.min(p.w, libre)
-        barra(g, x, y, w, p.barra, p.k)
+        barraMaqueta(g, x, y, w, p.barra)
         x += w
       }
     }
@@ -517,7 +538,7 @@ const fluir = (g: Celda[][], x0: number, y0: number, xMax: number, trozos: Pieza
 
 /** Etiqueta a la izquierda y valor pegado al borde derecho; con poco sitio, el valor se recorta. */
 const parAjustado = (g: Celda[][], W: number, y: number, etiqueta: string, valor: string, k: Tinta = 'fg') => {
-  put(g, 2, y, etiqueta, 'mut')
+  put(g, 2, y, etiqueta, 'box')
   const libre = W - 3 - (2 + Array.from(etiqueta).length + 1)
   const v = recortar(valor, Math.max(0, libre))
   put(g, W - 2 - Array.from(v).length, y, v, k)
@@ -577,35 +598,34 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
 
   // ESTADO: los mismos datos que a 100 columnas, en trozos que bajan de fila cuando no caben.
   const e = d.estado
-  const trozos: Pieza[][] = [[{ t: 'costo ', k: 'mut' }, { t: e.costo, k: 'fg' }]]
-  if (e.ultimoTurno) trozos.push([{ t: 'costo turno ', k: 'mut' }, { t: e.ultimoTurno, k: 'fg' }])
+  const trozos: Pieza[][] = [[{ t: 'costo ', k: 'box' }, { t: e.costo, k: 'fg' }]]
+  trozos.push([{ t: 'último turno ', k: 'box' }, { t: e.ultimoTurno ?? '—', k: 'box' }])
   for (const l of e.limites.slice(0, 2)) {
-    const tr: Pieza[] = [{ t: `cupo ${l.etiqueta} `, k: 'mut' }, { barra: l.valor, w: 8, k: l.valor >= 0.8 ? 'warn' : 'enj' }, { t: ` ${l.texto}`, k: 'fg' }]
-    if (l.ritmo) tr.push({ t: ' ritmo ', k: 'mut' }, { t: l.ritmo.texto, k: l.ritmo.k })
-    else if (l.reinicio) tr.push({ t: ' reinicia ', k: 'mut' }, { t: l.reinicio, k: 'fg' })
+    const tr: Pieza[] = [{ t: `cupo ${l.etiqueta} `, k: 'box' }, { barra: l.valor, w: 8, k: 'enj' }, { t: ` ${l.texto}`, k: 'fg' }]
+    if (l.ritmo) tr.push({ t: ' ritmo ', k: 'box' }, { t: l.ritmo.texto, k: l.ritmo.k })
+    else if (l.reinicio) tr.push({ t: ' reinicia ', k: 'box' }, { t: l.reinicio, k: 'box' })
     trozos.push(tr)
   }
   trozos.push([
-    { t: 'permisos ', k: 'mut' },
+    { t: 'permisos ', k: 'box' },
     { t: `${e.permisos.pendientes} pend.`, k: e.permisos.pendientes > 0 ? 'amb' : 'fg' },
-    { t: ' ', k: 'mut' },
-    { t: `${e.permisos.denegados} den.`, k: e.permisos.denegados > 0 ? 'warn' : 'fg' },
-    { t: ` ${e.permisos.modo}`, k: 'mut' },
+    { t: ' ', k: 'box' },
+    { t: `${e.permisos.denegados} den.`, k: e.permisos.denegados > 0 ? 'amb' : 'fg' },
+    { t: ` ${e.permisos.modo}`, k: 'box' },
   ])
-  if (e.bucles > 0) trozos.push([{ t: 'bucles ', k: 'mut' }, { t: String(e.bucles), k: 'fg' }])
-  trozos.push([{ t: 'racha errores ', k: 'mut' }, { t: String(e.errores), k: e.errores > 0 ? 'warn' : 'fg' }])
-  trozos.push([{ t: 'ediciones turno ', k: 'mut' }, { t: String(e.ediciones), k: 'fg' }])
+  trozos.push([{ t: 'bucles ', k: 'box' }, { t: String(e.bucles), k: 'fg' }])
+  trozos.push([{ t: 'racha errores ', k: 'box' }, { t: String(e.errores), k: e.errores > 0 ? 'warn' : 'fg' }])
+  trozos.push([{ t: 'ediciones turno ', k: 'box' }, { t: String(e.ediciones), k: 'fg' }])
+  // costo/min con tantas celdas como quepan (hasta 24): siempre los minutos más recientes.
+  const sparkW = Math.max(4, Math.min(SPARK_ANCHO, iw - 10))
+  trozos.push([{ t: 'costo/min ', k: 'box' }, { t: Array.from(sparkCosto(e.costoMin)).slice(-sparkW).join(''), k: 'lead' }])
   // Skills y MCP van cada uno en su fila: son listas largas.
   const estadoFilas = fluir(g, 2, y + 1, xMax, trozos)
   let yIn = y + 1 + estadoFilas
-  if (e.skills) {
-    put(g, 2, yIn, 'skills ', 'mut')
-    put(g, 9, yIn++, recortar(e.skills, iw - 7), 'fg')
-  }
-  if (e.mcp) {
-    put(g, 2, yIn, 'mcp ', 'mut')
-    put(g, 6, yIn++, recortar(e.mcp, iw - 4), 'fg')
-  }
+  put(g, 2, yIn, 'skills ', 'box')
+  put(g, 9, yIn++, recortar(e.skills || '—', iw - 7), 'fg')
+  put(g, 2, yIn, 'mcp ', 'box')
+  put(g, 6, yIn++, recortar(e.mcp || '—', iw - 4), 'fg')
   caja(g, 0, y, W, yIn - y + 1, 'ESTADO', 'mut')
   y = yIn + 2
 
@@ -617,53 +637,48 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   put(g, 2, yLead + 1, d.lead.delegando ? 'delegando' : d.situacion === 'trabajando' ? 'trabajando' : 'a la espera', 'lead')
   if (d.lead.turno) {
     const tt = `turno ${d.lead.turno}`
-    put(g, W - 2 - tt.length, yLead + 1, tt, 'mut')
+    put(g, W - 2 - tt.length, yLead + 1, tt, 'box')
   }
   parAjustado(g, W, yLead + 2, 'modelo', d.lead.modelo)
-  put(g, 2, yLead + 3, 'contexto', 'mut')
-  if (d.lead.ctx === null) put(g, W - 3, yLead + 3, '—', 'mut')
+  put(g, 2, yLead + 3, 'contexto', 'box')
+  if (d.lead.ctx === null) put(g, W - 3, yLead + 3, '—', 'box')
   else {
     const pct = `${Math.round(d.lead.ctx * 100)}%`
     put(g, W - 2 - pct.length, yLead + 3, pct, 'fg')
-    const bw = Math.min(12, W - 2 - pct.length - 1 - 12)
-    barra(g, W - 2 - pct.length - 1 - bw, yLead + 3, bw, d.lead.ctx, d.lead.ctx >= 0.8 ? 'warn' : 'enj')
+    barraMaqueta(g, W - 2 - pct.length - 1 - 8, yLead + 3, 8, d.lead.ctx)
   }
-  put(g, 2, yLead + 4, 'líneas', 'mut')
+  put(g, 2, yLead + 4, 'líneas', 'box')
   const mas = `+${d.lead.mas}`
   const menos = `−${d.lead.menos}`
   const xMenos = W - 2 - Array.from(menos).length
-  put(g, xMenos, yLead + 4, menos, 'warn')
+  put(g, xMenos, yLead + 4, menos, 'amb')
   put(g, xMenos - 1 - mas.length, yLead + 4, mas, 'jev')
   parAjustado(g, W, yLead + 5, 'respuestas', String(d.lead.respuestas))
   y = yLead + 7
 
   // Conector lead → JEV, en el centro.
   const cx = Math.floor(W / 2)
-  put(g, cx, y, '▼', 'mut')
-  if (hayTrabajo) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'lead')
+  put(g, cx, y, '▾', 'mut')
+  if (hayTrabajo) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
   y += 1
 
-  // JEV: etiqueta a la izquierda, texto pegado a la derecha y la barra en el hueco que quede.
+  // JEV · decisiones: el umbral, las tres últimas decisiones (hora, texto, ▮▯, confianza) y el tope.
   const yJev = y
-  const filasJev = d.jev.filas.slice(0, 3)
-  const altoJev = 2 + 1 + filasJev.length + (d.jev.tope ? 1 : 0) + 1
+  const recientes = d.jev.recientes.slice(0, 3)
+  const altoJev = 2 + 1 + recientes.length + (d.jev.tope ? 1 : 0)
   caja(g, 0, yJev, W, altoJev, JEV_TITULO, 'jev')
-  put(g, 2, yJev + 1, `${d.jev.decisiones} decisiones`, 'jev')
-  filasJev.forEach((f, i) => {
+  parAjustado(g, W, yJev + 1, 'umbral', d.jev.umbral.toFixed(2))
+  recientes.forEach((r, i) => {
     const yy = yJev + 2 + i
-    const etiqueta = recortar(f.etiqueta, 13)
-    // El texto largo si cabe con un espacio tras la etiqueta; si no, el corto.
-    const largo = f.texto
-    const txt = 2 + Array.from(etiqueta).length + 1 + Array.from(largo).length <= W - 2 ? largo : recortar(f.corto ?? largo, iw - Array.from(etiqueta).length - 1)
-    const xTxt = W - 2 - Array.from(txt).length
-    put(g, 2, yy, etiqueta, 'fg')
-    const bw = Math.min(12, xTxt - 1 - 16)
-    if (bw >= 3) barra(g, xTxt - 1 - bw, yy, bw, f.valor, f.color)
-    put(g, xTxt, yy, txt, f.color)
+    // Derecha: ▮▯ y la confianza (15 celdas); izquierda: la hora y el texto en lo que quede.
+    const xConf = W - 2 - 4
+    const xBar = xConf - 1 - 10
+    put(g, xConf, yy, r.conf.toFixed(2), 'box')
+    barraConfianza(g, xBar, yy, r.conf)
+    put(g, 2, yy, r.hora, 'box')
+    put(g, 8, yy, recortar(r.txt, Math.max(0, xBar - 1 - 8)), 'fg')
   })
-  let yj = yJev + 2 + filasJev.length
-  if (d.jev.tope) put(g, 2, yj++, recortar(d.jev.tope, iw), 'warn')
-  put(g, 2, yj, JEV_REGLA.find(r => Array.from(r).length <= iw) ?? recortar(JEV_REGLA.at(-1)!, iw), 'mut')
+  if (d.jev.tope) put(g, 2, yJev + 2 + recientes.length, recortar(d.jev.tope, iw), 'amb')
   y = yJev + altoJev + 1
 
   // ASESOR: solo si hubo consultas.
@@ -671,26 +686,23 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
     const kAs: Tinta = d.asesorActivo && !vivo ? 'box' : 'ase'
     caja(g, 0, y, W, 4, recortar(`ASESOR · ${d.asesor.estado}`, W - 6), kAs)
     parAjustado(g, W, y + 1, 'consultas', String(d.asesor.consultas))
-    put(g, 2, y + 2, recortar(`última consulta ${d.asesor.ultima ?? '—'}`, iw), 'mut')
+    put(g, 2, y + 2, recortar(`última consulta ${d.asesor.ultima ?? '—'}`, iw), 'box')
     y += 5
   }
 
-  // REGISTRO: tantas filas como entradas, hasta 4.
-  const reg = d.registro.slice(-4)
-  caja(g, 0, y, W, Math.max(3, reg.length + 2), REGISTRO_TITULO, 'mut')
-  reg.forEach((s, i) => put(g, 2, y + 1 + i, recortar(s, iw), 'fg'))
-  y += Math.max(3, reg.length + 2) + 1
+  // REGISTRO: cinco filas, la más nueva arriba.
+  caja(g, 0, y, W, 7, REGISTRO_TITULO, 'mut')
+  d.registro.slice(0, 5).forEach((r, i) => {
+    put(g, 2, y + 1 + i, r.hora, 'box')
+    put(g, 8, y + 1 + i, r.rol, TINTA_ROL[r.rol])
+    put(g, 15, y + 1 + i, recortar(r.txt, Math.max(0, iw - 13)), 'box')
+  })
+  y += 8
 
-  // Pie: el estado de las tareas (si hay) y, en la última fila, la versión y el autor a la derecha.
-  if (N === 0) put(g, 2, y++, recortar('SIN TAREAS · el lead espera trabajo', iw), 'mut')
-  else {
-    fluir(g, 2, y, xMax, [
-      [{ t: 'subagentes ', k: 'mut' }, { t: `[${d.barra.hechos}/${d.barra.total}]`, k: 'fg' }],
-      ...(d.asesor ? [[{ t: 'asesor ', k: 'mut' }, { t: d.asesorActivo ? '[asesorando]' : `[${d.asesor.consultas}]`, k: 'ase' }] as Pieza[]] : []),
-      [{ t: 'jev ', k: 'mut' }, { t: `[${d.jev.decisiones}]`, k: 'jev' }],
-    ])
-    y = g.findLastIndex(r => r.some(c => c.c.trim() !== '')) + 1
-  }
+  // Pie: las tareas y los subagentes y, en la última fila, la versión y el autor a la derecha.
+  // Si el pie de la maqueta no cabe, se deja fuera «el lead espera trabajo» antes que cortar los subagentes.
+  const corto = d.tarjetas.length === 0 ? `SIN TAREAS · subagentes ${d.barra.hechos}/${d.barra.total}` : textoPie(d)
+  put(g, 2, y++, recortar(Array.from(textoPie(d)).length <= iw ? textoPie(d) : corto, iw), 'box')
   const firma = W >= 50 ? `tablero v${d.version} · desarrollado por ` : `v${d.version} · `
   put(g, W - 2 - Array.from(firma).length - 2, y, firma, 'mut')
   put(g, W - 4, y, 'JP', 'lead')

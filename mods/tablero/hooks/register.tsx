@@ -84,12 +84,13 @@ import { COLOR_DE } from './banda'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana, textoFilaJev } from './jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaRegistroJev, marcaTarjeta, recientesJev, resumenJev, ritmoSemana } from './jev-modelo'
+import { anotarCosto, costoPorMinuto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
 import { situacionDe } from './situacion'
-import { MAPA_ANCHO, MAPA_MIN, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
+import { MAPA_ANCHO, MAPA_MIN, SPARK_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -292,6 +293,8 @@ const mostrado = { contexto: null as number | null, usos: new Map<string, number
 let fase = 0
 // Verdadero mientras el último dibujo fue la rejilla animada: entonces el reloj redibuja con cada marco.
 let mapaVivo = false
+/** El costo de la sesión a lo largo del tiempo, para la gráfica costo/min del mapa. */
+const muestrasCosto: MuestraCosto[] = []
 let ultimaClave = ''
 let reloj: { cancel: () => void } | null = null
 const redondeo = (n: number) => Math.round(n * 10) / 10
@@ -1523,7 +1526,7 @@ export const register: Register = (on, options) => {
     // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
     mapaVivo = enMapa && cfg.animacion
     const colorDeTinta = (k: Tinta): string =>
-      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
+      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, jevd: '#1f6f4f', enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
     const rit = ritmoSemana(jevs.limites, now / 1000)
     const nivelRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)?.nivel
     const ritmoMapa = rit && nivelRit
@@ -1531,6 +1534,7 @@ export const register: Register = (on, options) => {
       : undefined
     const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
     const ultimoTope = jevs.decisiones.filter(x => x.tipo === 'tope').at(-1)
+    anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
     const juntar = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ')
     const mapaDatos: DatosMapa = {
       tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
@@ -1543,8 +1547,8 @@ export const register: Register = (on, options) => {
         costo: `$${(u.costUsd ?? 0).toFixed(2)}`,
         ultimoTurno: r?.costDelta != null ? fmtUsd(r.costDelta) : null,
         limites: [
-          { kind: 'five_hour', etiqueta: '5 h' },
-          { kind: 'seven_day', etiqueta: '7 d' },
+          { kind: 'five_hour', etiqueta: '5h' },
+          { kind: 'seven_day', etiqueta: '7d' },
         ].flatMap(({ kind, etiqueta }) => {
           const l = u.limits.find(x => x.kind === kind)
           return l
@@ -1555,6 +1559,7 @@ export const register: Register = (on, options) => {
         bucles: lp.length,
         errores: t.errorStreak,
         ediciones: t.edits,
+        costoMin: costoPorMinuto(muestrasCosto, now, SPARK_ANCHO),
         skills: juntar(usosNow.skills),
         mcp: juntar(usosNow.mcp),
       },
@@ -1576,13 +1581,8 @@ export const register: Register = (on, options) => {
         delegando: running.length > 0,
       },
       jev: {
-        filas: resumenJevs.filas
-          .slice(0, 3)
-          .filter(f => f.confianza !== null)
-          .map(f => {
-            const { largo, corto } = textoFilaJev(f.confianza ?? 0, f.estado)
-            return { etiqueta: f.etiqueta, valor: f.confianza ?? 0, texto: largo, corto, color: (f.sharp ? 'jev' : 'warn') as Tinta }
-          }),
+        umbral: 0.8,
+        recientes: recientesJev(jevs.decisiones),
         decisiones: jevN,
         tope: ultimoTope?.motivo || null,
       },
@@ -1594,7 +1594,7 @@ export const register: Register = (on, options) => {
         total: null,
         estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'F' : c.status === 'stopped' ? 'S' : 'Q',
       })),
-      registro: jevs.decisiones.slice(-4).map(lineaLog),
+      registro: jevs.decisiones.slice(-5).reverse().map(lineaRegistroJev),
       asesorActivo: advising,
       barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
     }
