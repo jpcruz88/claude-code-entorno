@@ -51,6 +51,23 @@ class PruebaEstado(unittest.TestCase):
         e = {"inicio": self.t - 3600, "repetir": ["skill:caveman"]}
         self.assertEqual(cargar().que_revisar(e, self.t), "pendientes")
 
+    def test_pendientes_cuentan_desde_el_ultimo_intento(self):
+        m = cargar()
+        e = {"inicio": self.t - 5 * 3600, "ultimo_intento": self.t - 1800,
+             "repetir": ["skill:caveman"]}
+        self.assertIsNone(m.que_revisar(e, self.t))
+        e["ultimo_intento"] = self.t - 3600
+        self.assertEqual(m.que_revisar(e, self.t), "pendientes")
+
+    def test_las_24h_cuentan_desde_inicio_aunque_haya_reintentos(self):
+        e = {"inicio": self.t - 24 * 3600, "ultimo_intento": self.t - 60,
+             "repetir": ["skill:caveman"]}
+        self.assertEqual(cargar().que_revisar(e, self.t), "todo")
+
+    def test_ultimo_intento_roto_se_ignora(self):
+        e = {"inicio": self.t - 3600, "ultimo_intento": "ayer", "repetir": ["x"]}
+        self.assertEqual(cargar().que_revisar(e, self.t), "pendientes")
+
     def test_cerrojo(self):
         m = cargar()
         self.assertTrue(m.tomar_cerrojo(self.dir, self.t))
@@ -278,6 +295,7 @@ class PruebaRevision(unittest.TestCase):
             self._texto(Path(ruta) / "README.md", "igual\n")
         self.cm = "0.12.0"
         self.respuestas = {}    # cmd -> (código, salida): pisa el efecto normal
+        self.falla_con_efecto = {}   # cmd -> (código, salida): hace el efecto y luego falla
         self.llamadas = []
 
     # ---- ayudas del mundo falso ----
@@ -298,6 +316,12 @@ class PruebaRevision(unittest.TestCase):
         self.llamadas.append((cmd, timeout))
         if tuple(cmd) in self.respuestas:
             return self.respuestas[tuple(cmd)]
+        if tuple(cmd) in self.falla_con_efecto:
+            self.respuestas_normal(cmd)
+            return self.falla_con_efecto[tuple(cmd)]
+        return self.respuestas_normal(cmd)
+
+    def respuestas_normal(self, cmd):
         if cmd[:3] == ["claude", "plugin", "list"]:
             return 0, json.dumps([{"id": i, "version": v, "installPath": r}
                                   for i, (v, r) in self.plugins.items()])
@@ -366,12 +390,23 @@ class PruebaRevision(unittest.TestCase):
         self.assertIsNone(c["diff"])
 
     def test_el_cambio_sale_de_la_version_no_del_codigo_de_salida(self):
-        # el comando falla pero la versión cambió: es un cambio y también un fallo
-        self.respuestas[("npx", "-y", self.SK, "update", "caveman", "-g", "-y")] = (1, "salió mal")
-        self.hashes["caveman"] = "ddddd44444"   # ya no cambia por el comando
+        # El comando actualiza (la versión cambia) pero sale con código 1: según el brief
+        # el cambio sale de comparar versiones y el fallo del código; son las dos cosas.
+        self.falla_con_efecto[("npx", "-y", self.SK, "update", "caveman", "-g", "-y")] = (
+            1, "salió mal")
         r = self.revisar()
-        self.assertEqual(self.por_nombre(r["cambios"], "caveman"), [])
-        self.assertEqual(len(self.por_nombre(r["fallos"], "caveman")), 1)
+        (c,) = self.por_nombre(r["cambios"], "caveman")
+        self.assertEqual((c["antes"], c["despues"]), ("aaaaa", "ccccc"))
+        self.assertEqual(self.por_nombre(r["fallos"], "caveman"),
+                         [{"nombre": "caveman", "tipo": "skill", "error": "salió mal"}])
+        ultima = json.loads((self.home / ".claude" / "al-dia" / "ultima-revision.json").read_text())
+        self.assertIn("skill:caveman", ultima["repetir"])
+
+    def test_sin_cambio_de_version_un_comando_exitoso_no_es_cambio(self):
+        # brand-identity sale con código 0 pero la versión no cambia: ni cambio ni fallo
+        r = self.revisar()
+        self.assertEqual(self.por_nombre(r["cambios"], "brand-identity"), [])
+        self.assertEqual(self.por_nombre(r["fallos"], "brand-identity"), [])
 
     def test_codebase_memory_cambia_sin_carpeta(self):
         r = self.revisar()
@@ -502,7 +537,7 @@ class PruebaRevision(unittest.TestCase):
         self.assertEqual(sorted(r["cambios"][0]),
                          ["antes", "cambio_texto", "despues", "diff", "nombre", "tipo"])
         self.assertEqual(json.loads((d / "ultima-revision.json").read_text()),
-                         {"inicio": self.ahora, "repetir": []})
+                         {"inicio": self.ahora, "ultimo_intento": self.ahora, "repetir": []})
 
     # ---- modo reintento ----
     def test_solo_corre_un_paso_y_conserva_los_cambios_anteriores(self):
@@ -518,7 +553,35 @@ class PruebaRevision(unittest.TestCase):
         nombres = sorted(c["nombre"] for c in r["cambios"])
         self.assertEqual(nombres, ["caveman", "codebase-memory", "superpowers"])
         self.assertEqual(r["fallos"], [])
-        self.assertEqual(r["ts"], int(self.ahora + 3700))
+
+    def test_solo_no_reinicia_el_reloj_de_las_24_horas(self):
+        clave = ("npx", "-y", self.SK, "update", "brand-identity", "-g", "-y")
+        self.respuestas[clave] = (1, "network error")
+        self.revisar()
+        r = self.revisar(ahora=self.ahora + 3700, solo={"skill:brand-identity"})
+        d = self.home / ".claude" / "al-dia"
+        self.assertEqual(r["ts"], int(self.ahora))
+        self.assertEqual(json.loads((d / "resultado.json").read_text())["ts"], int(self.ahora))
+        ultima = json.loads((d / "ultima-revision.json").read_text())
+        self.assertEqual(ultima["inicio"], self.ahora)
+        self.assertEqual(ultima["ultimo_intento"], self.ahora + 3700)
+        self.assertEqual(ultima["repetir"], ["skill:brand-identity"])
+
+    def test_fallo_permanente_con_reintentos_cada_hora_llega_a_revision_completa(self):
+        m = cargar()
+        clave = ("npx", "-y", self.SK, "update", "brand-identity", "-g", "-y")
+        self.respuestas[clave] = (1, "network error")
+        self.revisar()
+        d = self.home / ".claude" / "al-dia"
+        for hora in range(1, 24):
+            ahora = self.ahora + hora * 3600
+            estado = m.leer_json(d / "ultima-revision.json")
+            self.assertEqual(m.que_revisar(estado, ahora), "pendientes", hora)
+            self.assertIsNone(m.que_revisar(estado, ahora - 60), hora)
+            self.revisar(ahora=ahora, solo=set(estado["repetir"]))
+        estado = m.leer_json(d / "ultima-revision.json")
+        self.assertEqual(estado["inicio"], self.ahora)
+        self.assertEqual(m.que_revisar(estado, self.ahora + 24 * 3600), "todo")
 
     def test_solo_reemplaza_fallos_por_los_nuevos(self):
         clave = ("npx", "-y", self.SK, "update", "brand-identity", "-g", "-y")
@@ -622,8 +685,7 @@ class PruebaRevision(unittest.TestCase):
         fuente = (RAIZ / "herramientas" / "instalar_comun.py").read_text(encoding="utf-8")
         esperado = re.search(r'^SKILLS_CLI\s*=\s*"([^"]+)"', fuente, re.M).group(1)
         m = cargar()
-        self.assertEqual(m.SKILLS_CLI, esperado)
-        antes = {"skill:caveman": self.antes_completo()["skill:caveman"]}
+        self.assertEqual(m.skills_cli(self.home), esperado)
         ejecutadas = []
 
         def ejecutar(cmd, timeout):
@@ -631,6 +693,34 @@ class PruebaRevision(unittest.TestCase):
             return 0, "ok"
         m.revisar(self.home, self.ahora, ejecutar, self.buscar)
         self.assertIn(["npx", "-y", esperado, "update", "caveman", "-g", "-y"], ejecutadas)
+
+    def cargar_instalado(self):
+        """Simula el hook copiado a ~/.claude/hooks: sin `herramientas/` al lado."""
+        hooks = self.home / ".claude" / "hooks"
+        hooks.mkdir(parents=True)
+        copia = hooks / "al_dia.py"
+        copia.write_text(MODULO.read_text(encoding="utf-8"), encoding="utf-8")
+        spec = importlib.util.spec_from_file_location("al_dia_instalado", copia)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        return modulo
+
+    def test_cli_skills_con_el_hook_instalado_sale_del_repo_en_home(self):
+        self._texto(self.home / "claude-code-entorno" / "herramientas" / "instalar_comun.py",
+                    'import os\nSKILLS_CLI = "skills@9.9.9"\n')
+        m = self.cargar_instalado()
+        self.assertEqual(m.skills_cli(self.home), "skills@9.9.9")
+        ejecutadas = []
+
+        def ejecutar(cmd, timeout):
+            ejecutadas.append(list(cmd))
+            return 0, "ok"
+        m.revisar(self.home, self.ahora, ejecutar, self.buscar)
+        self.assertIn(["npx", "-y", "skills@9.9.9", "update", "caveman", "-g", "-y"], ejecutadas)
+
+    def test_cli_skills_ultimo_recurso_si_no_hay_ningun_archivo(self):
+        m = self.cargar_instalado()
+        self.assertEqual(m.skills_cli(self.home), "skills@1.7.2")
 
     def test_textos_filtra_por_extension_tamano_y_carpetas(self):
         d = self.home / "t"

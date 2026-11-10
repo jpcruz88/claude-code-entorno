@@ -26,20 +26,30 @@ def carpeta(home):
     return Path(home) / ".claude" / "al-dia"
 
 
+def _hora(valor):
+    """Número válido (no bool) o None."""
+    return None if isinstance(valor, bool) or not isinstance(valor, (int, float)) else valor
+
+
 def que_revisar(estado, ahora):
     """Decide qué revisar: "todo", "pendientes" o None.
 
-    `estado` es el contenido de ultima-revision.json: {"inicio": float, "repetir": [str]}.
+    `estado` es el contenido de ultima-revision.json:
+    {"inicio": float, "ultimo_intento": float (opcional), "repetir": [str]}.
+    Las 24 h cuentan desde `inicio` (la última revisión completa); el reintento de
+    pendientes, desde `ultimo_intento` (o desde `inicio` si falta).
     """
     if not isinstance(estado, dict):
         return "todo"
-    inicio = estado.get("inicio")
-    if isinstance(inicio, bool) or not isinstance(inicio, (int, float)):
+    inicio = _hora(estado.get("inicio"))
+    if inicio is None:
         return "todo"
-    transcurrido = ahora - inicio
-    if transcurrido >= HORAS_REVISION:
+    if ahora - inicio >= HORAS_REVISION:
         return "todo"
-    if estado.get("repetir") and transcurrido >= REINTENTO:
+    ultimo = _hora(estado.get("ultimo_intento"))
+    if ultimo is None:
+        ultimo = inicio
+    if estado.get("repetir") and ahora - ultimo >= REINTENTO:
         return "pendientes"
     return None
 
@@ -313,22 +323,33 @@ MAX_ERROR = 120
 EN_USO = ("in use", "being used", "busy", "denied")
 
 
-def _leer_skills_cli():
-    """SKILLS_CLI de herramientas/instalar_comun.py, para no duplicarlo a mano."""
-    ruta = Path(__file__).resolve().parent.parent.parent / "herramientas" / "instalar_comun.py"
+def _skills_cli_de(ruta):
     try:
         m = re.search(r'^SKILLS_CLI\s*=\s*["\']([^"\']+)["\']',
                       ruta.read_text(encoding="utf-8"), re.M)
     except OSError:
-        m = None
-    # Último recurso: el hook también corre copiado fuera del repo, sin ese archivo al lado.
-    return m.group(1) if m else "skills@1.7.2"
+        return None
+    return m.group(1) if m else None
 
 
-SKILLS_CLI = _leer_skills_cli()
+def skills_cli(home=None):
+    """SKILLS_CLI de herramientas/instalar_comun.py, para no duplicarlo a mano.
+
+    Busca en el repo vecino a este archivo y, con el hook instalado en ~/.claude/hooks,
+    en <home>/claude-code-entorno.
+    """
+    candidatos = [Path(__file__).resolve().parent.parent.parent / "herramientas" / "instalar_comun.py",
+                  Path(home if home is not None else Path.home())
+                  / "claude-code-entorno" / "herramientas" / "instalar_comun.py"]
+    for ruta in candidatos:
+        valor = _skills_cli_de(ruta)
+        if valor:
+            return valor
+    # Último recurso: ni el repo ni ~/claude-code-entorno están en este equipo.
+    return "skills@1.7.2"
 
 
-def pasos(antes, cli_skills=SKILLS_CLI):
+def pasos(antes, cli_skills):
     """Pasos de actualización: [(clave, comando, timeout)], solo de lo que está en `antes`.
 
     Los `marketplace update` van primero, para que `plugin update` vea lo último.
@@ -442,7 +463,7 @@ def _ruta_diff(home, ahora, nombre, tipo, usadas):
     return ruta
 
 
-def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=SKILLS_CLI):
+def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
     """Actualiza, compara la foto de antes con la de después y guarda el resultado.
 
     `solo` (modo reintento): claves de los únicos pasos que corren; el resultado nuevo
@@ -450,7 +471,7 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=SKILLS_C
     """
     home = Path(home)
     antes = foto(home, ejecutar, buscar)
-    lista = pasos(antes, cli_skills)
+    lista = pasos(antes, cli_skills or skills_cli(home))
     if solo is not None:
         lista = [p for p in lista if p[0] in solo]
 
@@ -498,17 +519,25 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=SKILLS_C
                 cambio["diff"] = str(destino)
         cambios.append(cambio)
 
+    ts, inicio = int(ahora), ahora
     if solo is not None:
         previo = _resultado_previo(home, ahora)
         if previo:
             cambios = [c for c in previo["cambios"] if isinstance(c, dict)] + cambios
+            # El reintento no reinicia las 24 h: se conserva el reloj de la revisión completa.
+            ts = previo["ts"]
+            estado = leer_json(carpeta(home) / "ultima-revision.json") or {}
+            inicio = _hora(estado.get("inicio"))
+            if inicio is None:
+                inicio = ts
 
     con_cambio = {(c.get("nombre"), c.get("tipo")) for c in cambios}
     al_dia = sum(1 for k, d in despues.items()
                  if k not in malas and (d["nombre"], d["tipo"]) not in con_cambio)
-    resultado = {"version": 1, "ts": int(ahora), "cambios": cambios, "fallos": fallos,
+    resultado = {"version": 1, "ts": ts, "cambios": cambios, "fallos": fallos,
                  "pendientes": pendientes, "al_dia": al_dia}
     d_estado = carpeta(home)
     escribir_json(d_estado / "resultado.json", resultado)
-    escribir_json(d_estado / "ultima-revision.json", {"inicio": ahora, "repetir": malas})
+    escribir_json(d_estado / "ultima-revision.json",
+                  {"inicio": inicio, "ultimo_intento": ahora, "repetir": malas})
     return resultado
