@@ -369,13 +369,13 @@ class Instalador:
         self.retirar_mods(claude, instalados)
         for nombre in nombres:
             pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
-            if pid in instalados:
-                self.info("ya instalado: %s" % pid)
-                continue
-            self.info("$ claude plugin install %s --scope user" % pid)
-            codigo, salida = self.correr([claude, "plugin", "install", pid, "--scope", "user"])
+            # Ya instalado: se actualiza. La caché de plugins guarda una copia por
+            # versión, así que sin este paso un `git pull` no trae el mod nuevo.
+            accion = "update" if pid in instalados else "install"
+            self.info("$ claude plugin %s %s --scope user" % (accion, pid))
+            codigo, salida = self.correr([claude, "plugin", accion, pid, "--scope", "user"])
             if codigo == 0:
-                self.info("instalado: %s" % pid)
+                self.info("%s: %s" % ("al día" if accion == "update" else "instalado", pid))
             else:
                 self.fallo("mod %s: %s" % (nombre, resumen_error(salida)))
 

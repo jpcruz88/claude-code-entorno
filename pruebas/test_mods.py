@@ -4,6 +4,7 @@ El repo es su propio marketplace (.claude-plugin/marketplace.json): cada mod de
 mods/ se instala con `claude plugin install <mod>@claude-code-entorno`. Los
 instaladores lo hacen por defecto; --sin-mods lo omite.
 """
+import importlib.util
 import json
 import subprocess
 import unittest
@@ -76,6 +77,54 @@ class InstalarMods(BaseInstalarSh):
         salida = self.correr(OPCIONES + ["--sin-mods"], subprocess.DEVNULL)
         self.assertNotIn(NOMBRE_MARKETPLACE, self.leer("llamadas-claude.txt"))
         self.assertIn("Se omiten (--sin-mods).", salida)
+
+
+def cargar_instalar_comun():
+    ruta = RAIZ / "herramientas" / "instalar_comun.py"
+    spec = importlib.util.spec_from_file_location("instalar_comun_mods", str(ruta))
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+class ActualizarModsYaInstalados(unittest.TestCase):
+    """Un mod ya instalado se actualiza: si no, `git pull` no trae su versión nueva."""
+
+    def setUp(self):
+        modulo = cargar_instalar_comun()
+        inst = object.__new__(modulo.Instalador)
+        inst.sin_mods = False
+        inst.simular = False
+        inst.pendientes = []
+        inst.llamadas = []
+        inst.fallos = []
+        inst.paso = lambda *a: None
+        inst.info = lambda *a: None
+        inst.aviso = lambda *a: None
+        inst.fallo = inst.fallos.append
+        inst.claude = lambda: "claude"
+        inst.nombres_mods = lambda: ["tablero", "secret-guard"]
+
+        def correr(args, timeout=600, env_extra=None):
+            inst.llamadas.append(" ".join(args[1:]))
+            if args[1:] == ["plugin", "list", "--json"]:
+                return 0, json.dumps([{"id": "tablero@%s" % NOMBRE_MARKETPLACE}])
+            if args[1:] == ["plugin", "marketplace", "list", "--json"]:
+                return 0, json.dumps([{"name": NOMBRE_MARKETPLACE}])
+            return 0, ""
+
+        inst.correr = correr
+        self.inst = inst
+
+    def test_actualiza_el_ya_instalado_e_instala_el_que_falta(self):
+        self.inst.mods()
+        self.assertIn("plugin update tablero@%s --scope user" % NOMBRE_MARKETPLACE,
+                      self.inst.llamadas)
+        self.assertIn("plugin install secret-guard@%s --scope user" % NOMBRE_MARKETPLACE,
+                      self.inst.llamadas)
+        self.assertNotIn("plugin install tablero@%s --scope user" % NOMBRE_MARKETPLACE,
+                         self.inst.llamadas)
+        self.assertEqual(self.inst.fallos, [])
 
 
 if __name__ == "__main__":
