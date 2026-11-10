@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.15 (tablero)
+
+- With 0 or 1 task the map is compact: 28 rows instead of 42. The task card sits under the lead, in the right half, with its «de vuelta al lead» line. The registro and the status bar move up with it. With 0 tasks the card reads «SIN TAREAS · el lead espera trabajo».
+- Fix: with 0 tasks the map no longer shows «de vuelta al lead».
+- Tests: `tests/mapa.test.ts` covers the compact height, the 0-task text, the 1-task card and the status row.
+
 ## 0.3.14 (tablero)
 
 - The main card shows the skills and MCP servers the session has used, with a count each: `habilidades caveman×2 · MCP tablero×3`. The line appears only once something has been used. The counts reset with `/clear`. They count from every loop, so a subagent's use counts too.
