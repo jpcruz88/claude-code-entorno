@@ -1,6 +1,4 @@
-// Movimiento de las barras de la banda, sin motor: cada llamada da un cuadro.
-
-export type Barras = { contexto: number; uso: number }
+// Movimiento de los valores que mira el reloj del panel, sin motor: cada llamada da un cuadro.
 
 /** Acerca `mostrado` a `objetivo` en `pasos` cuadros; a menos de medio punto, llega. Un objetivo inválido deja el valor. */
 export const avanzar = (mostrado: number, objetivo: number, pasos = 4): number => {

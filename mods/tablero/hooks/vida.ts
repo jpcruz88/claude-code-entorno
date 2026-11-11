@@ -2,6 +2,7 @@
 // de color (verde, ámbar, rojo) según se agota. Solo cálculo: el dibujo lo pone register.tsx
 // a partir de estas filas. En la terminal el degradado son tres tonos; la app de escritorio
 // pinta un degradado continuo.
+import type { Colors } from './core'
 import type { Tono } from './banda-modelo'
 
 /** Una fila de la barra de vida: trozos de texto, cada uno con su tono. */
@@ -13,6 +14,15 @@ export const BARRA_ANCHO = 20
 export const vidaDe = (contextoPct: number | null): number | null => {
   if (contextoPct === null || !Number.isFinite(contextoPct)) return null
   return Math.min(100, Math.max(0, Math.round(100 - contextoPct)))
+}
+
+/** El color de la paleta que corresponde a cada tono de texto. */
+export const COLOR_DE: Record<Tono, keyof Colors> = {
+  normal: 'text',
+  tenue: 'dim',
+  aviso: 'amber',
+  peligro: 'warn',
+  acento: 'main',
 }
 
 /** Color de la parte llena: verde con vida alta, ámbar a media, rojo cuando queda poca. */
