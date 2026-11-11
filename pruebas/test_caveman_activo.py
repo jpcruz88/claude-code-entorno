@@ -60,15 +60,20 @@ class InicioDeSesion(ConCarpeta):
         self.assertIn("full", texto)
         self.assertEqual(ca.leer_modo(self.home, "s1"), "full")
 
-    def test_incluye_las_reglas_de_la_skill_instalada_sin_el_frontmatter(self):
-        self.poner_skill()
+    def test_el_texto_de_inicio_es_corto_y_no_copia_la_skill_entera(self):
+        """El texto se paga en cada sesión y en cada subagente: lleva las reglas, no la skill."""
+        self.poner_skill("# caveman\n\n" + "RELLENO-DE-LA-SKILL " * 400)
         texto = contexto(ca.main(inicio(), self.home))
-        self.assertIn("REGLA-DE-LA-SKILL", texto)
-        self.assertNotIn("name: caveman", texto)
+        self.assertNotIn("RELLENO-DE-LA-SKILL", texto)
+        self.assertLess(len(texto), 1500)
 
-    def test_sin_la_skill_instalada_da_las_reglas_minimas(self):
+    def test_da_las_reglas_aunque_la_skill_no_este_instalada(self):
         texto = contexto(ca.main(inicio(), self.home))
-        self.assertIn("sin relleno", texto)
+        for regla in ("sin relleno", "negación", "exactos"):
+            self.assertIn(regla, texto)
+
+    def test_remite_a_la_skill_para_el_detalle(self):
+        self.assertIn("skill `caveman`", contexto(ca.main(inicio(), self.home)))
 
     def test_dice_que_lo_escrito_para_otros_va_en_espanol_normal(self):
         texto = contexto(ca.main(inicio(), self.home))
