@@ -128,6 +128,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "Stop": [
@@ -137,6 +147,17 @@
             "type": "command",
             "command": "python3 ~/.claude/hooks/memoria-maestra.py fin",
             "timeout": 60
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
           }
         ]
       }

@@ -24,6 +24,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Avisa para que resumas o cambies de sesión. |
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
 | Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
+| Hook `caveman-activo.py` | Siempre | Activa el modo caveman al abrir la sesión y lo recuerda en cada mensaje. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
 | Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet`, `opus` o `fable`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
 | Hook `jev-reintento.py` | Después de un fallo de herramienta | Al segundo fallo seguido con el mismo error, pregunta a Jev si reintentar, cambiar de enfoque o parar. Su sugerencia llega como nota. |
