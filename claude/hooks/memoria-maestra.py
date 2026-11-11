@@ -4,7 +4,10 @@
 Modos (los llama la configuración de hooks):
 - inicio  (SessionStart): si esta computadora no tiene memoria maestra, pide a Claude
   que pregunte al usuario si la crea. Si ya la tiene, trae los últimos cambios.
-- fin     (Stop): si la memoria cambió, la comitea y la sube al repo privado.
+- fin     (Stop): si la memoria cambió, la comitea y la sube al repo privado. Antes de
+  comitear aparta los archivos que parecen tener una clave (no los sube). Si el rebase
+  choca, lo aborta y no empuja. Cualquier problema queda como aviso para el usuario: en el
+  momento (systemMessage) y otra vez al abrir la siguiente sesión.
 - configurar: crea (o enlaza) la memoria maestra. Sin --aplicar solo muestra el plan.
 
 Cómo queda: la carpeta de memoria del proyecto se vuelve un enlace a
@@ -27,7 +30,23 @@ from pathlib import Path
 
 NOMBRE_REPO = "memoria-maestra"
 CLON_POR_OMISION = Path.home() / NOMBRE_REPO
-TRAILER = "Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>"
+# No afirma un modelo concreto: el hook no sabe con cuál se trabajó.
+TRAILER = "Co-Authored-By: Claude <noreply@anthropic.com>"
+TOPE_ESCANEO = 2 * 1024 * 1024  # bytes que se leen de cada archivo al buscar claves
+# Patrones de claves y tokens. El nombre es lo único que se muestra: nunca el secreto.
+SECRETOS = [
+    ("clave sk-", re.compile(r"\bsk-[A-Za-z0-9_-]{20,}")),
+    ("clave sk_live_", re.compile(r"\bsk_live_[A-Za-z0-9]{16,}")),
+    ("token ghp_ de GitHub", re.compile(r"\bghp_[A-Za-z0-9]{30,}")),
+    ("token github_pat_", re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}")),
+    ("clave AKIA de AWS", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("token xox de Slack", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("clave AIza de Google", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+    ("llave privada PEM", re.compile(r"-{5}BEGIN [A-Z ]*PRIVATE KEY-{5}")),
+    ("token JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}")),
+    ("URL de base de datos con clave", re.compile(r"\bpostgres(?:ql)?://[^\s:/@]+:[^\s@/]+@")),
+    ("token de bot de Telegram", re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b")),
+]
 PREGUNTA = (
     "Memoria maestra: esta computadora todavía no tiene una memoria maestra privada. "
     "Antes de seguir, pregúntale al usuario, en una frase, si quiere crearla: un repo "
@@ -52,7 +71,12 @@ def carpeta_memoria(cwd, base=None):
 
 
 def slug_proyecto(cwd):
-    """Nombre legible y estable del proyecto: la última carpeta, en minúsculas y con guiones."""
+    """Nombre legible y estable del proyecto: la última carpeta, en minúsculas y con guiones.
+
+    Riesgo conocido: dos proyectos con la misma última carpeta (por ejemplo ~/a/app y
+    ~/b/app) comparten la misma carpeta en el repo privado. No se cambia el cálculo porque
+    rompería el enlace de las memorias que ya existen.
+    """
     nombre = Path(str(cwd)).name or "proyecto"
     limpio = re.sub(r"[^a-z0-9]+", "-", nombre.lower()).strip("-")
     return limpio or "proyecto"
@@ -69,16 +93,62 @@ def _identidad(cwd):
     return ["-c", "user.name=Memoria maestra", "-c", "user.email=memoria@localhost"]
 
 
+def buscar_secreto(contenido):
+    """Nombre del tipo de clave que aparece en el texto, o None si no hay ninguna."""
+    for tipo, patron in SECRETOS:
+        if patron.search(contenido):
+            return tipo
+    return None
+
+
+def _apartar_secretos(clon):
+    """Saca del commit los archivos preparados que parecen tener una clave. Devuelve avisos."""
+    r = git(clon, "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR")
+    avisos = []
+    for ruta in [x for x in r.stdout.split("\0") if x]:
+        try:
+            with open(os.path.join(str(clon), ruta), "rb") as f:
+                contenido = f.read(TOPE_ESCANEO).decode("utf-8", "replace")
+        except OSError:
+            continue
+        tipo = buscar_secreto(contenido)
+        if tipo:
+            git(clon, "reset", "-q", "--", ruta)
+            avisos.append("no subí %s porque parece tener un secreto (%s). Quítalo de ese "
+                          "archivo y se subirá en la próxima sesión." % (ruta, tipo))
+    return avisos
+
+
+def _rebase_en_curso(clon):
+    for nombre in ("rebase-merge", "rebase-apply"):
+        ruta = git(clon, "rev-parse", "--git-path", nombre).stdout.strip()
+        if ruta and Path(clon, ruta).exists():
+            return True
+    return False
+
+
 def _commit_y_subir(clon, mensaje):
-    git(clon, "add", "-A", "--", "memoria")
+    """Comitea y sube la memoria. Devuelve la lista de avisos para el usuario ([] si todo bien)."""
+    if git(clon, "add", "-A", "--", "memoria").returncode != 0:
+        return ["no pude preparar los cambios. Revisa la carpeta %s (git status)." % clon]
+    avisos = _apartar_secretos(clon)
     if git(clon, "diff", "--cached", "--quiet").returncode == 0:
-        return False
+        return avisos
     cmd = ["git", "-C", str(clon)] + _identidad(clon) + ["commit", "-q", "-m", mensaje,
                                                           "-m", TRAILER]
-    subprocess.run(cmd, capture_output=True, text=True)
-    git(clon, "pull", "-q", "--rebase", "origin", "HEAD")
-    git(clon, "push", "-q", "origin", "HEAD")
-    return True
+    if subprocess.run(cmd, capture_output=True, text=True).returncode != 0:
+        return avisos + ["no pude hacer commit. Revisa la carpeta %s (git status)." % clon]
+    if git(clon, "pull", "-q", "--rebase", "origin", "HEAD").returncode != 0:
+        if _rebase_en_curso(clon):
+            git(clon, "rebase", "--abort")
+            return avisos + ["tus cambios chocan con los del repo privado y no subí nada. "
+                             "Revisa la carpeta %s: resuelve con `git pull --rebase` y "
+                             "luego `git push`." % clon]
+        # Otro fallo (por ejemplo, el remoto aún vacío): se intenta subir igual.
+    if git(clon, "push", "-q", "origin", "HEAD").returncode != 0:
+        return avisos + ["no pude subir la memoria al repo privado. Revisa la carpeta %s "
+                         "(git status y git push)." % clon]
+    return avisos
 
 
 def _enlazar(memoria, destino):
@@ -114,10 +184,11 @@ def configurar(memoria, clon, remoto, config, proyecto="principal"):
         if git(clon, "rev-parse", "--verify", "-q", "origin/main").returncode == 0:
             git(clon, "checkout", "-q", "-B", "main", "origin/main")
     _enlazar(memoria, clon / "memoria" / proyecto)
-    _commit_y_subir(clon, "memoria: configura la memoria maestra")
+    avisos = _commit_y_subir(clon, "memoria: configura la memoria maestra")
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text(json.dumps({"remoto": remoto, "clon": str(clon),
                                   "memoria": str(memoria)}, indent=2) + "\n", encoding="utf-8")
+    return avisos
 
 
 def enlazar_proyecto(cwd, clon, base=None):
@@ -127,11 +198,41 @@ def enlazar_proyecto(cwd, clon, base=None):
 
 
 def sincronizar(clon):
-    """Sube los cambios de la memoria al repo privado (si los hay)."""
+    """Sube los cambios de la memoria al repo privado (si los hay). Devuelve los avisos."""
     clon = Path(clon)
     if not (clon / ".git").exists():
-        return
-    _commit_y_subir(clon, "memoria: actualiza")
+        return []
+    return _commit_y_subir(clon, "memoria: actualiza")
+
+
+def ruta_aviso():
+    """Aviso pendiente para el usuario, junto a la configuración."""
+    return config_path().with_name("memoria-maestra-aviso.txt")
+
+
+def texto_aviso(avisos):
+    return "Memoria maestra: " + " ".join(avisos)
+
+
+def guardar_aviso(avisos):
+    """Guarda el aviso para repetirlo al abrir la próxima sesión; sin avisos, lo borra."""
+    ruta = ruta_aviso()
+    if avisos:
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text(texto_aviso(avisos) + "\n", encoding="utf-8")
+    elif ruta.exists():
+        ruta.unlink()
+
+
+def tomar_aviso():
+    """Lee y borra el aviso pendiente. '' si no hay."""
+    ruta = ruta_aviso()
+    try:
+        texto = ruta.read_text(encoding="utf-8").strip()
+        ruta.unlink()
+    except OSError:
+        return ""
+    return ("Dile esto al usuario al empezar, tal cual y en una frase: " + texto) if texto else ""
 
 
 def traer(clon):
@@ -222,7 +323,7 @@ def modo_inicio():
         return
     traer(cfg.get("clon", ""))
     enlazar_proyecto(cwd, cfg.get("clon", ""))
-    _emitir(texto_inicio(cwd))
+    _emitir("\n\n".join(x for x in [tomar_aviso(), texto_inicio(cwd)] if x))
 
 
 def modo_fin():
@@ -231,7 +332,10 @@ def modo_fin():
     escribir_handoff_auto(cwd)
     cfg = leer_config()
     if cfg is not None:
-        sincronizar(cfg.get("clon", ""))
+        avisos = sincronizar(cfg.get("clon", ""))
+        guardar_aviso(avisos)
+        if avisos:
+            print(json.dumps({"systemMessage": texto_aviso(avisos)}, ensure_ascii=False))
 
 
 def modo_configurar(argumentos):
@@ -260,7 +364,8 @@ def modo_configurar(argumentos):
                 print("No pude crear el repo privado: " + r.stderr.strip())
                 return 1
         remoto = "https://github.com/%s.git" % slug
-    configurar(memoria, clon, remoto, config_path())
+    for aviso in configurar(memoria, clon, remoto, config_path()):
+        print("Aviso: " + aviso)
     print("Memoria maestra lista: %s (privado). Carpeta enlazada: %s" % (clon, memoria))
     return 0
 
