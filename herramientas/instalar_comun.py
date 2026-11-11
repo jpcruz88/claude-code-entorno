@@ -39,6 +39,7 @@ MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-
 NOMBRE_MARKETPLACE_MODS = "claude-code-entorno"
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
 MARCADOR_HERDR = "{{RUTA_HERDR}}"
+MARCADOR_ESPERA = "{{RUTA_ESPERA}}"
 # Skill oficial de herdr: enseña a Claude a manejar paneles y otros agentes.
 SKILL_HERDR = ("herdr", "herdrdev/herdr@herdr")
 # Versión fija del instalador de skills (vercel-labs/skills): la misma con la que
@@ -549,8 +550,14 @@ class Instalador:
         if not herdr:
             self.aviso("No encontré herdr; no cambio la config de Ghostty (abre herdr al arrancar).")
             return
+        # El guion que espera a los discos externos antes de abrir herdr.
+        origen = REPO / "herdr" / "esperar-discos.sh"
+        espera = self.home / ".config" / "herdr" / "esperar-discos.sh"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), espera,
+                              origen.relative_to(REPO), ejecutable=True)
         plantilla = REPO / "ghostty" / "config"
-        texto = plantilla.read_text(encoding="utf-8").replace(MARCADOR_HERDR, herdr)
+        texto = plantilla.read_text(encoding="utf-8").replace(MARCADOR_ESPERA, str(espera))
+        texto = texto.replace(MARCADOR_HERDR, herdr)
         self.instalar_archivo(texto.replace("\r\n", "\n").encode("utf-8"),
                               self.home / ".config" / "ghostty" / "config",
                               plantilla.relative_to(REPO))
