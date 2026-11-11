@@ -139,6 +139,56 @@ class GuardKill(unittest.TestCase):
             with self.subTest(c):
                 self.assertBloqueado(c)
 
+    def test_bloqueados_con_bucles_prefijos_y_xargs(self):
+        for c in [
+            "for p in $(pgrep -f cat); do kill $p; done",
+            "for p in `pgrep -f cat`; do kill -9 $p; done",
+            "pgrep -f cat | while read p; do kill $p; done",
+            "pidof iTerm2 | while read p; do kill \"$p\"; done",
+            "ps aux | grep -i iterm | awk '{print $2}' | while read p; do kill $p; done",
+            "nice pkill -f cat",
+            "nice -n 10 pkill -f cat",
+            "nohup killall iTerm2",
+            "sudo -u root pkill -f cat",
+            "env LANG=C pkill -f cat",
+            "time pkill -f cat",
+            "command pkill -f cat",
+            "echo cat | xargs pkill -f",
+            "printf 'iTerm2' | xargs killall",
+            "cat nombres.txt | xargs pkill -f",
+            "if pgrep -f cat; then pkill -f cat; fi",
+        ]:
+            with self.subTest(c):
+                self.assertBloqueado(c)
+
+    def test_permitidos_sin_falsos_positivos_nuevos(self):
+        for c in [
+            "kill $!",
+            "kill 4242",
+            "for p in 4242 4243; do kill $p; done",
+            "pgrep -f mi-servidor-unico-de-prueba | while read p; do kill $p; done",
+            "echo mi-servidor-unico-de-prueba | xargs pkill -f",
+            "nice pkill -f mi-servidor-unico-de-prueba",
+            "pgrep -fl cat; kill 4242",
+            "pgrep -f cat | while read p; do echo $p; done",
+            "command -v pkill",
+            "while read linea; do echo $linea; done < lista.txt; kill $!",
+        ]:
+            with self.subTest(c):
+                self.assertPermitido(c)
+
+    def test_proyectos_en_volumenes_no_son_del_sistema(self):
+        """Un proceso de un proyecto en un disco externo no es «del sistema»."""
+        # Partido: la prueba no lleva rutas reales de discos montados.
+        volumenes = "/Vol" + "umes/"
+        disco = "KING" + "STON"
+        tabla = {
+            700: (1, volumenes + disco + "/Proyectos/app/servidor-local --puerto 3000"),
+            701: (1, volumenes + "Instalador/Instalador.app/Contents/MacOS/Instalador"),
+        }
+        self.assertIsNone(gk.why_protected(700, tabla, [], None))
+        self.assertIn("sistema", gk.why_protected(701, tabla, [], None))
+
     def test_bloqueados_windows_desde_bash(self):
         for c in [
             "taskkill /IM node.exe /F",

@@ -7,7 +7,9 @@ terminal, Claude Desktop y varias apps.
 
 Qué hace:
 - macOS y Linux: para cada pkill / killall / `pgrep | xargs kill` /
-  `ps | grep | xargs kill`, pregunta a pgrep qué procesos atraparía AHORA. Si alguno
+  `ps | grep | xargs kill` (también con `while read … do kill`, `for p in $(pgrep …)`,
+  prefijos como nice, nohup, sudo o env, y `echo patrón | xargs pkill`), pregunta a pgrep
+  qué procesos atraparía AHORA. Si alguno
   es una app o proceso del sistema, un shell de terminal, una sesión de Claude (o
   algo que cuelga de otra sesión), o son demasiados, lo deniega.
 - Windows: deniega `taskkill /IM <nombre>` (y /FI que no sea por PID),
@@ -34,13 +36,22 @@ ES_WINDOWS = os.name == "nt"
 MAX_MATCHES = 10
 MIN_F_PATTERN = 10  # largo mínimo de un patrón -f que no se pudo resolver
 SYSTEM_PREFIXES = ("/Applications/", "/System/", "/Library/", "/usr/libexec/",
-                   "/usr/sbin/", "/sbin/", "/Volumes/")
+                   "/usr/sbin/", "/sbin/")
+# En /Volumes solo cuentan las apps (un instalador montado, una app en un disco externo);
+# un proyecto que vive en un disco externo no es «del sistema».
+APP_EN_VOLUMEN = re.compile(r"^/Volumes/.*?\.app/Contents/")
 SYSTEM_NAMES = {"login", "launchd", "loginwindow", "WindowServer", "Finder",
                 "Dock", "SystemUIServer", "iTerm2", "Terminal", "claude",
                 "sshd", "tmux", "screen", "systemd", "gnome-shell", "Xorg",
                 "Xwayland"}
 SYSTEM_NAME_PREFIXES = ("iTermServer",)  # el nombre lleva la versión: iTermServer-3.x
-WRAPPERS = {"sudo", "command", "exec", "nohup", "time", "builtin"}
+WRAPPERS = {"sudo", "doas", "command", "exec", "nohup", "time", "builtin", "nice"}
+# Opciones de los envoltorios que llevan un valor aparte: `sudo -u root`, `nice -n 10`.
+OPCIONES_CON_VALOR = {"sudo": {"-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"},
+                      "doas": {"-u", "-C"}, "nice": {"-n"}, "time": {"-f", "-o"},
+                      "exec": {"-a"}}
+# Palabras del shell que van delante de un comando: `do kill $p`, `then pkill …`.
+PALABRAS_SHELL = {"do", "then", "else", "elif", "if", "while", "until", "!", "{"}
 SIGNAL_RE = re.compile(r"^-(\d+|(SIG)?[A-Z][A-Z0-9]+)$")
 REDIR_RE = re.compile(r"^(\d*|&)(>>?|<)(&?\d+|&-)?(.*)$")
 
@@ -156,8 +167,15 @@ def strip_wrappers(argv):
         a = argv[i]
         if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", a):
             i += 1
-        elif a in WRAPPERS:
+        elif a in PALABRAS_SHELL:
             i += 1
+        elif a in WRAPPERS:
+            if a == "command" and i + 1 < len(argv) and argv[i + 1] in ("-v", "-V"):
+                return []  # `command -v pkill` solo pregunta si existe
+            con_valor = OPCIONES_CON_VALOR.get(a, ())
+            i += 1
+            while i < len(argv) and argv[i].startswith("-"):
+                i += 2 if argv[i] in con_valor else 1
         elif a == "env":
             i += 1
             while i < len(argv) and (argv[i].startswith("-") or "=" in argv[i]):
@@ -223,8 +241,8 @@ def why_protected(pid, table, my_chain, my_claude):
         return "es un shell de una pestaña de terminal"
     if is_claude(command):
         return "es una sesión de Claude"
-    if (command.startswith(SYSTEM_PREFIXES) or base in SYSTEM_NAMES
-            or base.startswith(SYSTEM_NAME_PREFIXES)):
+    if (command.startswith(SYSTEM_PREFIXES) or APP_EN_VOLUMEN.match(command)
+            or base in SYSTEM_NAMES or base.startswith(SYSTEM_NAME_PREFIXES)):
         return "es una app o proceso del sistema"
     for anc in ancestors(ppid, table):
         if is_claude(table[anc][1]) and anc != my_claude:
@@ -363,6 +381,39 @@ def check_ps_grep(segs, idx):
         deny("Bloqueado `%s`: manda a kill la lista de procesos sin filtrar. %s"
              % (label, CONSEJO_PID))
     evaluate(label, (["-i"] if ignora_mayus else []) + ["-f", patron], patron, True)
+
+
+def check_xargs_pkill(segs, idx):
+    """`echo patrón | xargs pkill -f`: el patrón llega por la tubería."""
+    s = segs[idx]
+    j = next(k for k, a in enumerate(s) if nombre(a) in ("pkill", "killall"))
+    sub = s[j:]
+    label = " | ".join(" ".join(x) for x in segs)
+    previo = segs[idx - 1] if idx > 0 else []
+    palabras = [a for a in previo[1:] if not a.startswith("-")]
+    if previo and nombre(previo[0]) in ("echo", "printf") and palabras:
+        sub = sub + " ".join(palabras).split()  # xargs parte la entrada por espacios
+        if nombre(sub[0]) == "pkill":
+            check_pkill(sub, label=label)
+        else:
+            check_killall(sub)
+        return
+    deny("Bloqueado `%s`: `xargs %s` recibe por tubería los nombres a matar y no se puede "
+         "ver qué procesos atraparía. %s" % (label, nombre(sub[0]), CONSEJO_PID))
+
+
+def lee_para_kill(todos, i):
+    """¿El pipeline i termina en `while read` y el cuerpo del bucle (hasta `done`) llama a kill?"""
+    if nombre(todos[i][-1][0]) != "read":
+        return False
+    for segs in todos[i + 1:]:
+        for s in segs:
+            n = nombre(s[0])
+            if n == "kill" or (n == "xargs" and "kill" in s):
+                return True
+            if n == "done":
+                return False
+    return False
 
 
 # ---------------------------------------------------------------- Windows
@@ -548,10 +599,10 @@ def analyze(cmd, modo="bash", depth=0):
                 elif n == "pidof" and re.search(r"(\$\(|`)\s*pidof\b", cmd):
                     for prog in [a for a in s[1:] if not a.startswith("-")]:
                         evaluate(cmd.strip(), ["-x", prog], prog, False)
-    for segs in todos:
+    for num, segs in enumerate(todos):
         nombres = [nombre(s[0]) for s in segs]
         feeds_kill = any(n == "kill" or (n == "xargs" and "kill" in s)
-                         for n, s in zip(nombres[1:], segs[1:]))
+                         for n, s in zip(nombres[1:], segs[1:])) or lee_para_kill(todos, num)
         for idx, (n, s) in enumerate(zip(nombres, segs)):
             ultimo = idx == len(segs) - 1
             if n in SHELLS_POSIX:
@@ -574,10 +625,15 @@ def analyze(cmd, modo="bash", depth=0):
                 check_kill(s)
             elif n == "pgrep" and feeds_kill and not ultimo:
                 check_pkill(s, label=" | ".join(" ".join(x) for x in segs))
+            elif n == "pidof" and feeds_kill and not ultimo:
+                for prog in [a for a in s[1:] if not a.startswith("-")]:
+                    evaluate(" | ".join(" ".join(x) for x in segs), ["-x", prog], prog, False)
             elif n == "ps" and modo != "ps" and feeds_kill and not ultimo:
                 check_ps_grep(segs, idx)
             elif n == "xargs" and "kill" in s:
                 check_kill(s[s.index("kill"):])
+            elif n == "xargs" and any(nombre(a) in ("pkill", "killall") for a in s[1:]):
+                check_xargs_pkill(segs, idx)
             elif n == "taskkill":
                 check_taskkill(s)
             elif n == "tskill":
