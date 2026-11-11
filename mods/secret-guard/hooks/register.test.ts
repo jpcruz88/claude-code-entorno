@@ -123,3 +123,67 @@ test('si el hook falla la llamada pasa y sale un toast sin el secreto', async ($
   expect(toasts.some(t => t.includes('secret-guard falló'))).toBe(true)
   expect(toasts.join(' ')).not.toContain(TOKEN)
 })
+
+test('Bash con cat de .env pregunta; Permitir deja pasar', async ($, on) => {
+  const preguntas: string[] = []
+  on('tool.call', { tool: 'AskUserQuestion' }, responder('Permitir', preguntas))
+  on('tool.call', () => ({ result: {} }))
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'cat app/.env' })
+
+  expect(r.deny).toBeUndefined()
+  expect(preguntas).toHaveLength(1)
+  expect(preguntas[0]).toContain('.env')
+})
+
+test('Bash con tail de una clave privada y Cancelar se rechaza', async ($, on) => {
+  on('tool.call', { tool: 'AskUserQuestion' }, responder('Cancelar'))
+  on('tool.call', () => ({ result: {} }))
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'tail -n 3 ~/.ssh/id_ecdsa' })
+
+  expect(r.deny).toContain('secret-guard')
+  expect(r.deny).toContain('id_ecdsa')
+})
+
+test('Bash con cat de .npmrc sin nadie a quien preguntar se rechaza', async ($, on) => {
+  on('tool.call', { tool: 'AskUserQuestion' }, () => { throw new Error('dismissed') })
+  on('tool.call', () => ({ result: {} }))
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'cat .npmrc' })
+
+  expect(r.deny).toContain('secret-guard')
+})
+
+test('Bash con cat de un archivo común no pregunta', async ($, on) => {
+  const preguntas: string[] = []
+  on('tool.call', { tool: 'AskUserQuestion' }, responder('Permitir', preguntas))
+  on('tool.call', () => ({ result: {} }))
+
+  const r = await $.tool.call({ tool: 'Bash', command: 'cat README.md && head -n 2 .env.example' })
+
+  expect(r.deny).toBeUndefined()
+  expect(preguntas).toEqual([])
+})
+
+test('Permitir en Read de un archivo vale también para cat del mismo archivo', async ($, on) => {
+  const preguntas: string[] = []
+  on('tool.call', { tool: 'AskUserQuestion' }, responder('Permitir', preguntas))
+  on('tool.call', () => ({ result: {} }))
+
+  await $.tool.call({ tool: 'Read', file_path: 'x/.netrc' })
+  const r = await $.tool.call({ tool: 'Bash', command: 'cat x/.netrc' })
+
+  expect(r.deny).toBeUndefined()
+  expect(preguntas).toHaveLength(1)
+})
+
+test('Bash con una URL con credenciales se rechaza sin repetir la clave', async ($, on) => {
+  on('tool.call', () => ({ result: {} }))
+  const clave = 'Zq81xLm3Tp'
+
+  const r = await $.tool.call({ tool: 'Bash', command: `psql postgres://app:${clave}@db/x` })
+
+  expect(r.deny).toContain('URL con credenciales')
+  expect(r.deny).not.toContain(clave)
+})

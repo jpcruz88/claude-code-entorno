@@ -40,6 +40,17 @@ jobs:
       - name: Pruebas del repo
         run: python3 -m unittest discover -s pruebas -v
 
+      - name: Pruebas de los mods (claude plugin test)
+        # Mismo CLI fijado de arriba. Corre todas las carpetas aunque una falle y
+        # termina en error si alguna falló.
+        run: |
+          fallos=0
+          for carpeta in mods/*/; do
+            echo "==> $carpeta"
+            claude plugin test "$carpeta" || fallos=1
+          done
+          exit "$fallos"
+
       - name: Revisión de datos privados (árbol de trabajo)
         # El modo --historial no va aquí: exige la identidad local de git del autor,
         # que el runner no tiene. El historial lo revisa gitleaks abajo.

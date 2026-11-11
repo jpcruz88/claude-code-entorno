@@ -9,7 +9,9 @@ esperes a que te lo pidan. Si el repo no tiene remoto, dilo y deja el commit loc
   Tipos: `feat`, `fix`, `docs`, `test`, `refactor`, `ci`, `chore`. El ámbito es
   opcional (`fix(instalar): …`).
 - Cuerpo opcional: explica el porqué, no el qué. Línea en blanco antes.
-- Termina siempre con la línea `Co-Authored-By: Claude Haiku 5.5 <noreply@anthropic.com>`.
+- Termina siempre con la línea `Co-Authored-By: Claude <modelo y versión> <noreply@anthropic.com>`,
+  con el modelo que realmente escribió el cambio (el de la sesión o el del subagente),
+  no uno fijo: por ejemplo `Claude Sonnet 5.5` si lo escribió Sonnet 5.5.
 - Autor y committer son los de `git config` del repo. No cambies la identidad.
 
 **Antes de subir:**

@@ -153,6 +153,8 @@ class InstalarShNoInteractivo(BaseInstalarSh):
         comandos = [h["command"] for g in ajustes["hooks"]["PreToolUse"] for h in g["hooks"]]
         self.assertTrue(any("guard-kill.py" in c for c in comandos), comandos)
         self.assertTrue((self.home / ".claude" / "hooks" / "guard-kill.py").is_file())
+        for regla in sorted((RAIZ / "claude" / "rules").glob("*.md")):  # todas las reglas del repo
+            self.assertTrue((self.home / ".claude" / "rules" / regla.name).is_file(), regla.name)
         llamadas = (self.home / "llamadas-claude.txt").read_text(encoding="utf-8")
         self.assertIn("plugin install superpowers@claude-plugins-official --scope user", llamadas)
         self.assertIn("mcp add-json --scope user context7", llamadas)

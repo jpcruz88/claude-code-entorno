@@ -44,6 +44,16 @@ class MarketplaceDeMods(unittest.TestCase):
                 self.assertEqual(entrada.get("version"), datos.get("version"))
 
 
+class CiPruebaLosMods(unittest.TestCase):
+    def test_ci_corre_claude_plugin_test_en_cada_mod(self):
+        texto = (RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("mods/*/", texto)
+        self.assertIn('claude plugin test "$carpeta"', texto)
+        # Va después de instalar el CLI fijado y en el mismo trabajo (Linux).
+        self.assertLess(texto.index("npm install -g @anthropic-ai/claude-code@"),
+                        texto.index('claude plugin test "$carpeta"'))
+
+
 class ExportarPruebaLosMods(unittest.TestCase):
     def test_exportar_corre_las_pruebas_de_cada_mod(self):
         texto = (RAIZ / "exportar.sh").read_text(encoding="utf-8")
