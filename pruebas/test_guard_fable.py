@@ -71,5 +71,108 @@ class GuardFable(unittest.TestCase):
         self.assertTrue(negado(correr({"tool_name": "Bash", "tool_input": {"command": comando}})))
 
 
+def bash(comando):
+    return {"tool_name": "Bash", "tool_input": {"command": comando}}
+
+
+class FalsosNegativos(unittest.TestCase):
+    """Formas de fijar el modelo que antes pasaban."""
+
+    def setUp(self):
+        self.carpeta = Path(tempfile.mkdtemp(prefix="fable-cfg-"))
+        self.addCleanup(shutil.rmtree, str(self.carpeta), True)
+
+    def archivo(self, nombre, contenido):
+        ruta = self.carpeta / nombre
+        ruta.write_text(contenido, encoding="utf-8")
+        return str(ruta)
+
+    def editar(self, ruta, viejo, nuevo, **extra):
+        entrada = {"file_path": ruta, "old_string": viejo, "new_string": nuevo}
+        entrada.update(extra)
+        return {"tool_name": "Edit", "tool_input": entrada}
+
+    def test_edit_que_solo_cambia_el_nombre_del_modelo_se_bloquea(self):
+        ruta = self.archivo("settings.json", '{\n  "model": "opus"\n}\n')
+        self.assertTrue(negado(correr(self.editar(ruta, "opus", MAS_CAPAZ))))
+        self.assertTrue(negado(correr(self.editar(ruta, '"opus"', '"%s"' % MAS_CAPAZ))))
+
+    def test_edit_de_id_completo_en_variable_de_entorno_se_bloquea(self):
+        ruta = self.archivo("settings.json",
+                            '{"env": {"ANTHROPIC_MODEL": "claude-opus-5-5"}}\n')
+        nuevo = "claude-%s-5-1" % MAS_CAPAZ
+        self.assertTrue(negado(correr(self.editar(ruta, "claude-opus-5-5", nuevo))))
+
+    def test_edit_sin_poder_leer_el_archivo_mira_el_texto_viejo(self):
+        ruta = str(self.carpeta / "no-existe.json")
+        self.assertTrue(negado(correr(self.editar(ruta, "sonnet", MAS_CAPAZ))))
+
+    def test_edit_ajeno_en_un_archivo_que_ya_lo_menciona_pasa(self):
+        ruta = self.archivo("notas.txt", "model: %s\ncolor: azul\n" % MAS_CAPAZ)
+        self.assertEqual(correr(self.editar(ruta, "azul", "verde")), "")
+
+    def test_edit_de_otro_texto_con_la_palabra_pasa(self):
+        ruta = self.archivo("notas.txt", "La ruta del barco.\n")
+        self.assertEqual(correr(self.editar(ruta, "barco", MAS_CAPAZ)), "")
+
+    def test_variable_de_modelo_en_json_se_bloquea(self):
+        for clave in ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                      "CLAUDE_CODE_SUBAGENT_MODEL"):
+            with self.subTest(clave=clave):
+                contenido = '{"env": {"%s": "claude-%s-5-1"}}' % (clave, MAS_CAPAZ)
+                escribir = {"tool_name": "Write", "tool_input": {
+                    "file_path": str(self.carpeta / "settings.json"), "content": contenido}}
+                self.assertTrue(negado(correr(escribir)))
+
+    def test_variable_de_modelo_en_yaml_se_bloquea(self):
+        contenido = "env:\n  ANTHROPIC_MODEL: %s\n" % MAS_CAPAZ
+        escribir = {"tool_name": "Write", "tool_input": {
+            "file_path": str(self.carpeta / "config.yaml"), "content": contenido}}
+        self.assertTrue(negado(correr(escribir)))
+
+    def test_claude_config_set_model_se_bloquea(self):
+        for comando in ("claude config set model %s" % MAS_CAPAZ,
+                        "claude config set -g model claude-%s-5-1" % MAS_CAPAZ,
+                        "claude config set --global model '%s'" % MAS_CAPAZ):
+            with self.subTest(comando=comando):
+                self.assertTrue(negado(correr(bash(comando))))
+
+    def test_claude_config_set_otro_modelo_pasa(self):
+        self.assertEqual(correr(bash("claude config set model sonnet")), "")
+
+
+class RutasLibres(unittest.TestCase):
+    """Dentro de un repo, la documentación, las reglas y las pruebas pueden HABLAR del modelo."""
+
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="fable-repo-"))
+        self.addCleanup(shutil.rmtree, str(self.repo), True)
+        (self.repo / ".git").mkdir()
+        self.contenido = "Ejemplo: model: %s\n" % MAS_CAPAZ
+
+    def escribir(self, relativa, raiz=None):
+        ruta = (raiz or self.repo) / relativa
+        return correr({"tool_name": "Write", "tool_input": {
+            "file_path": str(ruta), "content": self.contenido}})
+
+    def test_docs_reglas_y_pruebas_del_repo_pasan(self):
+        for relativa in ("docs/modelos.md", "claude/rules/nunca.md", "pruebas/notas.md",
+                         "pruebas/test_algo.py", "pruebas/algo_test.py"):
+            with self.subTest(relativa=relativa):
+                self.assertEqual(self.escribir(relativa), "")
+
+    def test_settings_y_scripts_siguen_bloqueados(self):
+        for relativa in ("docs/settings.json", "claude/rules/settings.local.json",
+                         "pruebas/settings.json", "docs/instalar.sh", "pruebas/arrancar.py",
+                         "claude/settings.base.json", "notas.md"):
+            with self.subTest(relativa=relativa):
+                self.assertTrue(negado(self.escribir(relativa)))
+
+    def test_fuera_de_un_repo_no_se_libera(self):
+        suelta = Path(tempfile.mkdtemp(prefix="fable-suelta-"))
+        self.addCleanup(shutil.rmtree, str(suelta), True)
+        self.assertTrue(negado(self.escribir("docs/modelos.md", raiz=suelta)))
+
+
 if __name__ == "__main__":
     unittest.main()
