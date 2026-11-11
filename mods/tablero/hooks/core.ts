@@ -466,6 +466,15 @@ export const settleCheck = (g: Gate, id: string, didRun: boolean): Gate => {
   }
 }
 
+/**
+ * Retira las `ask` que nadie va a responder: el turno del lead terminó (solo las del lead, `soloLead`) o empezó otro
+ * proceso (todas). La llamada no corrió, así que cuentan como denegadas, igual que en `settleCheck`.
+ */
+export const retireAsks = (g: Gate, soloLead: boolean): Gate =>
+  g.recent
+    .filter(c => c.verdict === 'ask' && !(soloLead && c.inSubagent))
+    .reduce((acc, c) => settleCheck(acc, c.id, false), g)
+
 export const gateSummary = (g: Gate) => {
   const all = (['file', 'shell', 'other'] as const).reduce(
     (s, k) => ({

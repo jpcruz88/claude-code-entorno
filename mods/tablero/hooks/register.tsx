@@ -68,6 +68,7 @@ import {
   adviceLine,
   receiptOf,
   recordCheck,
+  retireAsks,
   settleCheck,
   shorten,
   startConsult,
@@ -377,6 +378,16 @@ export const register: Register = (on, options) => {
       argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama]',
     })
     await migrate($)
+    // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
+    // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
+    const inicio = await $.clock.now()
+    await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+    await update($, agents, list =>
+      listOf<unknown>(list)
+        .map(normalizeCard)
+        .map(c => (c.status === 'running' ? { ...c, status: 'stopped' as const, endedAt: c.endedAt ?? inicio } : c)),
+    )
+    await update($, gate, g => retireAsks(normalizeGate(g), false))
     // A host without usage (headless, an SDK host, a session not yet bound) just starts without it.
     const u = await $.session.usage().catch(() => null)
     // A resumed session has a fill to draw already: its compaction window is read now, not at its first
@@ -731,6 +742,8 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+      // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
+      await update($, gate, g => retireAsks(normalizeGate(g), true))
       await refreshStatus($)
       return done
     }
@@ -1540,7 +1553,7 @@ export const register: Register = (on, options) => {
     const ritmoMapa = rit && nivelRit
       ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: (nivelRit === 'verde' ? 'jev' : nivelRit === 'ambar' ? 'amb' : 'warn') as Tinta }
       : undefined
-    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
+    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, turnoActivo: m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
     // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
     const topeVigente = topeAhora(jevs.limites, now / 1000)
     anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
