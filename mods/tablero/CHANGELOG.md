@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0 (tablero)
+
+Revisión: el panel deja de enseñar estados viejos, no se contradice y no redibuja cuando no hace falta.
+
+- Con más de 8 subagentes, la lista del mapa enseña primero los que están en curso y después los más recientes; el resto va en `+N más`. Antes salían los 7 más viejos y los que trabajaban quedaban escondidos.
+- `DETENIDO · el lead paró` solo sale cuando el turno del lead ya terminó; con tres fallos seguidos pero el lead aún trabajando, la franja sigue en `TRABAJANDO`.
+- Al abrir Claude tras un cierre brusco o al reanudar una sesión, el turno y los subagentes que quedaron «en curso» se dan por detenidos.
+- Un permiso pendiente que nadie va a responder ya no deja la franja en `TE ESPERA` para siempre: se retira al terminar el turno del lead o al abrir otra sesión.
+- La fila de ritmo de la caja JEV toma el color del mismo tope que la línea `tope ahora`: las dos ya no se contradicen (verde si deja pasar Opus o Fable con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku). Sin dato de uso, `tope ahora` va en ámbar, no en verde.
+- Jev reconoce la familia Fable: su id completo y su alias son el mismo modelo, y la tarjeta dice `jev ↓ opus` cuando el tope la baja. El motivo `tope: fable → opus` se lee `tope → opus · pedía fable`.
+- El panel solo se anima rápido con trabajo en curso (lead ocupado o subagentes corriendo). En reposo se redibuja como mucho una vez por segundo, para los relojes, y con el panel cerrado (o sin abrir con `openOnStart` apagado) no se redibuja.
+- Con `animacion` apagada el mapa se dibuja quieto y completo: sin paquetes en las líneas, sin spinner girando y con los bordes encendidos; los relojes siguen avanzando cada segundo.
+- AL DÍA ya no dice «ayer» para una hora por delante del reloj: dice hoy, ayer o la fecha.
+- Un `limites.json` leído a medio escribir ya no borra el tope: se queda el último dato válido.
+- `/tablero` ya no promete teclas que el mapa no tiene.
+- La versión del pie (`tablero v0.10.0`) se comprueba contra `plugin.json` en las pruebas.
+- Limpieza: se van la banda sobre el prompt, que ya no se dibujaba, y código sin uso. Los layouts `compact`, `wide`, `mini` y `diagrama` se quedan.
+
 ## 0.9.0 (tablero)
 
 El tope de uso tiene un escalón más alto: Fable, solo con mucho margen.
