@@ -1,5 +1,5 @@
 {
-  "model": "haiku",
+  "model": "opus",
   "modelSettings": {
     "claude-haiku-5-5": {
       "effortLevel": "medium"
@@ -136,6 +136,16 @@
             "type": "command",
             "command": "python3 ~/.claude/hooks/caveman-activo.py",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/hilo.py",
+            "timeout": 15
           }
         ]
       }

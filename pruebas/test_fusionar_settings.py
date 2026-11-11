@@ -47,7 +47,7 @@ class Fusion(unittest.TestCase):
         codigo, _ = self.aplicar(python_hooks="python3")
         self.assertEqual(codigo, 0)
         primero = self.leer()
-        self.assertEqual(primero["model"], "haiku")
+        self.assertEqual(primero["model"], json.loads(BASE.read_text(encoding="utf-8"))["model"])
         self.assertIn(("Bash|PowerShell", "python3 ~/.claude/hooks/guard-kill.py"),
                       comandos(primero, "PreToolUse"))
         self.assertEqual(len(comandos(primero, "SessionStart")), 5)  # 4 de codebase-memory y la de memoria
