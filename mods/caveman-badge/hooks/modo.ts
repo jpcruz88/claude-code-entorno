@@ -1,7 +1,8 @@
 export type Modo = 'lite' | 'full' | 'ultra' | 'normal'
 
 const NIVEL = /^\s*\/caveman\s+(lite|full|ultra)\b/i
-const APAGAR = /^\s*(stop\s+caveman|modo\s+normal)\s*$/i
+// Se admite puntuación o comillas alrededor («stop caveman.», «¡modo normal!»), pero no más palabras.
+const APAGAR = /^[\s\p{P}]*(stop\s+caveman|modo\s+normal)[\s\p{P}]*$/iu
 
 export function siguienteModo(actual: Modo, texto: string): Modo {
   const nivel = NIVEL.exec(texto)?.[1]
