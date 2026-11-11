@@ -362,16 +362,6 @@ export const limitOf = (r: { kind: string; percentUsed: number; resetsAt?: strin
   return { kind: r.kind, pct: r.percentUsed, resetsAt: Number.isFinite(at) ? at : null }
 }
 
-/** Time left until a window resets, its two largest units: `25m`, `3h10m`, `4d2h`; empty when unknown or past. */
-export const fmtResetIn = (resetsAt: number | null | undefined, now: number) => {
-  if (resetsAt === null || resetsAt === undefined || resetsAt <= now) return ''
-  const m = Math.max(1, Math.floor((resetsAt - now) / 60_000))
-  const d = Math.floor(m / 1440)
-  const h = Math.floor((m % 1440) / 60)
-  if (d > 0) return `${d}d${h}h`
-  return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
-}
-
 const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
 /** La hora de reinicio de una ventana: `hoy 23:05`, `mañana 01:30` o `vie 06:00`; vacío si no hay dato o ya pasó. */
@@ -676,4 +666,3 @@ export const adviceLine = (report: string) => {
   return shorten(first.replace(/\*\*|__/g, '').replace(/^[#>*\s-]+/, ''), 160)
 }
 
-export const elapsedOf = (c: AgentCard, now: number) => (c.endedAt ?? now) - c.spawnedAt

@@ -217,3 +217,22 @@ test('el tablero ya no registra las herramientas progreso y paso (las da savvy-p
   expect(nombres).not.toContain('paso')
   expect(nombres).not.toContain('progreso')
 })
+
+test('el footer nativo no muestra datos del mod', async ($, on) => {
+  mock.clock(on)
+  const estados: string[] = []
+  on('ui.status', (_$, e) => {
+    estados.push(JSON.stringify(e))
+    return { value: undefined }
+  })
+  on('session.cwd', () => ({ value: '/work' }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  await $.session.measure({
+    context: { window: 1_000_000, tokens: 420_000, percent: 42 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 63, resetsAt: new Date(2 * 3_600_000).toISOString() }],
+    cost: { usd: 1.2 },
+    changed: ['context'],
+  } as never)
+  expect(estados.some(s => /ctx|\$1\.20/.test(s))).toBe(false)
+})
