@@ -4,9 +4,11 @@
 La regla `caveman.md` pide responder siempre en modo caveman, pero una regla es solo
 texto: nada garantiza que la skill se cargue. Este hook lo garantiza de dos formas:
 
-- SessionStart: mete en el contexto las reglas de la skill `caveman` (o unas mínimas
-  si la skill no está instalada). Una sesión nueva o un `/clear` empiezan en `full`;
-  al reanudar o compactar se conserva el modo que la sesión ya tenía.
+- SessionStart: mete en el contexto las reglas del modo, en corto. No copia la skill
+  `caveman` entera: ese texto se paga en cada sesión y en cada subagente, así que solo
+  van las reglas y una remisión a la skill para el detalle. Una sesión nueva o un
+  `/clear` empiezan en `full`; al reanudar o compactar se conserva el modo que la
+  sesión ya tenía.
 - UserPromptSubmit: una línea corta que recuerda el modo en cada mensaje. También
   sigue los cambios que pide el usuario: `/caveman lite|full|ultra`, «stop caveman»
   y «modo normal».
@@ -39,11 +41,12 @@ EXCEPCIONES = (
     "irreversibles y los pasos que se siguen en orden."
 )
 
-REGLAS_MINIMAS = (
+REGLAS = (
     "Responde telegráfico: primero la respuesta, luego la razón y el siguiente paso. "
     "Frases cortas, sin relleno ni cortesías, sin anunciar lo que vas a hacer y sin "
     "resumen final. Términos técnicos, comandos, rutas, números y errores exactos. "
-    "Nunca quites una negación."
+    "Nunca quites una negación. Si comprimir resta claridad, gana la claridad. "
+    "El detalle está en la skill `caveman`."
 )
 
 
@@ -96,27 +99,12 @@ def siguiente_modo(actual, texto):
     return actual
 
 
-def reglas_de_la_skill(home):
-    """Cuerpo de SKILL.md de la skill caveman, sin el frontmatter; None si no está."""
-    try:
-        texto = (Path(home) / ".claude" / "skills" / "caveman" / "SKILL.md").read_text(
-            encoding="utf-8")
-    except OSError:
-        return None
-    if texto.startswith("---"):
-        partes = texto.split("---", 2)
-        if len(partes) == 3:
-            texto = partes[2]
-    return texto.strip() or None
-
-
-def texto_inicio(home, modo):
-    reglas = reglas_de_la_skill(home) or REGLAS_MINIMAS
+def texto_inicio(modo):
     return (
         "Caveman mode: %s. El modo caveman está ACTIVO desde el primer mensaje de esta "
-        "sesión, sin que el usuario lo pida y sin anunciarlo. Sigue activo en todas las "
-        "respuestas hasta que el usuario diga «stop caveman» o «modo normal»; el nivel se "
-        "cambia con `/caveman lite|full|ultra`.\n\n%s\n\n%s" % (modo, EXCEPCIONES, reglas)
+        "sesión, sin que el usuario lo pida y sin anunciarlo. Sigue activo hasta que el "
+        "usuario diga «stop caveman» o «modo normal»; el nivel se cambia con "
+        "`/caveman lite|full|ultra`.\n\n%s\n\n%s" % (modo, REGLAS, EXCEPCIONES)
     )
 
 
@@ -152,7 +140,7 @@ def main(evento, home, ahora=None):
         if modo == APAGADO:
             return None
         guardar_modo(home, sesion, modo)
-        return _salida(nombre, texto_inicio(home, modo))
+        return _salida(nombre, texto_inicio(modo))
 
     if nombre == "UserPromptSubmit":
         antes = leer_modo(home, sesion) or POR_OMISION
