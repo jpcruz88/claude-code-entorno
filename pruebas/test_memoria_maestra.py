@@ -36,7 +36,7 @@ class ConFondo(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.remoto = self.tmp / "remoto.git"
-        subprocess.run(["git", "init", "-q", "--bare", str(self.remoto)], check=True)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.remoto)], check=True)
         self.memoria = self.tmp / "memoria-viva"
         self.memoria.mkdir()
         (self.memoria / "MEMORY.md").write_text("- [x](x.md) — gancho\n", encoding="utf-8")
