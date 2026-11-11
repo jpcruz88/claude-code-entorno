@@ -47,7 +47,7 @@
       "name": "tablero",
       "source": "./mods/tablero",
       "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
-      "version": "0.9.0"
+      "version": "0.10.0"
     },
     {
       "name": "tdd-gate",
