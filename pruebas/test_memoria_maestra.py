@@ -103,6 +103,112 @@ class Sincronizar(ConFondo):
         self.assertIn("memoria/principal/nuevo.md", ls)
 
 
+def _secretos_de_prueba():
+    """Claves falsas armadas por partes: así el repo no lleva ninguna literal."""
+    a, d = "A" * 40, "1" * 40
+    return {
+        "sk-": "s" + "k-" + "ant-" + a[:30],
+        "sk_live_": "sk" + "_live_" + a[:24],
+        "ghp_": "gh" + "p_" + a[:36],
+        "github_pat_": "github" + "_pat_" + a[:30],
+        "AKIA": "AK" + "IA" + "B" * 16,
+        "xox": "xo" + "xb-" + d[:12] + "-" + a[:24],
+        "AIza": "AI" + "za" + a[:35],
+        "PEM": "-----BEGIN " + "RSA PRIVATE" + " KEY-----\nMIIabc\n",
+        "JWT": "ey" + "J" + a[:20] + ".ey" + "J" + a[:20] + "." + a[:20],
+        "postgres": "postgres" + "://usuario:" + "clave123@servidor/base",
+        "telegram": d[:10] + ":" + "AA" + a[:33],
+    }
+
+
+class Secretos(ConFondo):
+    def test_detecta_cada_tipo_de_clave(self):
+        for tipo, secreto in _secretos_de_prueba().items():
+            with self.subTest(tipo=tipo):
+                self.assertIsNotNone(mm.buscar_secreto("texto antes %s texto después" % secreto))
+
+    def test_texto_normal_no_es_secreto(self):
+        for texto in ("Dato normal sobre el proyecto", "usa sk-learn para eso",
+                      "postgres://servidor/base", "hora 12:30, version 1.2.3"):
+            with self.subTest(texto=texto):
+                self.assertIsNone(mm.buscar_secreto(texto))
+
+    def test_archivo_con_secreto_no_se_sube_y_el_resto_si(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        secreto = _secretos_de_prueba()["ghp_"]
+        (self.memoria / "clave.md").write_text("token: %s\n" % secreto, encoding="utf-8")
+        (self.memoria / "limpio.md").write_text("nada raro\n", encoding="utf-8")
+        avisos = mm.sincronizar(self.clon)
+        ls = _archivos_en_remoto(self.remoto)
+        self.assertIn("memoria/principal/limpio.md", ls)
+        self.assertNotIn("memoria/principal/clave.md", ls)
+        texto = "\n".join(avisos)
+        self.assertIn("clave.md", texto)
+        self.assertNotIn(secreto, texto)
+        self.assertTrue((self.memoria / "clave.md").is_file())  # no se borra nada
+
+    def test_secreto_en_la_primera_configuracion_tampoco_sube(self):
+        (self.memoria / "clave.md").write_text(_secretos_de_prueba()["AKIA"], encoding="utf-8")
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        ls = _archivos_en_remoto(self.remoto)
+        self.assertIn("memoria/principal/MEMORY.md", ls)
+        self.assertNotIn("memoria/principal/clave.md", ls)
+
+
+class Trailer(ConFondo):
+    def test_trailer_no_afirma_un_modelo_concreto(self):
+        self.assertEqual(mm.TRAILER, "Co-Authored-By: Claude <noreply@anthropic.com>")
+
+    def test_commit_lleva_el_trailer(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        cuerpo = git(self.clon, "log", "-1", "--format=%B").stdout
+        self.assertIn(mm.TRAILER, cuerpo)
+
+
+class Conflicto(ConFondo):
+    """Si el repo privado cambió lo mismo, no se empuja nada y se avisa qué carpeta revisar."""
+
+    def chocar(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        otra = self.tmp / "otra-maquina"
+        subprocess.run(["git", "clone", "-q", str(self.remoto), str(otra)], check=True)
+        (otra / "memoria" / "principal" / "x.md").write_text("de la otra máquina\n", encoding="utf-8")
+        ident = ["-c", "user.name=Prueba", "-c", "user.email=prueba@localhost"]
+        subprocess.run(["git", "-C", str(otra)] + ident + ["commit", "-qam", "otra"], check=True)
+        subprocess.run(["git", "-C", str(otra), "push", "-q", "origin", "HEAD"], check=True)
+        self.remoto_antes = git(self.remoto, "rev-parse", "HEAD").stdout.strip()
+        (self.memoria / "x.md").write_text("de esta máquina\n", encoding="utf-8")
+
+    def test_conflicto_aborta_el_rebase_no_empuja_y_avisa(self):
+        self.chocar()
+        avisos = mm.sincronizar(self.clon)
+        self.assertTrue(any(str(self.clon) in a for a in avisos), avisos)
+        self.assertEqual(git(self.remoto, "rev-parse", "HEAD").stdout.strip(), self.remoto_antes)
+        estado = git(self.clon, "status").stdout
+        self.assertNotIn("rebase", estado.lower())
+        self.assertEqual((self.memoria / "x.md").read_text(encoding="utf-8"), "de esta máquina\n")
+
+    def test_el_hook_fin_avisa_al_usuario_y_el_inicio_lo_repite(self):
+        self.chocar()
+        entorno = dict(os.environ, MEMORIA_MAESTRA_CONFIG=str(self.config),
+                       CLAUDE_CONFIG_DIR=str(self.tmp / "claude-config"))
+        r = subprocess.run([sys.executable, str(HOOK), "fin"], input=b"{}",
+                           capture_output=True, timeout=60, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        aviso = json.loads(r.stdout.decode("utf-8"))["systemMessage"]
+        self.assertIn(str(self.clon), aviso)
+        r = subprocess.run([sys.executable, str(HOOK), "inicio"],
+                           input=json.dumps({"cwd": str(self.tmp)}).encode(),
+                           capture_output=True, timeout=60, env=entorno)
+        contexto = json.loads(r.stdout.decode("utf-8"))["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(str(self.clon), contexto)
+
+    def test_sin_problemas_no_hay_aviso(self):
+        mm.configurar(self.memoria, self.clon, str(self.remoto), self.config)
+        (self.memoria / "nuevo.md").write_text("dato\n", encoding="utf-8")
+        self.assertEqual(mm.sincronizar(self.clon), [])
+
+
 class Hooks(ConFondo):
     def correr(self, modo, entrada, config):
         entorno = dict(os.environ, MEMORIA_MAESTRA_CONFIG=str(config))
