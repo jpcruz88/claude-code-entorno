@@ -1171,7 +1171,7 @@ export const register: Register = (on, options) => {
       return (
         <Text>
           {[...antes, ...despues].map((t, k) => (
-            <Text key={k} color={color(t)}>{t.texto}</Text>
+            <Text key={String(k)} color={color(t)}>{t.texto}</Text>
           ))}
         </Text>
       )
@@ -1648,9 +1648,9 @@ export const register: Register = (on, options) => {
     const mapaBody = enMapa ? (
       <Box flexDirection="column" width={Math.min(W, MAPA_ANCHO)}>
         {filasDeMapa(componerMapa(mapaDatos, now / 1000, W, cfg.animacion)).map((tramos, y) => (
-          <Text key={y}>
+          <Text key={String(y)}>
             {tramos.map((tr, i) => (
-              <Text key={i} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
+              <Text key={String(i)} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
                 {tr.c}
               </Text>
             ))}

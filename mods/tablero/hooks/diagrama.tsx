@@ -46,14 +46,16 @@ export type PiezasDiagrama = {
 
 export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDiagrama) => {
   const { Box, Text } = els
+  // Los módulos animados solo existen en las superficies que tienen `Client`; en las demás, el conector es texto.
+  const Client = 'Client' in els ? els.Client : null
   const { rw } = anchosDiagrama(p.ancho, p.asesor !== null)
   // El conector baja desde el centro de la columna derecha; su sangría es un margen, no espacios en el texto.
   const centro = Math.floor(rw / 2)
   // Con movimiento, el conector es un módulo animado (el paquete baja por la columna mientras hay trabajo).
   const conector = (simbolo: string, id: string) => (
     <Box marginLeft={centro}>
-      {p.motion ? (
-        <els.Client key={id} module="./conector-v.tsx" width={1} height={1} props={{ active: p.activo, alto: 1, color: colores.arch, dim: colores.faint }} />
+      {p.motion && Client ? (
+        <Client key={id} module="./conector-v.tsx" width={1} height={1} props={{ active: p.activo, alto: 1, color: colores.arch, dim: colores.faint }} />
       ) : (
         <Text color={colores.faint}>{simbolo}</Text>
       )}
@@ -66,8 +68,8 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
         {p.asesor !== null ? (
           // La línea va en la fila del contenido del lead (la fila 1), no en el borde. Con movimiento, el paquete la cruza.
           <Box marginTop={1} width={ANCHO_FLECHA} flexShrink={0}>
-            {p.motion ? (
-              <els.Client key="asesor-lead" module="./conector-h.tsx" width={ANCHO_FLECHA} height={1} props={{ active: p.activo, ancho: ANCHO_FLECHA, color: colores.arch, dim: colores.faint }} />
+            {p.motion && Client ? (
+              <Client key="asesor-lead" module="./conector-h.tsx" width={ANCHO_FLECHA} height={1} props={{ active: p.activo, ancho: ANCHO_FLECHA, color: colores.arch, dim: colores.faint }} />
             ) : (
               <Text color={colores.arch}>{cuadroConectorH(ANCHO_FLECHA, 0, false)}</Text>
             )}

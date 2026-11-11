@@ -2,7 +2,10 @@
 // de color (verde, ámbar, rojo) según se agota. Solo cálculo: el dibujo lo pone register.tsx
 // a partir de estas filas. En la terminal el degradado son tres tonos; la app de escritorio
 // pinta un degradado continuo.
-import type { FilaBanda, Tono } from './banda-modelo'
+import type { Tono } from './banda-modelo'
+
+/** Una fila de la barra de vida: trozos de texto, cada uno con su tono. */
+export type FilaVida = { tramos: { texto: string; tono: Tono }[] }
 
 export const BARRA_ANCHO = 20
 
@@ -24,7 +27,7 @@ export const tonoDeVida = (vida: number): Tono => {
  * angosto la etiqueta se recorta a solo el número, y la barra se encoge para que la fila no pase
  * de ese contenido. Sin espacio para nada, no hay fila.
  */
-export const filasVida = (e: { contextoPct: number | null; columnas: number }): FilaBanda[] => {
+export const filasVida = (e: { contextoPct: number | null; columnas: number }): FilaVida[] => {
   const vida = vidaDe(e.contextoPct)
   if (vida === null) return []
   const disponible = e.columnas - 4
