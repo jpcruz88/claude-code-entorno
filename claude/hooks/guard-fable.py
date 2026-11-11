@@ -14,6 +14,7 @@ Qué revisa:
 - Workflow: el script (inline, o el archivo de `scriptPath`) con `model: 'fable'` en algún agent().
 - Bash / PowerShell: `--model fable`, `--fallback-model fable`, `ANTHROPIC_MODEL=…fable` y
   `model="claude-fable-…"` dentro de un comando (llamadas a la API, scripts de una línea).
+  También `claude config set model …` con un nombre de la familia Fable.
 - Write / Edit: el contenido nuevo cuando fija un modelo (`model: fable`, `"model": "fable"`,
   `model="claude-fable-…"`), por ejemplo en settings.json, agentes o código.
   También las variables de modelo en JSON o YAML (la clave ANTHROPIC_MODEL con `:`). En un
