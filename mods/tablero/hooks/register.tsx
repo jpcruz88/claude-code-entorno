@@ -169,9 +169,11 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
-  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Roto o ausente es «sin dato».
+  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Ausente es «sin dato»; roto (por ejemplo,
+  // a medio escribir) deja el último válido.
   const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
-  const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const leidos = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const limites = typeof textoLimites === 'string' && leidos === null ? (await getJev($)).limites : leidos
   // Lo que actualizó la revisión «Al día»; ausente o roto es «sin dato» (la caja no se dibuja).
   const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
   const alDia = typeof textoAlDia === 'string' ? textoAlDia : null
@@ -460,7 +462,7 @@ export const register: Register = (on, options) => {
     }
     const opened = await openPane($, cfg)
     if (!opened.isPlaced) return { text: `Tablero aún no se muestra: ${opened.reason}` }
-    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab; 1-6 abren tarjetas, a/s/o abren las filas de permisos (archivo, shell, otro).' }
+    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab.' }
   })
 
   // Un panel que el mod abre solo, al iniciar, espera sin dibujar por debajo de 144 columnas. El primer
