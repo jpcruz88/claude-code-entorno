@@ -1,8 +1,19 @@
-# nexus-claude
+# claude-code-entorno
 
 > Un solo nodo para todo mi Claude Code: reglas, hooks, skills, plugins,
-> mods y memoria. Este repo se llama `claude-code-entorno` (el nombre del marketplace y
-> de los plugins); «nexus-claude» es el nombre del proyecto.
+> mods y memoria. Es también el nombre del marketplace de los mods y de los plugins.
+
+## Arranque rápido
+
+En Mac o Linux, tres comandos y uno más para los hooks de git si vas a contribuir
+(en Windows, ver [Instalación en Windows](#instalación-en-windows-paso-a-paso-a-mano)):
+
+```bash
+git clone https://github.com/jpcruz88/claude-code-entorno.git && cd claude-code-entorno
+./instalar.sh --simular   # ver qué haría, sin cambiar nada
+./instalar.sh             # instalar
+git config core.hooksPath .githooks   # una vez por clon: activa los hooks de privacidad y gitleaks
+```
 
 Mi configuración de [Claude Code](https://code.claude.com) lista para copiar en otra
 computadora, con **Windows** o con **Mac**. Un solo comando deja reglas, hooks,
@@ -62,7 +73,7 @@ dices que sí.
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones) y `nunca-fable.md`: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones), `nunca-fable.md` (Fable solo en subagentes y con tope de uso) y `mods-version.md` (los pasos para cambiar un mod: subir la versión y actualizar la caché). También: usar `ctx7` (regla `context7.md`) para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». Además, desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Hook `al-dia.py` | `claude/hooks/` | «Al día»: al abrir Claude, si pasaron 24 h, actualiza en segundo plano tus skills, plugins y programas (no los mods de este repo). Los cambios de texto quedan como diff en `~/.claude/al-dia/cambios/` y el tablero muestra un resumen. |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |

@@ -9,6 +9,9 @@ otros la reusen: los cambios se revisan para que no entre nada privado.
    ```bash
    git config core.hooksPath .githooks
    ```
+   Sin este paso no corren la revisión de privacidad ni `gitleaks` en tus commits
+   y pushes. Una prueba (`pruebas/test_githooks_activos.py`) falla con este mismo
+   comando si en tu clon no está activado; en CI se salta.
 2. Instala `gitleaks` (`brew install gitleaks`) y Python 3.
 
 ## Flujo

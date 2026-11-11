@@ -6,11 +6,13 @@ repo, ve a [Si vas a modificar el repo](#si-vas-a-modificar-el-repo).
 
 ## Qué es y cuál es tu tarea
 
-`claude-code-entorno` es la configuración de Claude Code del usuario: reglas, el
-hook `guard-kill.py`, la línea de estado, el plugin `superpowers`, skills de
-terceros y los servidores MCP `context7` y `codebase-memory-mcp`. En Mac, además,
-herdr (con su plugin de Telegram) y Ghostty. El instalador
-(`instalar.ps1` en Windows, `instalar.sh` en Mac) lo deja todo listo y se puede
+`claude-code-entorno` es la configuración de Claude Code del usuario: reglas, hooks,
+línea de estado, plugin `superpowers`, skills de terceros y los MCP `context7` y
+`codebase-memory-mcp`. Trae ocho mods propios (`mods/`, entre ellos el tablero, un
+panel junto al chat), **Jev** (elige modelo y esfuerzo de los subagentes) con un tope de
+uso de la cuenta que lo recorta, la revisión diaria «Al día» (actualiza skills y plugins
+y lo resume en el tablero) y la memoria maestra privada. En Mac, además, herdr y
+Ghostty. El instalador (`instalar.ps1` en Windows, `instalar.sh` en Mac) se puede
 correr las veces que haga falta: lo que ya está se salta.
 
 Tu tarea: instalarlo con la confirmación del usuario, comprobar que quedó bien y
