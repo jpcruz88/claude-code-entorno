@@ -47,19 +47,17 @@ const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }, id: str
     fork: false,
   } as never)
 
-const dibujado = async () => {
-  const plano = (n: unknown): string =>
-    typeof n === 'string' || typeof n === 'number'
-      ? String(n)
-      : n && typeof n === 'object' && Array.isArray((n as { children?: unknown[] }).children)
-        ? (n as { children: unknown[] }).children.map(plano).join('')
-        : ''
-  return plano
-}
+/** El texto de un árbol dibujado, sin colores. */
+const plano = (n: unknown): string =>
+  typeof n === 'string' || typeof n === 'number'
+    ? String(n)
+    : n && typeof n === 'object' && Array.isArray((n as { children?: unknown[] }).children)
+      ? (n as { children: unknown[] }).children.map(plano).join('')
+      : ''
 
 const texto = async ($: { ui: { mount: (p: never) => Promise<{ drawn: () => Promise<unknown>; unmount: () => Promise<void> }> } }) => {
   const ui = await $.ui.mount(pane as never)
-  const s = (await dibujado())(await ui.drawn())
+  const s = plano(await ui.drawn())
   await ui.unmount()
   return s
 }
