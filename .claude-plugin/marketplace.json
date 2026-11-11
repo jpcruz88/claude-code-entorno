@@ -11,7 +11,7 @@
       "name": "caveman-badge",
       "source": "./mods/caveman-badge",
       "description": "Muestra en la línea de estado el modo caveman (aproximado)",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "ctx-budget",

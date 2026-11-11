@@ -19,6 +19,14 @@ test('stop caveman y Modo Normal pasan a normal', () => {
   expect(siguienteModo('full', 'Stop  Caveman')).toBe('normal')
 })
 
+test('stop caveman y modo normal con puntuación final también apagan', () => {
+  expect(siguienteModo('full', 'stop caveman.')).toBe('normal')
+  expect(siguienteModo('full', 'Stop caveman!')).toBe('normal')
+  expect(siguienteModo('ultra', 'modo normal...')).toBe('normal')
+  expect(siguienteModo('ultra', '¡modo normal!')).toBe('normal')
+  expect(siguienteModo('full', '«stop caveman»')).toBe('normal')
+})
+
 test('/caveman sin nivel no cambia el modo', () => {
   expect(siguienteModo('lite', '/caveman')).toBe('lite')
 })
