@@ -19,9 +19,15 @@ Qué revisa:
   máximos según ~/.claude/jev/limites.json. Si la elección final los supera, se baja con
   `updatedInput` y queda una línea `tope` en decisiones.jsonl. Nunca hace deny; cualquier
   fallo equivale a sin tope.
-- Workflow: el script debe fijar haiku, sonnet u opus en cada agent() y nunca un esfuerzo
-  mayor que high (un workflow no se puede bajar con el tope, así que Fable y xhigh se
-  bloquean). Jev no rutea workflows.
+- Fork (Agent / Task con subagent_type "fork"): ignora model y effort y hereda el modelo de
+  la sesión, así que ni Jev ni el tope lo pueden bajar. Si el modelo de la sesión (el que
+  traiga la entrada del hook, ANTHROPIC_MODEL o la clave `model` de ~/.claude/settings.json)
+  es de la familia más capaz, se bloquea y se propone un agente normal con modelo explícito.
+  Si no se puede saber el modelo, pasa.
+- Workflow: el script (en línea o el archivo de `scriptPath`) debe fijar haiku, sonnet u
+  opus en cada agent() y nunca un esfuerzo mayor que high (un workflow no se puede bajar con
+  el tope, así que Fable y xhigh se bloquean). Los comentarios // y /* */ no cuentan. Jev no
+  rutea workflows.
 
 Funciona con python3 (3.6 o más nuevo), sin dependencias. Si algo falla dentro del
 guardián, deja pasar la acción: un error propio nunca debe frenar el trabajo normal.
@@ -52,6 +58,8 @@ MODELOS_WORKFLOW = ("haiku", "sonnet", "opus")  # un workflow no se puede bajar 
 MODELO_SIN_TOPES = "opus"  # sin poder calcular el tope, Fable baja a este
 OPCIONES_JEV = {"modelo": list(MODELOS_PERMITIDOS), "esfuerzo": list(ESFUERZOS_PERMITIDOS)}
 DESCRIPCION_MAX = 60
+TOPE_SCRIPT = 512 * 1024  # bytes que se leen de un scriptPath
+FAMILIA_MAS_CAPAZ = "fable"  # un fork con esta familia se salta el tope
 # `model: 'haiku'`, `model: "claude-haiku-5-5"`, `model = haiku`
 MODELO_EN_GUION = re.compile(r"""\bmodel["'\\]*\s*[:=]\s*["'\\]*([\w./:-]*)""", re.I)
 # `effort: 'high'`, `effort = medium`
@@ -231,7 +239,7 @@ def revisar_agente(entrada, session_id=None):
     """Devuelve (entrada reescrita, por_jev, por_tope) si algo cambió; None si pasa tal cual."""
     modelo = texto(entrada.get("model")).strip()
     esfuerzo = texto(entrada.get("effort")).strip().lower()
-    validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: Fable nunca llega a Jev
+    validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: lo no permitido nunca llega a Jev
     final_modelo, final_esfuerzo = rutear_con_jev(entrada, modelo, esfuerzo, session_id)
     validar_agente(final_modelo, final_esfuerzo)
     tras_jev = (final_modelo, final_esfuerzo)
@@ -249,10 +257,93 @@ def revisar_agente(entrada, session_id=None):
     return dict(entrada, **cambios), por_jev, por_tope
 
 
-def revisar_workflow(entrada, session_id=None):
+def ruta_de_ajustes():
+    return os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+
+
+def modelo_de_sesion(datos, ajustes=None):
+    """Modelo de la sesión: la entrada del hook, ANTHROPIC_MODEL o settings.json. '' si no se sabe."""
+    modelo = datos.get("model")
+    if isinstance(modelo, dict):
+        modelo = modelo.get("id") or modelo.get("display_name")
+    if isinstance(modelo, str) and modelo.strip():
+        return modelo.strip()
+    modelo = os.environ.get("ANTHROPIC_MODEL", "")
+    if modelo.strip():
+        return modelo.strip()
+    try:
+        with open(ajustes or ruta_de_ajustes(), "r", encoding="utf-8") as f:
+            config = json.load(f)
+        modelo = config.get("model") if isinstance(config, dict) else None
+        return modelo.strip() if isinstance(modelo, str) else ""
+    except Exception:
+        return ""
+
+
+def es_fork(entrada):
+    return texto(entrada.get("subagent_type")).strip().lower() == "fork"
+
+
+def revisar_fork(datos, ajustes=None):
+    """Un fork hereda el modelo de la sesión: si es de la familia más capaz, se bloquea."""
+    modelo = modelo_de_sesion(datos, ajustes)
+    if FAMILIA_MAS_CAPAZ in modelo.lower():
+        deny("Un fork (subagent_type \"fork\") ignora model y effort y hereda el modelo de "
+             "la sesión (%s), así que se salta el tope de uso. Lanza un agente normal, sin "
+             "subagent_type \"fork\", con modelo explícito (por ejemplo opus con effort high)."
+             % modelo)
+    return None
+
+
+def quitar_comentarios(guion):
+    """Quita los comentarios // y /* */ de un script sin tocar lo que va dentro de textos."""
+    salida, i, n, comilla = [], 0, len(guion), None
+    while i < n:
+        c = guion[i]
+        if comilla:
+            salida.append(c)
+            if c == "\\" and i + 1 < n:
+                salida.append(guion[i + 1])
+                i += 2
+                continue
+            if c == comilla:
+                comilla = None
+            i += 1
+        elif c in "'\"`":
+            comilla = c
+            salida.append(c)
+            i += 1
+        elif guion.startswith("//", i):
+            fin = guion.find("\n", i)
+            i = n if fin < 0 else fin
+        elif guion.startswith("/*", i):
+            fin = guion.find("*/", i + 2)
+            salida.append(" ")
+            i = n if fin < 0 else fin + 2
+        else:
+            salida.append(c)
+            i += 1
+    return "".join(salida)
+
+
+def leer_guion(entrada):
+    """El script en línea o, si no hay, el archivo de `scriptPath`. '' si no se puede leer."""
     guion = texto(entrada.get("script"))
+    ruta = texto(entrada.get("scriptPath"))
+    if guion or not ruta:
+        return guion
+    try:
+        with open(os.path.expanduser(ruta), "r", encoding="utf-8", errors="replace") as f:
+            return f.read(TOPE_SCRIPT)
+    except Exception:
+        return ""
+
+
+def revisar_workflow(entrada, session_id=None):
+    guion = leer_guion(entrada)
     if not guion:
-        return None  # sin script inline no hay nada que revisar aquí
+        return None  # sin script legible no hay nada que revisar aquí
+    guion = quitar_comentarios(guion)
     llamadas = len(LLAMADA_AGENTE.findall(guion))
     modelos = [m.strip() for m in MODELO_EN_GUION.findall(guion)]
     if any(not es_modelo_permitido(m, MODELOS_WORKFLOW) for m in modelos if m):
@@ -288,6 +379,8 @@ def main():
     if not isinstance(sesion, str):
         sesion = None
     try:
+        if revisor is revisar_agente and es_fork(entrada):
+            return revisar_fork(datos)  # model y effort no cuentan en un fork
         actualizada = revisor(entrada, sesion)
     except SystemExit:
         raise

@@ -26,7 +26,8 @@ atexit.register(shutil.rmtree, _HOME_COMUN, True)
 
 def correr(entrada, crudo=None, home=None, jev=None, clave=None):
     datos = crudo if crudo is not None else json.dumps(entrada)
-    entorno = {k: v for k, v in os.environ.items() if k not in ("OPENROUTER_API_KEY", "JEV_URL", "HOME")}
+    entorno = {k: v for k, v in os.environ.items()
+               if k not in ("OPENROUTER_API_KEY", "JEV_URL", "HOME", "ANTHROPIC_MODEL")}
     entorno["HOME"] = home or _HOME_COMUN
     if jev:
         entorno["JEV_URL"] = jev
@@ -135,6 +136,108 @@ class Workflows(unittest.TestCase):
     def test_script_sin_modelo_se_bloquea(self):
         guion = "await agent('x', {effort: 'medium'})"
         self.assertTrue(negado(correr(self.workflow(guion))))
+
+
+    # --- comentarios: un model en un comentario no cuenta ---
+
+    def test_model_en_comentario_de_linea_no_cuenta(self):
+        guion = "// ejemplo: model: 'haiku'\nawait agent('x', {effort: 'medium'})"
+        self.assertTrue(negado(correr(self.workflow(guion))))
+
+    def test_model_en_comentario_de_bloque_no_cuenta(self):
+        guion = "/* model: 'sonnet' */\nawait agent('x', {effort: 'low'})"
+        self.assertTrue(negado(correr(self.workflow(guion))))
+
+    def test_barras_dentro_de_un_texto_no_son_comentario(self):
+        guion = "await agent('lee https://x.y/z', {model: 'haiku', effort: 'low'})"
+        self.assertEqual(correr(self.workflow(guion)), "")
+
+    def test_modelo_prohibido_en_comentario_no_bloquea_aqui(self):
+        guion = "// antes: model: 'gpt-5'\nawait agent('x', {model: 'haiku', effort: 'low'})"
+        self.assertEqual(correr(self.workflow(guion)), "")
+
+    # --- scriptPath: el archivo se revisa igual que el script en línea ---
+
+    def guion_en_archivo(self, contenido):
+        carpeta = tempfile.mkdtemp(prefix="guion-")
+        self.addCleanup(shutil.rmtree, carpeta, True)
+        ruta = Path(carpeta, "flujo.js")
+        ruta.write_text(contenido, encoding="utf-8")
+        return {"tool_name": "Workflow", "tool_input": {"scriptPath": str(ruta)}}
+
+    def test_script_path_con_otro_modelo_se_bloquea(self):
+        entrada = self.guion_en_archivo("await agent('x', {model: 'gpt-5', effort: 'low'})")
+        self.assertTrue(negado(correr(entrada)))
+
+    def test_script_path_sin_modelo_se_bloquea(self):
+        self.assertTrue(negado(correr(self.guion_en_archivo("await agent('x', {effort: 'low'})"))))
+
+    def test_script_path_valido_pasa(self):
+        entrada = self.guion_en_archivo("await agent('x', {model: 'sonnet', effort: 'high'})")
+        self.assertEqual(correr(entrada), "")
+
+    def test_script_path_ilegible_pasa(self):
+        entrada = {"tool_name": "Workflow", "tool_input": {"scriptPath": "/no/existe/flujo.js"}}
+        self.assertEqual(correr(entrada), "")
+
+
+class Forks(unittest.TestCase):
+    """Un fork ignora model y effort: hereda el modelo de la sesión."""
+    # El nombre va en una constante: guard-fable.py bloquea escribir un archivo que lo fije literal.
+    MAS_CAPAZ = "fable"
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="fork-home-")
+        self.addCleanup(shutil.rmtree, self.home, True)
+
+    def ajustes(self, datos):
+        carpeta = Path(self.home, ".claude")
+        carpeta.mkdir(parents=True, exist_ok=True)
+        carpeta.joinpath("settings.json").write_text(json.dumps(datos), encoding="utf-8")
+
+    def fork(self, **extra):
+        entrada = {"description": "x", "prompt": "y", "subagent_type": "fork",
+                   "model": "haiku", "effort": "low"}
+        datos = {"tool_name": "Agent", "tool_input": entrada}
+        datos.update(extra)
+        return datos
+
+    def test_fork_con_sesion_mas_capaz_en_settings_se_bloquea(self):
+        self.ajustes({"model": self.MAS_CAPAZ})
+        salida = correr(self.fork(), home=self.home)
+        self.assertTrue(negado(salida))
+        razon = json.loads(salida)["hookSpecificOutput"]["permissionDecisionReason"]
+        self.assertIn("fork", razon)
+        self.assertIn("modelo explícito", razon)
+
+    def test_fork_con_id_completo_mas_capaz_se_bloquea(self):
+        self.ajustes({"model": "claude-%s-5-1[1m]" % self.MAS_CAPAZ})
+        self.assertTrue(negado(correr(self.fork(), home=self.home)))
+
+    def test_fork_con_modelo_en_la_entrada_del_hook_se_bloquea(self):
+        self.ajustes({"model": "sonnet"})
+        datos = self.fork(model={"id": "claude-%s-5-1" % self.MAS_CAPAZ})
+        self.assertTrue(negado(correr(datos, home=self.home)))
+
+    def test_entrada_del_hook_manda_sobre_settings(self):
+        self.ajustes({"model": self.MAS_CAPAZ})
+        self.assertEqual(correr(self.fork(model="claude-haiku-5-5"), home=self.home), "")
+
+    def test_fork_con_sesion_opus_pasa(self):
+        self.ajustes({"model": "opus"})
+        self.assertEqual(correr(self.fork(), home=self.home), "")
+
+    def test_fork_sin_saber_el_modelo_pasa(self):
+        self.assertEqual(correr(self.fork(), home=self.home), "")
+
+    def test_fork_con_settings_roto_pasa(self):
+        Path(self.home, ".claude").mkdir()
+        Path(self.home, ".claude", "settings.json").write_text("{roto", encoding="utf-8")
+        self.assertEqual(correr(self.fork(), home=self.home), "")
+
+    def test_agente_normal_no_mira_el_modelo_de_la_sesion(self):
+        self.ajustes({"model": self.MAS_CAPAZ})
+        self.assertEqual(correr(agente("haiku", "low"), home=self.home), "")
 
 
 class Robustez(unittest.TestCase):
