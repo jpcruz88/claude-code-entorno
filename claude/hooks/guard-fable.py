@@ -23,6 +23,14 @@ Qué revisa:
   claude/rules/ y pruebas/ (solo .md y archivos de prueba, nunca settings*.json ni scripts),
   donde se HABLA de Fable sin elegirlo.
 
+Además protege la configuración de Jev: ~/.claude/jev/config.json y ~/.claude/jev/clave solo
+los cambia el usuario. Se bloquean Write, Edit y NotebookEdit sobre esos archivos y los
+comandos evidentes que los escriben (`> …`, `>> …`, tee, cp/install/ln/rsync con ese destino,
+mv, rm, `sed -i`, dd of=…; en PowerShell Set-Content, Out-File, Copy-Item y parecidos). Las
+lecturas y el resto de la carpeta (limites.json, decisiones.jsonl) no se tocan. Va en este
+hook porque ya corre en Write, Edit, Bash y PowerShell; este bloqueo no se levanta con
+CLAUDE_PERMITIR_FABLE.
+
 Cómo se autoriza: solo el usuario, al arrancar la sesión con la variable de entorno
 CLAUDE_PERMITIR_FABLE=1 (por ejemplo `CLAUDE_PERMITIR_FABLE=1 claude`). Claude no puede
 ponerla, porque el hook hereda el entorno con el que se abrió la sesión.
@@ -32,7 +40,9 @@ guardián, deja pasar la acción: un error propio nunca debe frenar el trabajo n
 """
 import json
 import os
+import posixpath
 import re
+import shlex
 import sys
 
 # `model: fable`, `"model": "claude-fable-5-1"`, `model='fable'`, `model = fable`
@@ -52,6 +62,20 @@ RUTAS_LIBRES = ("/.claude/rules/", "/.claude/hooks/", "/memory/")
 CARPETAS_LIBRES_EN_REPO = ("claude/rules/", "docs/", "pruebas/")
 ARCHIVO_DE_PRUEBA = re.compile(r"^(?:test_.*\.py|.*_test\.py|.*\.(?:test|spec)\.[jt]sx?)$", re.I)
 TOPE_SCRIPT = 512 * 1024
+# Archivos de Jev que solo cambia el usuario (no limites.json ni decisiones.jsonl).
+ARCHIVO_DE_JEV = re.compile(r"/\.claude/jev/(?:config\.json|clave)(?![\w.-])")
+REDIRECCION = re.compile(r"""(?:>>?|>\|)\s*["']?([^\s;|&<>"']+)""")
+SEPARADORES = re.compile(r"[;&|\n]+")
+ENVOLTORIOS = {"sudo", "doas", "command", "nohup", "env", "exec", "time", "nice"}
+ESCRIBE_DESTINO = {"cp", "install", "ln", "rsync", "gcp"}  # el último argumento es el destino
+ESCRIBE_CUALQUIERA = {"tee", "mv", "rm", "truncate", "shred", "unlink"}
+EDITA_EN_SITIO = {"sed", "gsed", "perl"}
+CMDLETS_QUE_ESCRIBEN = re.compile(
+    r"\b(?:set-content|add-content|out-file|clear-content|copy-item|move-item|remove-item|"
+    r"new-item|rename-item|sc|ac|cpi|mi|ri|del|cp|mv|rm)\b|>", re.I)
+CONSEJO_JEV = ("Solo el usuario cambia ~/.claude/jev/config.json y ~/.claude/jev/clave (la "
+               "configuración y la clave de Jev). Si hace falta un cambio, dile al usuario qué "
+               "cambiar y deja que lo haga él; no intentes rodear este bloqueo.")
 TOPE_ARCHIVO = 2 * 1024 * 1024
 
 CONSEJO = ("Regla general del usuario (~/.claude/rules/nunca-fable.md): Claude nunca usa el modelo "
@@ -70,8 +94,74 @@ def deny(motivo):
     sys.exit(0)
 
 
+def deny_jev(motivo):
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "%s %s" % (motivo, CONSEJO_JEV),
+    }}))
+    sys.exit(0)
+
+
 def texto(valor):
     return valor if isinstance(valor, str) else ""
+
+
+def es_archivo_de_jev(ruta):
+    """¿La ruta (de archivo o de un argumento de comando) es config.json o clave de Jev?"""
+    normal = posixpath.normpath(ruta.strip("\"'").replace("\\", "/"))
+    return bool(ARCHIVO_DE_JEV.search(normal))
+
+
+def _palabras(segmento):
+    try:
+        palabras = shlex.split(segmento)
+    except ValueError:
+        palabras = segmento.split()
+    while palabras and (palabras[0] in ENVOLTORIOS or "=" in palabras[0]
+                        or (palabras[0].startswith("-") and len(palabras) > 1)):
+        palabras = palabras[1:]  # sudo, env VAR=…, nice -n 10 …
+    return palabras
+
+
+def comando_escribe_en_jev(cmd):
+    for destino in REDIRECCION.findall(cmd):
+        if es_archivo_de_jev(destino):
+            return True
+    for segmento in SEPARADORES.split(cmd):
+        palabras = _palabras(segmento)
+        if not palabras:
+            continue
+        programa = os.path.basename(palabras[0]).lower()
+        args = [a for a in palabras[1:] if not a.startswith("-")]
+        if programa in ESCRIBE_DESTINO and args and es_archivo_de_jev(args[-1]):
+            return True
+        if programa in ESCRIBE_CUALQUIERA and any(es_archivo_de_jev(a) for a in args):
+            return True
+        en_sitio = any(a.startswith("--in-place") or (a.startswith("-") and not a.startswith("--")
+                                                        and "i" in a[1:]) for a in palabras[1:])
+        if programa in EDITA_EN_SITIO and en_sitio and any(es_archivo_de_jev(a) for a in args):
+            return True
+        if programa == "dd" and any(a.startswith("of=") and es_archivo_de_jev(a[3:]) for a in args):
+            return True
+    return False
+
+
+def proteger_jev(herramienta, entrada):
+    """Deniega que el agente cambie config.json o clave de Jev. Las lecturas pasan."""
+    if herramienta in ("Write", "Edit", "NotebookEdit"):
+        ruta = texto(entrada.get("file_path") or entrada.get("path") or entrada.get("notebook_path"))
+        if ruta and es_archivo_de_jev(os.path.abspath(os.path.expanduser(ruta))):
+            deny_jev("Bloqueado: %s es un archivo de configuración de Jev." % ruta)
+    elif herramienta == "Bash":
+        cmd = texto(entrada.get("command"))
+        if ".claude" in cmd and comando_escribe_en_jev(cmd):
+            deny_jev("Bloqueado: el comando escribe en la configuración de Jev.")
+    elif herramienta == "PowerShell":
+        cmd = texto(entrada.get("command")).replace("\\", "/")
+        if es_archivo_de_jev(cmd) or any(es_archivo_de_jev(p) for p in cmd.split()):
+            if CMDLETS_QUE_ESCRIBEN.search(cmd):
+                deny_jev("Bloqueado: el comando escribe en la configuración de Jev.")
 
 
 def hay_guardian_de_topes():
@@ -184,8 +274,6 @@ REVISORES = {
 
 
 def main():
-    if os.environ.get("CLAUDE_PERMITIR_FABLE") == "1":
-        return
     try:
         crudo = sys.stdin.buffer.read() if hasattr(sys.stdin, "buffer") else sys.stdin.read()
         if isinstance(crudo, bytes):
@@ -195,9 +283,20 @@ def main():
         return
     if not isinstance(datos, dict):
         return
-    revisor = REVISORES.get(datos.get("tool_name"))
+    herramienta = datos.get("tool_name")
     entrada = datos.get("tool_input")
-    if revisor is None or not isinstance(entrada, dict):
+    if not isinstance(entrada, dict):
+        return
+    try:
+        proteger_jev(herramienta, entrada)  # va antes del permiso de Fable: no lo levanta
+    except SystemExit:
+        raise
+    except Exception:
+        pass  # ante un fallo del guardián, no bloquear el trabajo normal
+    if os.environ.get("CLAUDE_PERMITIR_FABLE") == "1":
+        return
+    revisor = REVISORES.get(herramienta)
+    if revisor is None:
         return
     try:
         revisor(entrada)
