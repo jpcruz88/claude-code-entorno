@@ -427,10 +427,11 @@ const resultadoAlDia = JSON.stringify({
 })
 
 test('con resultado.json reciente, el mapa de 100 columnas dibuja la caja AL DÍA', async ($, on) => {
-  motor(on, null, null, BASE, resultadoAlDia)()
+  // Con el reloj en su hora: sin esperar a fijarlo, el resultado quedaba en el futuro y la caja decía «ayer».
+  await motor(on, null, null, BASE, resultadoAlDia)()
   await lanzar($, 'revisar auth', 'al1')
   const ui = await $.ui.mount(pane(100) as never)
-  expect(await ui.find({ text: /AL DÍA · (hoy|ayer) \d\d:\d\d/ })).toBeDefined()
+  expect(await ui.find({ text: /AL DÍA · hoy \d\d:\d\d/ })).toBeDefined()
   expect(await ui.find({ text: /61 al día · reinicia Claude/ })).toBeDefined()
   await ui.unmount()
 })
