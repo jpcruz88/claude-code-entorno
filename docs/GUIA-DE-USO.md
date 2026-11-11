@@ -6,7 +6,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 ## 1. Arranque de una sesión
 
 - Abre Claude Code en la carpeta del proyecto (`cd proyecto && claude`).
-- La sesión arranca con **Haiku** (ver §3). La línea de estado de abajo muestra
+- La sesión usa el modelo que tú eliges (ver §3). La línea de estado de abajo muestra
   modelo, carpeta, rama, contexto usado, costo y límites.
 - Si aparece un aviso de `ctx-budget` (70 % u 85 % de contexto), conviene empezar
   una sesión nueva con un resumen en vez de seguir.
@@ -21,9 +21,10 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `tdd-gate` | Al editar código de producción | Pregunta una vez por sesión si no se ha tocado una prueba. |
 | Mod `spec-gate` | Al editar código de producción | Pregunta una vez por sesión si no hay una spec reciente. |
 | Mod `guard-kill-visible` | Antes de comandos que matan procesos | Solo avisa; no bloquea. |
-| Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Avisa para que resumas o cambies de sesión. |
+| Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Te avisa, y le pide a Claude guardar el handoff antes de que se compacte. |
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
 | Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
+| Hook `hilo.py` | Al compactar, reanudar o abrir sesión | Devuelve los mensajes del usuario tal como los escribió, para no depender del resumen. Con `buscar` cita lo dicho en sesiones pasadas. |
 | Hook `caveman-activo.py` | Siempre | Activa el modo caveman al abrir la sesión y lo recuerda en cada mensaje. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
 | Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet`, `opus` o `fable`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
@@ -36,12 +37,12 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 
 ## 3. Modelo
 
-- **Por defecto: Haiku.** Está en `claude/settings.base.json` y en la regla
-  `claude/rules/modelo.md`.
-- Para otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o usa
-  `/model`. Vale solo para esa tarea.
-- En la sesión principal, Fable no se usa por omisión; solo si lo pides de forma
-  explícita.
+- **El de la sesión lo eliges tú.** Una máquina nueva arranca con Opus
+  (`claude/settings.base.json`); si ya tienes otro en tu `settings.json`, se conserva.
+  Ya no hay Haiku fijo por omisión.
+- Para otro modelo, pídelo («usa sonnet para esto») o usa `/model`. Claude no lo
+  cambia por su cuenta.
+- En la sesión principal, Fable solo se usa si tú lo eliges.
 - **Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
   esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide el modelo según el tamaño
   de la tarea, y el tope de uso lo baja si el crédito no alcanza (ver «Tope por uso

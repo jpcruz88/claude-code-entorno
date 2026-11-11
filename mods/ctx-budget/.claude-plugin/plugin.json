@@ -1,5 +1,5 @@
 {
   "name": "ctx-budget",
-  "version": "0.1.0",
-  "description": "Avisa cuando el contexto cruza el 70 % y el 85 %"
+  "version": "0.2.0",
+  "description": "Avisa cuando el contexto cruza el 70 % y el 85 %, y pide a Claude guardar el handoff"
 }

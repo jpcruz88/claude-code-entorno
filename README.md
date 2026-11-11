@@ -73,9 +73,10 @@ dices que sí.
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones), `nunca-fable.md` (Fable solo en subagentes y con tope de uso) y `mods-version.md` (los pasos para cambiar un mod: subir la versión y actualizar la caché). También: usar `ctx7` (regla `context7.md`) para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». Además, desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones), `nunca-fable.md` (Fable solo en subagentes y con tope de uso) y `mods-version.md` (los pasos para cambiar un mod: subir la versión y actualizar la caché). También: usar `ctx7` (regla `context7.md`) para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». Además, desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y el modelo de la sesión es el que tú eliges (ver [Modelo de la sesión](#modelo-de-la-sesión)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
 | Hook `al-dia.py` | `claude/hooks/` | «Al día»: al abrir Claude, si pasaron 24 h, actualiza en segundo plano tus skills, plugins y programas (no los mods de este repo). Los cambios de texto quedan como diff en `~/.claude/al-dia/cambios/` y el tablero muestra un resumen. |
+| Hook `hilo.py` | `claude/hooks/` | El hilo literal de la conversación. Tras compactar o reanudar, mete en el contexto los mensajes del usuario tal como los escribió (sacados de la transcripción, no de un resumen) y los archivos editados. Al abrir una sesión, apunta a la anterior del proyecto. Como comando busca en sesiones pasadas y cita fecha y sesión: `python3 ~/.claude/hooks/hilo.py buscar "<término>"` (con `--todos`, en todos los proyectos) y `python3 ~/.claude/hooks/hilo.py ver <id>`. No guarda nada: lee las transcripciones que Claude Code ya conserva. |
 | Hook `caveman-activo.py` | `claude/hooks/` | Activa el modo caveman solo: al abrir, reanudar, limpiar o compactar una sesión mete en el contexto las reglas del modo en corto (no la skill entera), y en cada mensaje recuerda el modo en una línea. Sigue `/caveman lite\|full\|ultra`, «stop caveman» y «modo normal»; el modo de cada sesión se guarda en `~/.claude/caveman/`. Sin él, caveman dependía solo del texto de la regla `caveman.md`. |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
@@ -342,7 +343,7 @@ con un aviso.
 
 | Clave | Valor | Qué hace |
 |---|---|---|
-| `model` | `haiku` | Modelo por omisión: Haiku. Ver [Modelo por defecto](#modelo-por-defecto-haiku). |
+| `model` | `opus` | Modelo con el que arranca una máquina nueva. Ver [Modelo de la sesión](#modelo-de-la-sesión). |
 | `modelSettings` | `claude-opus-5-5` → `effortLevel: xhigh` | Esfuerzo de razonamiento alto para ese modelo. |
 | `statusLine` | `~/.claude/statusline.sh` | Línea de estado de abajo (en Windows: `bash ~/.claude/statusline.sh`). |
 | `hooks.PreToolUse` `Bash\|PowerShell` | `guard-kill.py` | Revisa cada comando antes de correrlo y bloquea los que matan procesos en masa. |
@@ -401,18 +402,19 @@ carpeta `memory.bak-<fecha>` antes de enlazar, y lo que no esté en el repo se c
 
 Nunca pongas en el repo público el contenido de la memoria: solo el hook y la regla.
 
-## Modelo por defecto: Haiku
+## Modelo de la sesión
 
-Cada sesión arranca con **Haiku**. Se fija en dos sitios que se complementan:
+La sesión principal usa el modelo que tú eliges. Ya no hay Haiku fijo por omisión:
+aquí pesa más no perder el hilo ni inventar datos que el gasto. Se fija en dos sitios:
 
 | Dónde | Qué hace |
 |---|---|
-| `claude/settings.base.json` → `"model": "haiku"` | Es el modelo con el que arranca Claude Code. |
+| `claude/settings.base.json` → `"model": "opus"` | Es el modelo con el que arranca Claude Code en una máquina nueva. Si tu `settings.json` ya tiene otro, el instalador conserva el tuyo. |
 | `claude/rules/modelo.md` | Le indica a Claude qué modelo y esfuerzo pedir en los subagentes según el tamaño de la tarea, y que no cambie el modelo de la sesión por su cuenta. |
 
-Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o
-usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
-En la sesión principal, Fable no se usa por omisión: solo si lo pides de forma explícita.
+Para usar otro modelo, pídelo («usa sonnet para esto») o usa `/model`. Claude no
+cambia el modelo de la sesión por su cuenta. En la sesión principal, Fable solo se usa
+si tú lo eliges.
 
 **Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
 esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide según el tamaño de la tarea
@@ -421,8 +423,7 @@ y el tope de uso de la cuenta lo baja en cada lanzamiento si el crédito no alca
 Nunca `max`. En un workflow, solo `haiku`, `sonnet` u `opus`. Lo revisa el hook
 `claude/hooks/guard-subagentes.py` en las llamadas a Agent, Task y Workflow. Si
 Jev está seguro (confianza de al menos 0,80), elige el modelo y el esfuerzo de cada
-subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base sigue fijando
-Haiku con esfuerzo medio como valor por defecto de la sesión.
+subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base fija esfuerzo medio como valor por defecto.
 
 Para cambiar el modelo por defecto en todas tus computadoras, edita
 `claude/settings.base.json`, haz commit y corre el instalador en cada una. En la
@@ -473,7 +474,7 @@ omitirlos).
 | `tdd-gate` | Pregunta una vez por sesión si se edita código de producción sin haber tocado antes una prueba. |
 | `spec-gate` | Pregunta una vez por sesión si se edita código de producción sin una spec reciente. |
 | `guard-kill-visible` | Avisa cuando un comando mata procesos por nombre. Solo avisa, no bloquea. |
-| `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto. |
+| `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto, y le pide a Claude actualizar `handoff.md` antes de que se compacte. |
 | `sound-notify` | Avisa al terminar un turno largo y cuando Claude espera un permiso. |
 | `caveman-badge` | Muestra en la línea de estado el modo caveman (aproximado). |
 | `tablero` | Panel en español con carpeta, modelo, costo, contexto, subagentes, permisos y uso. Derivado de Flightdeck (MIT). |
