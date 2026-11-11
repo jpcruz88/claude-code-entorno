@@ -121,10 +121,11 @@ class Exportar(unittest.TestCase):
         (config / "herdr").mkdir(parents=True)
         (config / "herdr" / "config.toml").write_text("# cambiada en esta Mac\n", encoding="utf-8")
         (config / "ghostty").mkdir()
-        # La de Ghostty lleva la ruta real de herdr en vez del marcador: cuenta como igual.
+        # La de Ghostty lleva las rutas reales en vez de los marcadores: cuenta como igual.
         ghostty = (RAIZ / "ghostty/config").read_text(encoding="utf-8")
         (config / "ghostty" / "config").write_text(
-            ghostty.replace("{{RUTA_HERDR}}", "/opt/homebrew/bin/herdr"), encoding="utf-8")
+            ghostty.replace("{{RUTA_ESPERA}}", "/ruta/a/esperar-discos.sh")
+                   .replace("{{RUTA_HERDR}}", "/opt/homebrew/bin/herdr"), encoding="utf-8")
         self.config_dir = config
         salida = self.correr()
         self.assertIn("distinto en esta Mac: herdr/config.toml", salida)

@@ -262,7 +262,7 @@ class Exportador:
         pares = [("claude/hooks/guard-kill.py", self.claude_dir / "hooks" / "guard-kill.py"),
                  ("claude/statusline.sh", self.claude_dir / "statusline.sh")]
         # herdr y Ghostty también se mantienen a mano en el repo (Ghostty, con el marcador
-        # {{RUTA_HERDR}} en lugar de la ruta de herdr de cada Mac).
+        # {{RUTA_ESPERA}} {{RUTA_HERDR}} en lugar de las rutas de cada Mac).
         for relativo, real in (("herdr/config.toml", self.config_dir / "herdr" / "config.toml"),
                                ("ghostty/config", self.config_dir / "ghostty" / "config")):
             if (self.repo / relativo).exists():
@@ -280,7 +280,7 @@ class Exportador:
     def _normalizar(relativo, datos):
         if relativo != "ghostty/config":
             return datos
-        return re.sub(rb"(?m)^command = .*$", b"command = {{RUTA_HERDR}}", datos)
+        return re.sub(rb"(?m)^command = .*$", b"command = {{RUTA_ESPERA}} {{RUTA_HERDR}}", datos)
 
     def todo(self):
         self.settings()
