@@ -269,5 +269,59 @@ class ReintentoConJev(unittest.TestCase):
         self.assertEqual(correr(None, self.home, crudo="esto no es json"), "")
 
 
+class PodarEstado(unittest.TestCase):
+    """estado.json no crece sin fin: guarda solo lo reciente."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="podar-home-")
+        self.addCleanup(shutil.rmtree, self.home, True)
+        self.carpeta = Path(self.home, ".claude", "jev")
+        self.carpeta.mkdir(parents=True)
+        self.modulo = cargar_hook()
+
+    def sembrar(self, estado):
+        (self.carpeta / "estado.json").write_text(json.dumps(estado), encoding="utf-8")
+
+    def estado(self):
+        return json.loads((self.carpeta / "estado.json").read_text(encoding="utf-8"))
+
+    def entrada(self, hora):
+        return {"herramienta": "Bash", "error_normal": "x", "cuenta": 1, "hora": hora}
+
+    def test_quita_las_entradas_de_mas_de_7_dias(self):
+        import time
+        ahora = time.time()
+        self.sembrar({"vieja": self.entrada(ahora - 8 * 86400),
+                      "reciente": self.entrada(ahora - 86400),
+                      "sin-hora": {"herramienta": "Bash", "error_normal": "x", "cuenta": 1}})
+        self.modulo.registrar_fallo(self.home, "nueva", "Bash", "error")
+        estado = self.estado()
+        self.assertEqual(sorted(estado), ["nueva", "reciente"])
+        self.assertIn("hora", estado["nueva"])
+
+    def test_deja_como_mucho_las_200_mas_recientes(self):
+        import time
+        ahora = time.time()
+        self.sembrar({"s%d" % i: self.entrada(ahora - i) for i in range(300)})
+        self.modulo.registrar_fallo(self.home, "nueva", "Bash", "error")
+        estado = self.estado()
+        self.assertEqual(len(estado), 200)
+        self.assertIn("nueva", estado)
+        self.assertIn("s0", estado)
+        self.assertNotIn("s299", estado)
+
+    def test_reiniciar_tambien_poda(self):
+        import time
+        ahora = time.time()
+        self.sembrar({"vieja": self.entrada(ahora - 30 * 86400),
+                      "actual": dict(self.entrada(ahora), cuenta=1)})
+        self.modulo.reiniciar(self.home, "actual", "Bash")
+        self.assertEqual(sorted(self.estado()), ["actual"])
+
+    def test_no_quedan_temporales(self):
+        self.modulo.registrar_fallo(self.home, "s", "Bash", "error")
+        self.assertEqual([p.name for p in self.carpeta.iterdir() if p.suffix == ".tmp"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

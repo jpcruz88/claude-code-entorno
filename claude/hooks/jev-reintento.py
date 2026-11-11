@@ -8,7 +8,9 @@ Qué hace:
   devuelve su elección como nota para Claude (additionalContext).
 - Éxito (PostToolUse): si es la misma herramienta, reinicia la cuenta. No imprime nada.
 - Las interrupciones (is_interrupt: true) se ignoran: no cuentan como fallo.
-- Estado en ~/.claude/jev/estado.json. Registro en decisiones.jsonl, sin el texto del error.
+- Estado en ~/.claude/jev/estado.json, una entrada por sesión con su hora. Al escribirlo se
+  podan las entradas de más de 7 días y se dejan como mucho las 200 más recientes.
+  Registro en decisiones.jsonl, sin el texto del error.
 
 Cualquier fallo propio deja pasar la acción: este hook nunca bloquea nada.
 """
@@ -19,6 +21,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -37,6 +40,8 @@ FRASES = {
 DESCRIPCION_MAX = 60
 ERROR_REGISTRO_MAX = 60
 ERROR_NORMAL_MAX = 200
+ESTADO_EDAD_MAX = 7 * 86400  # segundos: una sesión sin fallos en 7 días se olvida
+ESTADO_ENTRADAS_MAX = 200
 
 RUTA_WINDOWS = re.compile(r"\b[A-Za-z]:\\[^\s'\"`<>|]*")
 RUTA_UNIX = re.compile(r"(?<![\w.])/[^\s'\"`<>|]*")
@@ -86,8 +91,25 @@ def _leer_estado(carpeta):
         return {}
 
 
+def _hora(entrada):
+    try:
+        return float(entrada.get("hora"))
+    except Exception:
+        return 0.0  # sin hora (formato viejo): cuenta como vieja
+
+
+def podar(estado, ahora=None):
+    """Quita las entradas de más de 7 días y deja como mucho las 200 más recientes."""
+    ahora = time.time() if ahora is None else ahora
+    vivas = [(sesion, e) for sesion, e in estado.items()
+             if isinstance(e, dict) and ahora - _hora(e) <= ESTADO_EDAD_MAX]
+    vivas.sort(key=lambda par: _hora(par[1]), reverse=True)
+    return dict(vivas[:ESTADO_ENTRADAS_MAX])
+
+
 def _escribir_estado(carpeta, estado):
-    """Escribe a un temporal y lo cambia con os.replace: nunca queda a medias."""
+    """Poda y escribe a un temporal que cambia con os.replace: nunca queda a medias."""
+    estado = podar(estado)
     temporal = None
     try:
         fd, temporal = tempfile.mkstemp(dir=carpeta, prefix="estado-", suffix=".tmp")
@@ -111,7 +133,7 @@ def registrar_fallo(home, sesion, herramienta, error_normal):
                  and previo.get("error_normal") == error_normal)
         cuenta = _entero(previo.get("cuenta")) + 1 if misma else 1
         estado[sesion] = {"herramienta": herramienta, "error_normal": error_normal,
-                          "cuenta": cuenta}
+                          "cuenta": cuenta, "hora": time.time()}
         _escribir_estado(carpeta, estado)
     return cuenta
 
@@ -128,6 +150,7 @@ def reiniciar(home, sesion, herramienta):
         if (isinstance(previo, dict) and previo.get("herramienta") == herramienta
                 and _entero(previo.get("cuenta")) != 0):
             previo["cuenta"] = 0
+            previo["hora"] = time.time()
             _escribir_estado(carpeta, estado)
 
 
