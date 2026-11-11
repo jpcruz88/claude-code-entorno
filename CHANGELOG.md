@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- Ghostty abre herdr con `herdr/esperar-discos.sh`: si la sesión guardada usa carpetas de un disco externo que aún no está montado (pasa al iniciar sesión), espera hasta 120 s (`HERDR_ESPERA_DISCOS`; Ctrl+C para no esperar) antes de abrir herdr. Sin eso herdr restauraba las pestañas sin carpeta, con «Saved directory is unavailable», y no lo reintentaba. No espera si el servidor de herdr ya está abierto.
 - `guard-subagentes.py` vuelve a ser ejecutable en el repo: `settings.base.json` lo lanza por su ruta y sin el permiso fallaba con «Permission denied» en cada Agent o Task, sin bloquear, así que la guarda no revisaba nada. Prueba nueva (`pruebas/test_hooks_ejecutables.py`) que falla si un hook lanzado por su ruta no es ejecutable. `instalar_comun.py` recupera el permiso de ejecución aunque el contenido del archivo ya esté al día.
 - Revisión de higiene (rama `fix/revision-higiene`):
   - `secret-guard` 0.2.0 detecta URL con credenciales, variables `*_PASSWORD`/`*_SECRET`/`*_TOKEN`, claves de OpenAI, Stripe, Google, JWT, tokens de Telegram, clave secreta de AWS y tokens de npm, y pregunta antes de que `cat`, `less`, `more`, `head`, `tail` o `bat` lean un archivo sensible (ahora también `.envrc`, `id_ecdsa`, `.npmrc`, `.netrc` y `*.key`).

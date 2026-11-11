@@ -177,7 +177,9 @@ class PasoHerdr(unittest.TestCase):
         herdr = self.falso("herdr", HERDR_FALSO)
         self.correr("--sin-skills", "--ghostty")
         texto = (self.home / ".config" / "ghostty" / "config").read_text(encoding="utf-8")
-        self.assertIn("command = %s" % herdr, texto)
+        guion = self.home / ".config" / "herdr" / "esperar-discos.sh"
+        self.assertIn("command = %s %s" % (guion, herdr), texto)
+        self.assertTrue(os.access(guion, os.X_OK))
         self.assertNotIn("{{", texto)
         self.assertIn("theme = Kanagawa Wave", texto)
 
@@ -251,7 +253,7 @@ class ArchivosDelRepo(unittest.TestCase):
 
     def test_plantilla_ghostty_usa_el_marcador(self):
         texto = PLANTILLA_GHOSTTY.read_text(encoding="utf-8")
-        self.assertIn("command = {{RUTA_HERDR}}", texto)
+        self.assertIn("command = {{RUTA_ESPERA}} {{RUTA_HERDR}}", texto)
         self.assertNotIn("/opt/homebrew", texto)
 
 
