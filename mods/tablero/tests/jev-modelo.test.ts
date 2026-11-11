@@ -231,11 +231,14 @@ test('ritmo: sin dato, dato viejo, reinicio vencido o JSON roto no dan nada', ()
 const rs = (usado: number, ritmo: number, despuesDelCorte = false) => ({ usado, ritmo, exceso: usado - ritmo, despuesDelCorte })
 const h5 = (usado: number, falta = 3 * 3600) => ({ usado, reinicio: AHORA + falta })
 
-test('fila de ritmo: texto y color por exceso (verde ≤ 5, ámbar 5 a 15, rojo > 15)', () => {
+// El color es el del tope que rige (ver la prueba de coherencia al final): con la 5 h al 40 %, manda la semana.
+test('fila de ritmo: texto y color del tope (verde hasta +5, ámbar hasta +25, rojo cuando baja a haiku)', () => {
   expect(filaRitmo(rs(52, 40), h5(40), AHORA)).toEqual({ texto: 'semana 52% · ritmo 40% · +12', nivel: 'ambar' })
   expect(filaRitmo(rs(45, 40), h5(40), AHORA)).toEqual({ texto: 'semana 45% · ritmo 40% · +5', nivel: 'verde' })
   expect(filaRitmo(rs(55, 40), h5(40), AHORA)).toEqual({ texto: 'semana 55% · ritmo 40% · +15', nivel: 'ambar' })
-  expect(filaRitmo(rs(55.4, 40), h5(40), AHORA)?.nivel).toBe('rojo')
+  expect(filaRitmo(rs(55.4, 40), h5(40), AHORA)?.nivel).toBe('ambar')
+  expect(filaRitmo(rs(65, 40), h5(40), AHORA)?.nivel).toBe('ambar')
+  expect(filaRitmo(rs(65.1, 40), h5(40), AHORA)?.nivel).toBe('rojo')
   expect(filaRitmo(rs(70, 40), h5(40), AHORA)).toEqual({ texto: 'semana 70% · ritmo 40% · +30', nivel: 'rojo' })
   expect(filaRitmo(rs(25, 40), h5(40), AHORA)).toEqual({ texto: 'semana 25% · ritmo 40% · −15 · xhigh ok', nivel: 'verde' })
   expect(filaRitmo(null, h5(40), AHORA)).toBe(null)
@@ -343,8 +346,47 @@ test('tope ahora: con una ventana vencida o sin la semana, xhigh no pasa y dice 
 })
 
 test('tope ahora: sin dato o con dato viejo no hay tope y lo dice', () => {
-  const sinDato = { texto: 'tope ahora: opus high · sin dato de uso', nivel: 'verde' }
+  const sinDato = { texto: 'tope ahora: opus high · sin dato de uso', nivel: 'ambar' }
   expect(ta(null)).toEqual(sinDato)
   expect(ta({ actualizado: AHORA })).toEqual(sinDato)
   expect(ta({ ...semana(75, JUEVES), actualizado: AHORA - 6 * 3600 - 1 })).toEqual(sinDato)
+})
+
+// ---------------------------------------------------------------- 0.10.0: la familia más capaz y el motivo del guardián
+// El nombre se arma aparte, como en el resto de pruebas que lo nombran junto a un id de modelo.
+const MAS_CAPAZ = ['fa', 'ble'].join('')
+const ID_MAS_CAPAZ = `claude-${MAS_CAPAZ}-5-1`
+
+test('la familia más capaz es una familia: su id completo y su alias son lo mismo', () => {
+  expect(lineaLog(decision({ claude: ID_MAS_CAPAZ, opcion: MAS_CAPAZ, confianza: 0.9 }))).toBe(`Jev dejó modelo ${MAS_CAPAZ} (90%)`)
+  expect(lineaLog(decision({ claude: 'opus', opcion: ID_MAS_CAPAZ, confianza: 0.9 }))).toBe(`Jev cambió modelo opus→${MAS_CAPAZ} (90%)`)
+})
+
+test('la familia más capaz está por encima de opus en la marca de tarjeta', () => {
+  expect(marcaTarjeta(decision({ claude: ID_MAS_CAPAZ, opcion: 'opus', aplicada: true }))).toBe('jev ↓ opus')
+  expect(marcaTarjeta(decision({ claude: 'opus', opcion: MAS_CAPAZ, aplicada: true }))).toBe(`jev ↑ ${MAS_CAPAZ}`)
+  expect(marcaTarjeta(decision({ claude: ID_MAS_CAPAZ, opcion: MAS_CAPAZ, aplicada: true }))).toBe(null)
+})
+
+test('el motivo «tope: <modelo> → opus» del guardián se lee sin los dos puntos', () => {
+  expect(lineaLog(tope({ opcion: 'opus', claude: MAS_CAPAZ, motivo: `tope: ${MAS_CAPAZ} → opus` }))).toBe(`tope → opus · pedía ${MAS_CAPAZ}`)
+  expect(lineaLog(tope({ opcion: 'opus', claude: MAS_CAPAZ, motivo: `tope: ${MAS_CAPAZ} → opus; esfuerzo xhigh → high` }))).toBe(
+    `tope → opus · pedía ${MAS_CAPAZ} · esfuerzo high`,
+  )
+})
+
+test('el color de la fila de ritmo sale del mismo tope que la línea «tope ahora»', () => {
+  // semana(u, JUEVES) a las 12:00 del lunes: ritmo 45,5. Con 61,0 el exceso es +15,5: sonnet medium (ámbar), no rojo.
+  for (const usado of [20, 30, 44, 52, 58, 61, 66, 75]) {
+    for (const cinco of [undefined, h5(30), h5(65), h5(80), h5(90)]) {
+      const l = { ...semana(usado, JUEVES), ...(cinco ? { five_hour: cinco } : {}) }
+      const fila = filaRitmo(ritmoSemana(l, AHORA, undefined, UTC1), cinco, AHORA)
+      expect(fila?.nivel).toBe(ta(l).nivel)
+    }
+  }
+})
+
+test('sin dato de uso el tope no se pinta en verde', () => {
+  expect(ta(null).nivel).not.toBe('verde')
+  expect(ta({ actualizado: AHORA }).nivel).not.toBe('verde')
 })

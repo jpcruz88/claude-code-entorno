@@ -280,7 +280,7 @@ const colorDeFila = async ($: Parameters<Parameters<typeof test>[1]>[0], usado: 
   return nodo?.props?.color
 }
 
-// Ritmo 45 %: 1 % queda 44 puntos por debajo, 55 % está 10 por encima y 70 % está 25 por encima.
+// Ritmo 45 %: 1 % queda 44 puntos por debajo, 55 % está 10 por encima, 70 % está 25 y 72 % está 27 por encima.
 test('la fila de ritmo va en verde con el uso por debajo del ritmo', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(1), AHORA_RITMO)
   await fijar()
@@ -293,10 +293,17 @@ test('la fila de ritmo va en ámbar de 5 a 15 puntos por encima', { options: { l
   expect(await colorDeFila($, 55)).toBe('warning')
 })
 
-test('la fila de ritmo va en rojo con más de 15 puntos por encima', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
+// El color es el del tope: 70 % (+25) baja a sonnet medium, ámbar; 72 % (+27) baja a haiku, rojo.
+test('la fila de ritmo va en ámbar mientras el tope no baja a haiku', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   const fijar = motor(on, unaDecision(), limitesJson(70), AHORA_RITMO)
   await fijar()
-  expect(await colorDeFila($, 70)).toBe('error')
+  expect(await colorDeFila($, 70)).toBe('warning')
+})
+
+test('la fila de ritmo va en rojo cuando el tope baja a haiku', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
+  const fijar = motor(on, unaDecision(), limitesJson(72), AHORA_RITMO)
+  await fijar()
+  expect(await colorDeFila($, 72)).toBe('error')
 })
 
 const sinFila = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
