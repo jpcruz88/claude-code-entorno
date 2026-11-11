@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { detectarSecreto, esLecturaSensible } from './secretos'
+import { comandoLeeSensible, detectarSecreto, esLecturaSensible } from './secretos'
 
 const permitidos = new Set<string>()
 
@@ -37,7 +37,12 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Write' }, (_, e, next) => rechazarSiHaySecreto(e.content) ?? next(e)).catch(alFallar)
   on('tool.call', { tool: 'Edit' }, (_, e, next) => rechazarSiHaySecreto(e.new_string) ?? next(e)).catch(alFallar)
   on('tool.call', { tool: 'NotebookEdit' }, (_, e, next) => rechazarSiHaySecreto(e.new_source) ?? next(e)).catch(alFallar)
-  on('tool.call', { tool: 'Bash' }, (_, e, next) => rechazarSiHaySecreto(e.command) ?? next(e)).catch(alFallar)
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const rechazo = rechazarSiHaySecreto(e.command)
+    if (rechazo) return rechazo
+    const ruta = comandoLeeSensible(e.command)
+    return (ruta && (await revisarLectura($, ruta))) || next(e)
+  }).catch(alFallar)
   on('tool.call', { tool: 'PowerShell' }, (_, e, next) => rechazarSiHaySecreto(e.command) ?? next(e)).catch(alFallar)
   on('tool.call', { tool: 'Read' }, async ($, e, next) => (await revisarLectura($, e.file_path)) ?? next(e)).catch(alFallar)
 }
