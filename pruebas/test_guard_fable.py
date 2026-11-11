@@ -141,6 +141,76 @@ class FalsosNegativos(unittest.TestCase):
         self.assertEqual(correr(bash("claude config set model sonnet")), "")
 
 
+class ConfiguracionDeJev(unittest.TestCase):
+    """Solo el usuario cambia ~/.claude/jev/config.json y ~/.claude/jev/clave."""
+    CONFIG = "~/.claude/jev/config.json"
+    CLAVE = "~/.claude/jev/clave"
+
+    def correr_sin_permiso(self, entrada, permitir_fable=False):
+        entorno = {k: v for k, v in os.environ.items() if k != "CLAUDE_PERMITIR_FABLE"}
+        if permitir_fable:
+            entorno["CLAUDE_PERMITIR_FABLE"] = "1"
+        r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(entrada).encode(),
+                           capture_output=True, timeout=30, env=entorno)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout.decode().strip()
+
+    def escribir(self, ruta, herramienta="Write"):
+        entrada = {"file_path": ruta, "content": "{}"}
+        if herramienta == "Edit":
+            entrada = {"file_path": ruta, "old_string": "a", "new_string": "b"}
+        return {"tool_name": herramienta, "tool_input": entrada}
+
+    def test_write_y_edit_se_bloquean(self):
+        home = os.path.expanduser("~")
+        for ruta in (self.CONFIG, self.CLAVE, home + "/.claude/jev/config.json",
+                     home + "/.claude/jev/../jev/clave"):
+            for herramienta in ("Write", "Edit"):
+                with self.subTest(ruta=ruta, herramienta=herramienta):
+                    salida = correr(self.escribir(ruta, herramienta))
+                    self.assertTrue(negado(salida))
+                    self.assertIn("solo el usuario", salida.lower())
+
+    def test_bloqueo_sigue_con_permiso_de_fable(self):
+        self.assertTrue(negado(self.correr_sin_permiso(self.escribir(self.CLAVE), True)))
+
+    def test_comandos_que_escriben_se_bloquean(self):
+        for comando in (
+                "echo '{}' > ~/.claude/jev/config.json",
+                "printf x >> \"$HOME/.claude/jev/clave\"",
+                "echo x | tee ~/.claude/jev/clave",
+                "echo x | tee -a ${HOME}/.claude/jev/config.json > /dev/null",
+                "cp /tmp/otra.json ~/.claude/jev/config.json",
+                "mv /tmp/otra ~/.claude/jev/clave",
+                "mv ~/.claude/jev/clave /tmp/robada",
+                "rm -f ~/.claude/jev/config.json",
+                "sed -i '' 's/a/b/' ~/.claude/jev/config.json",
+                "cd /tmp && cp nueva.json ~/.claude/jev/config.json"):
+            with self.subTest(comando=comando):
+                self.assertTrue(negado(correr(bash(comando))))
+
+    def test_powershell_que_escribe_se_bloquea(self):
+        entrada = {"tool_name": "PowerShell", "tool_input": {
+            "command": "Set-Content -Path $HOME\\.claude\\jev\\clave -Value x"}}
+        self.assertTrue(negado(correr(entrada)))
+
+    def test_lecturas_y_otros_archivos_pasan(self):
+        for comando in ("cat ~/.claude/jev/config.json",
+                        "cat ~/.claude/jev/config.json > /tmp/copia.json",
+                        "cp ~/.claude/jev/config.json /tmp/copia.json",
+                        "jq . ~/.claude/jev/config.json",
+                        "echo x > ~/.claude/jev/limites.json",
+                        "echo x >> ~/.claude/jev/decisiones.jsonl",
+                        "cp a ~/.claude/jev/config.json.bak"):
+            with self.subTest(comando=comando):
+                self.assertEqual(correr(bash(comando)), "")
+        for ruta in ("~/.claude/jev/limites.json", "~/.claude/jev/decisiones.jsonl"):
+            with self.subTest(ruta=ruta):
+                self.assertEqual(correr(self.escribir(ruta)), "")
+        lectura = {"tool_name": "Read", "tool_input": {"file_path": self.CONFIG}}
+        self.assertEqual(correr(lectura), "")
+
+
 class RutasLibres(unittest.TestCase):
     """Dentro de un repo, la documentación, las reglas y las pruebas pueden HABLAR del modelo."""
 
