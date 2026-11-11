@@ -150,6 +150,13 @@ class Instalador:
     def instalar_archivo(self, contenido, destino, origen, ejecutable=False):
         """Copia `contenido` a `destino`; si ya había otra versión, antes la respalda."""
         if destino.exists() and destino.read_bytes() == contenido:
+            # Mismo contenido no implica mismo permiso: una copia hecha por otra vía
+            # puede haber dejado el hook sin bit de ejecución.
+            if (ejecutable and not ES_WINDOWS and not self.simular
+                    and not os.access(str(destino), os.X_OK)):
+                destino.chmod(0o755)
+                self.info("permiso de ejecución recuperado: %s" % destino)
+                return
             self.info("al día: %s" % destino)
             return
         if self.simular:

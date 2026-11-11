@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- `guard-subagentes.py` vuelve a ser ejecutable en el repo: `settings.base.json` lo lanza por su ruta y sin el permiso fallaba con «Permission denied» en cada Agent o Task, sin bloquear, así que la guarda no revisaba nada. Prueba nueva (`pruebas/test_hooks_ejecutables.py`) que falla si un hook lanzado por su ruta no es ejecutable. `instalar_comun.py` recupera el permiso de ejecución aunque el contenido del archivo ya esté al día.
 - Revisión de higiene (rama `fix/revision-higiene`):
   - `secret-guard` 0.2.0 detecta URL con credenciales, variables `*_PASSWORD`/`*_SECRET`/`*_TOKEN`, claves de OpenAI, Stripe, Google, JWT, tokens de Telegram, clave secreta de AWS y tokens de npm, y pregunta antes de que `cat`, `less`, `more`, `head`, `tail` o `bat` lean un archivo sensible (ahora también `.envrc`, `id_ecdsa`, `.npmrc`, `.netrc` y `*.key`).
   - `caveman-badge` 0.1.1: «stop caveman.» con puntuación final apaga el badge.
