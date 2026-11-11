@@ -63,7 +63,8 @@ test('detenido: fondo rojo (warn) con los errores seguidos', () => {
 
 test('en espera: fondo gris (mut) y el latido alterna ○ y ●', () => {
   const a = componerMapa({ ...datos(0), situacion: 'inactivo', detalle: {} }, 0)
-  const b = componerMapa({ ...datos(0), situacion: 'inactivo', detalle: {} }, 0.7)
+  // Late una vez por segundo: en reposo el panel se redibuja como mucho cada segundo.
+  const b = componerMapa({ ...datos(0), situacion: 'inactivo', detalle: {} }, 1.2)
   expect(a[2][0].bg).toBe('mut')
   expect(fila(a, 2)).toContain('E N   E S P E R A')
   expect(fila(a, 2)).not.toBe(fila(b, 2))

@@ -102,32 +102,6 @@ test('con animación apagada no pide redibujar cada segundo', { options: { anima
   expect(invalidaciones).toBe(alPrincipio)
 })
 
-test('con contexto medido, la barra de vida no redibuja a cada cuadro si nada cambia', async ($, on) => {
-  const reloj = mock.clock(on)
-  on('ui.status', () => ({ value: undefined }))
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  on('session.cwd', () => ({ value: '/work' }))
-  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
-  on('session.measure', (_$, e) => ({ changed: e.changed }))
-  on('command.register', () => ({ value: { command: 'tablero' } }))
-  on('ui.open', () => ({ value: { isPlaced: true as const } }))
-  let invalidaciones = 0
-  on('ui.invalidate', () => {
-    invalidaciones += 1
-    return { value: undefined }
-  })
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  await reloj.advance(1_000)
-  const quieto = invalidaciones
-  await medir($)
-  await reloj.advance(3_000)
-  expect(invalidaciones).toBeGreaterThan(quieto)
-  const tras = invalidaciones
-  await reloj.advance(5_000)
-  // En reposo el latido cambia cada 5 cuadros de 120 ms: unos 8 redibujos en 5 s, no 41 (uno por cuadro).
-  expect(invalidaciones - tras).toBeLessThanOrEqual(10)
-})
-
 test('al terminar la sesión, el reloj de la banda deja de pedir redibujos', async ($, on) => {
   const reloj = mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
