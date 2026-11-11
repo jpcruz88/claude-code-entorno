@@ -281,7 +281,8 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
   const bg: Tinta | undefined = encendido ? b.tinta : undefined
   const fg: Tinta = encendido ? 'osc' : b.tinta
   for (let y = 1; y <= 3; y++) for (let x = 0; x < W; x++) g[y][x] = bg ? { c: ' ', k: fg, bg } : { c: ' ', k: fg }
-  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t / 0.6) % 2 === 0 ? '○' : '●') : b.glifo
+  // El latido late una vez por segundo: en reposo el panel se redibuja como mucho cada segundo.
+  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t) % 2 === 0 ? '○' : '●') : b.glifo
   // Con poco ancho, el rótulo va sin espaciar; el detalle se recorta al ancho.
   const largo = `${gl}   ${espaciado(b.rotulo)}`
   const titulo = Array.from(largo).length <= W - 4 ? largo : `${gl} ${b.rotulo}`
@@ -293,11 +294,14 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
 /**
  * Compone el mapa para los datos, el instante `t` (segundos desde que empezó la animación) y el ancho del panel.
  * Desde 100 columnas, la rejilla de dos columnas de 100; por debajo, todo apilado al ancho del panel.
+ * Con `animado` en falso el mapa es el mismo en cualquier instante: spinner y lunas en su primer cuadro, bordes
+ * encendidos y sin paquetes en las líneas.
  */
-export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO): Celda[][] => {
+export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO, animado = true): Celda[][] => {
   const ancha = ancho >= MAPA_ANCHO
   const W = ancha ? MAPA_ANCHO : Math.max(MAPA_MIN, Math.floor(ancho))
-  const g = ancha ? componerAncho(d, t) : componerAngosto(d, t, W)
+  const tt = animado ? t : 0
+  const g = ancha ? componerAncho(d, tt, animado) : componerAngosto(d, tt, W, animado)
   if (!d.alDia) return g
   // AL DÍA va en la fila 5, justo bajo la franja (filas 1 a 3), con una fila en blanco debajo; lo demás baja.
   const enBlanco = crearRejilla(1, W)
@@ -374,7 +378,7 @@ export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
   return g
 }
 
-const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
+const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => {
   const N = d.tarjetas.length
   const compacto = N <= 1
   const alto = compacto ? MAPA_ALTO_COMPACTO : MAPA_ALTO
@@ -386,9 +390,9 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
   // El borde y el parpadeo siguen el mismo pulso: vivo y tenue, medio ciclo cada uno.
   const vivo = Math.floor(t * 1.7) % 2 === 0
   const hayTrabajo = enCurso > 0 || d.asesorActivo || d.situacion === 'trabajando'
-  // Los paquetes solo recorren las líneas con trabajo: en reposo, las líneas quedan quietas.
+  // Los paquetes solo recorren las líneas con trabajo y animación: en reposo, las líneas quedan quietas.
   const paq = (...a: Parameters<typeof paquete>) => {
-    if (hayTrabajo) paquete(...a)
+    if (hayTrabajo && animado) paquete(...a)
   }
 
   // Cabecera, en las columnas de la maqueta.
@@ -643,7 +647,7 @@ const parAjustado = (g: Celda[][], W: number, y: number, etiqueta: string, valor
   put(g, W - 2 - Array.from(v).length, y, v, k)
 }
 
-const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
+const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): Celda[][] => {
   const N = d.tarjetas.length
   const g = crearRejilla(120, W)
   const enCurso = d.tarjetas.filter(x => x.estado === 'R').length
@@ -759,7 +763,7 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   // Conector lead → JEV, en el centro.
   const cx = Math.floor(W / 2)
   put(g, cx, y, '▾', 'mut')
-  if (hayTrabajo) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
+  if (hayTrabajo && animado) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
   y += 1
 
   // JEV · decisiones: el umbral, las tres últimas decisiones (hora, texto, ▮▯, confianza) y el tope.

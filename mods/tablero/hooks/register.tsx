@@ -78,7 +78,7 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, type ModoReloj } from './clave-redibujo'
 import { nombreDeTipo } from './nombres'
 import { filasVida, svgVida, vidaDe } from './vida'
 import { COLOR_DE } from './banda'
@@ -176,7 +176,9 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
   const alDia = typeof textoAlDia === 'string' ? textoAlDia : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  await update($, jev, () => ({ decisiones: ds, limites, alDia }))
+  // Escribir el estado redibuja el panel: solo se escribe si algo cambió.
+  const nuevo: JevEstado = { decisiones: ds, limites, alDia }
+  if (JSON.stringify(await getJev($)) !== JSON.stringify(normalizeJev(nuevo))) await update($, jev, () => nuevo)
   return ds
 }
 
@@ -296,12 +298,15 @@ async function noteMode($: EngineInterface, mode: string | undefined) {
 // Lo que la banda muestra ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
 const mostrado = { contexto: null as number | null, usos: new Map<string, number>() }
 let fase = 0
-// Verdadero mientras el último dibujo fue la rejilla animada: entonces el reloj redibuja con cada marco.
-let mapaVivo = false
+// Verdadero mientras el último dibujo fue el mapa: sus relojes tienen segundos y, con trabajo, se anima con cada marco.
+let mapaVisible = false
 /** El costo de la sesión a lo largo del tiempo, para la gráfica costo/min del mapa. */
 const muestrasCosto: MuestraCosto[] = []
 let ultimaClave = ''
+// El reloj del panel: corre solo mientras el panel se dibuja (lo arranca su `ui.render`, lo paran `ui.close` y
+// `session.end`), rápido con trabajo en curso y lento en reposo.
 let reloj: { cancel: () => void } | null = null
+let modoActual: ModoReloj = 'lento'
 const redondeo = (n: number) => Math.round(n * 10) / 10
 
 async function entradaDe($: EngineInterface, columnas: number): Promise<BandaEntrada> {
@@ -344,12 +349,17 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
-  const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = claveDeRedibujo({ ...e, marco: mapaVivo ? fase : undefined })
+  const [e, m] = await Promise.all([entradaDe($, 0), getMain($)])
+  if (!reloj) return
+  const modo = modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || e.agentesActivos > 0 })
+  const s = suavizar(cfg, e)
+  const clave = claveDeRedibujo({ ...s, marco: mapaVisible && modo === 'rapido' ? fase : undefined, segundos: mapaVisible })
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
   }
+  // Empezó o terminó el trabajo: el reloj cambia de ritmo.
+  if (modo !== modoActual) iniciarReloj($, cfg, modo)
 }
 
 function detenerReloj() {
@@ -357,10 +367,11 @@ function detenerReloj() {
   reloj = null
 }
 
-function iniciarReloj($: EngineInterface, cfg: Config) {
+function iniciarReloj($: EngineInterface, cfg: Config, modo: ModoReloj) {
   detenerReloj()
+  modoActual = modo
   // Un cuadro por periodo; solo redibuja si la clave cambió (ver PERIODO_RELOJ_MS).
-  reloj = $.clock.every(PERIODO_RELOJ_MS(cfg.animacion), () => void cuadroDeReloj($, cfg).catch(() => undefined))
+  reloj = $.clock.every(PERIODO_RELOJ_MS[modo], () => void cuadroDeReloj($, cfg).catch(() => undefined))
 }
 
 // ---------------------------------------------------------------- hooks
@@ -411,8 +422,6 @@ export const register: Register = (on, options) => {
     // Lo que actualizó la revisión «Al día» ya está en disco al abrir la sesión: la caja sale desde el primer cuadro.
     await releerJev($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
-    // El reloj redibuja el panel (animación, cuenta del turno, cambio de minuto): siempre corre.
-    iniciarReloj($, cfg)
     await refreshStatus($)
     const done = await next(e)
     if (resumedWindow > 0) {
@@ -768,6 +777,16 @@ export const register: Register = (on, options) => {
 
   // ---------------------------------------------------------------- drawing
 
+  // Un panel cerrado no se ve: el reloj se para hasta que vuelva a dibujarse.
+  on('ui.close', async ($, e, next) => {
+    const r = await next(e)
+    if (e.id === PANE) {
+      detenerReloj()
+      mapaVisible = false
+    }
+    return r
+  })
+
   // After a surface module faults on a surface, this load draws it there as plain text; the other
   // module, and other surfaces, keep theirs. Keyed by faultKey: `desktop:rail.tsx`.
   const faulted = new Set<string>()
@@ -822,6 +841,9 @@ export const register: Register = (on, options) => {
     const viewed = e.props.view?.agentId ?? null
     const advising = isAdvising(a)
     const running = cards.filter(c => c.status === 'running')
+    // El panel se está dibujando: si el reloj no corre (recién abierto o reabierto), arranca al ritmo que toca.
+    mapaVisible = enMapa
+    if (!reloj) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
@@ -1545,7 +1567,6 @@ export const register: Register = (on, options) => {
     }) : null
 
     // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
-    mapaVivo = enMapa && cfg.animacion
     const colorDeTinta = (k: Tinta): string =>
       ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, jevd: '#1f6f4f', enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
     const rit = ritmoSemana(jevs.limites, now / 1000)
@@ -1624,7 +1645,7 @@ export const register: Register = (on, options) => {
     }
     const mapaBody = enMapa ? (
       <Box flexDirection="column" width={Math.min(W, MAPA_ANCHO)}>
-        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W)).map((tramos, y) => (
+        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W, cfg.animacion)).map((tramos, y) => (
           <Text key={y}>
             {tramos.map((tr, i) => (
               <Text key={i} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
