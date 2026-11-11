@@ -59,6 +59,13 @@ class ConfiguracionCompleta(unittest.TestCase):
         self.assertIn("push", texto)
         self.assertIn("Co-Authored-By", texto)
 
+    def test_regla_de_git_no_fija_el_modelo_de_la_linea_co_authored(self):
+        """La línea lleva el modelo que escribió el cambio, no uno fijo."""
+        texto = (RAIZ / "claude" / "rules" / "git.md").read_text(encoding="utf-8")
+        self.assertNotIn("Haiku 5.5", texto)
+        self.assertIn("Co-Authored-By: Claude <modelo y versión> <noreply@anthropic.com>", texto)
+        self.assertIn("realmente", texto)
+
 
 if __name__ == "__main__":
     unittest.main()
