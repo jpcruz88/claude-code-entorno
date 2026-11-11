@@ -13,5 +13,6 @@ cursor-style = bar
 cursor-color = #c8c093
 selection-background = #2d4f67
 
-# Abrir herdr automáticamente en cada ventana
-command = {{RUTA_HERDR}}
+# Abrir herdr automáticamente en cada ventana. El guion espera antes a los discos
+# externos de la sesión guardada, para que herdr encuentre las carpetas al restaurar.
+command = {{RUTA_ESPERA}} {{RUTA_HERDR}}

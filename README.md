@@ -84,7 +84,7 @@ dices que sí.
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
 | herdr | `herdr/config.toml` | Organizador de terminales para agentes, con la paleta Kanagawa, atajos `ctrl+alt`, lazygit, btop y Neovim en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
-| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Antes espera (hasta 120 s, `HERDR_ESPERA_DISCOS`) a los discos externos de la sesión guardada con `herdr/esperar-discos.sh`, para que herdr no marque las pestañas como «Saved directory is unavailable». Solo Mac. |
 | Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
