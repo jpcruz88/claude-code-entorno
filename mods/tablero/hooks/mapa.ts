@@ -256,6 +256,19 @@ const glifo = (t: TarjetaMapa, idx: number, tiempo: number): [string, Tinta, str
 /** Color del borde o de la barra de una tarea. */
 const tintaDe = (t: TarjetaMapa): Tinta => (t.estado === 'D' ? 'jev' : t.estado === 'F' ? 'warn' : t.estado === 'Q' || t.estado === 'S' ? 'mut' : 'enj')
 
+/** Filas de la lista de agentes: con más de `LISTA_MAX` tareas se enseñan `LISTA_MAX - 1` y una fila de «+N más». */
+const LISTA_MAX = 8
+
+/**
+ * Las tareas que enseña la lista. Si caben todas, en el orden en que se lanzaron. Si no, `LISTA_MAX - 1`: las que están
+ * en curso primero y después las demás, cada grupo de la más reciente a la más vieja; el resto lo cuenta «+N más».
+ */
+const tarjetasDeLista = (tarjetas: TarjetaMapa[]): TarjetaMapa[] => {
+  if (tarjetas.length <= LISTA_MAX) return tarjetas
+  const recientes = [...tarjetas].reverse()
+  return [...recientes.filter(x => x.estado === 'R'), ...recientes.filter(x => x.estado !== 'R')].slice(0, LISTA_MAX - 1)
+}
+
 /** `2/4` con total reportado; si no, `3 pasos` (o `1 paso`). */
 const textoPasos = (t: TarjetaMapa) =>
   t.total === null ? `${t.hechos} ${t.hechos === 1 ? 'paso' : 'pasos'}` : `${Math.min(t.hechos, t.total)}/${t.total}`
@@ -268,7 +281,8 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
   const bg: Tinta | undefined = encendido ? b.tinta : undefined
   const fg: Tinta = encendido ? 'osc' : b.tinta
   for (let y = 1; y <= 3; y++) for (let x = 0; x < W; x++) g[y][x] = bg ? { c: ' ', k: fg, bg } : { c: ' ', k: fg }
-  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t / 0.6) % 2 === 0 ? '○' : '●') : b.glifo
+  // El latido late una vez por segundo: en reposo el panel se redibuja como mucho cada segundo.
+  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t) % 2 === 0 ? '○' : '●') : b.glifo
   // Con poco ancho, el rótulo va sin espaciar; el detalle se recorta al ancho.
   const largo = `${gl}   ${espaciado(b.rotulo)}`
   const titulo = Array.from(largo).length <= W - 4 ? largo : `${gl} ${b.rotulo}`
@@ -280,11 +294,14 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
 /**
  * Compone el mapa para los datos, el instante `t` (segundos desde que empezó la animación) y el ancho del panel.
  * Desde 100 columnas, la rejilla de dos columnas de 100; por debajo, todo apilado al ancho del panel.
+ * Con `animado` en falso el mapa es el mismo en cualquier instante: spinner y lunas en su primer cuadro, bordes
+ * encendidos y sin paquetes en las líneas.
  */
-export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO): Celda[][] => {
+export const componerMapa = (d: DatosMapa, t: number, ancho: number = MAPA_ANCHO, animado = true): Celda[][] => {
   const ancha = ancho >= MAPA_ANCHO
   const W = ancha ? MAPA_ANCHO : Math.max(MAPA_MIN, Math.floor(ancho))
-  const g = ancha ? componerAncho(d, t) : componerAngosto(d, t, W)
+  const tt = animado ? t : 0
+  const g = ancha ? componerAncho(d, tt, animado) : componerAngosto(d, tt, W, animado)
   if (!d.alDia) return g
   // AL DÍA va en la fila 5, justo bajo la franja (filas 1 a 3), con una fila en blanco debajo; lo demás baja.
   const enBlanco = crearRejilla(1, W)
@@ -361,7 +378,7 @@ export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
   return g
 }
 
-const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
+const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => {
   const N = d.tarjetas.length
   const compacto = N <= 1
   const alto = compacto ? MAPA_ALTO_COMPACTO : MAPA_ALTO
@@ -373,9 +390,9 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
   // El borde y el parpadeo siguen el mismo pulso: vivo y tenue, medio ciclo cada uno.
   const vivo = Math.floor(t * 1.7) % 2 === 0
   const hayTrabajo = enCurso > 0 || d.asesorActivo || d.situacion === 'trabajando'
-  // Los paquetes solo recorren las líneas con trabajo: en reposo, las líneas quedan quietas.
+  // Los paquetes solo recorren las líneas con trabajo y animación: en reposo, las líneas quedan quietas.
   const paq = (...a: Parameters<typeof paquete>) => {
-    if (hayTrabajo) paquete(...a)
+    if (hayTrabajo && animado) paquete(...a)
   }
 
   // Cabecera, en las columnas de la maqueta.
@@ -546,7 +563,7 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
     paq(g, desplazar(poligono([[14, 29], [14, 30], [50, 30], [50, 31]])), t, 6, 0.9, 'enj')
     paq(g, desplazar(poligono([[85, 29], [85, 30], [50, 30], [50, 31]])), t, 6, 1.4, 'enj')
   } else {
-    // Lista: hasta siete agentes, con «+N más» si hay más
+    // Lista: hasta ocho agentes; con más, siete (en curso y recientes primero) y «+N más».
     HL(3, 96, 21, '─', 'mut')
     P(2, 21, '┌', 'mut')
     P(97, 21, '┐', 'mut')
@@ -555,9 +572,10 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
     paq(g, desplazar(linea(OX, 20, OX, 21)), t, 7, 0.6, 'jev')
     caja(g, 2, 22 + Y, 96, 10, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, 'enj')
     P(OX, 22, '┴', 'enj')
-    const filas = N > 8 ? 7 : N
+    const lista = tarjetasDeLista(d.tarjetas)
+    const filas = lista.length
     for (let i = 0; i < filas; i++) {
-      const ag = d.tarjetas[i]
+      const ag = lista[i]
       const y = 23 + i
       const [gl, kg, txt] = glifo(ag, i, t)
       P(4, y, gl, kg)
@@ -568,7 +586,7 @@ const componerAncho = (d: DatosMapa, t: number): Celda[][] => {
       P(58, y, txt, kg)
       if (ag.estado === 'R') P(92, y, Math.floor(t * 6 + i) % 2 === 0 ? '▸' : '▹', kg)
     }
-    if (N > 8) P(6, 30, `+${N - 7} más · ${enCola} en cola`, 'mut')
+    if (N > filas) P(6, 30, `+${N - filas} más · ${enCola} en cola`, 'mut')
     P(50, 31, '┬', 'enj')
     VL(50, 32, 32, '│', 'mut')
     paq(g, desplazar(poligono([[50, 31], [50, 32], [50, 33]])), t, 6, 0.9, 'enj')
@@ -629,7 +647,7 @@ const parAjustado = (g: Celda[][], W: number, y: number, etiqueta: string, valor
   put(g, W - 2 - Array.from(v).length, y, v, k)
 }
 
-const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
+const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): Celda[][] => {
   const N = d.tarjetas.length
   const g = crearRejilla(120, W)
   const enCurso = d.tarjetas.filter(x => x.estado === 'R').length
@@ -651,18 +669,19 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   franja(g, d, t, W, vivo, sp)
   let y = 5
 
-  // AGENTES, justo bajo la franja: una fila por tarea, hasta siete, con «+N más» si hay más de ocho. Va arriba porque es
+  // AGENTES, justo bajo la franja: una fila por tarea, hasta ocho; con más, siete (ver tarjetasDeLista) y «+N más». Va arriba porque es
   // lo que más cambia y, al pie de un mapa alto, el panel lo cortaba.
   if (N > 0) {
-    const filas = N > 8 ? 7 : N
-    const alto = filas + 2 + (N > 8 ? 1 : 0)
+    const lista = tarjetasDeLista(d.tarjetas)
+    const filas = lista.length
+    const alto = filas + 2 + (N > filas ? 1 : 0)
     caja(g, 0, y, W, alto, '', 'enj')
     // El título más largo que quepa entero, sin cortar una palabra contra el borde.
     const titulos = [`AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok`, `AGENTES ${N}`]
     const tituloAg = titulos.find(x => Array.from(x).length + 2 <= W - 4) ?? `AGENTES ${N}`
     put(g, 2, y, ` ${tituloAg} `, 'enj')
     for (let i = 0; i < filas; i++) {
-      const ag = d.tarjetas[i]
+      const ag = lista[i]
       const yy = y + 1 + i
       const [gl, kg, txt] = glifo(ag, i, t)
       const pasos = textoPasos(ag)
@@ -677,7 +696,7 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
       const bw = Math.min(12, xDer - 1 - xBarra)
       if (bw >= 4 && ag.total !== null) barra(g, xBarra, yy, bw, Math.min(ag.hechos, ag.total) / Math.max(1, ag.total), tintaDe(ag))
     }
-    if (N > 8) put(g, 5, y + 1 + filas, recortar(`+${N - 7} más · ${enCola} en cola`, iw - 3), 'mut')
+    if (N > filas) put(g, 5, y + 1 + filas, recortar(`+${N - filas} más · ${enCola} en cola`, iw - 3), 'mut')
     y += alto + 1
   }
 
@@ -744,7 +763,7 @@ const componerAngosto = (d: DatosMapa, t: number, W: number): Celda[][] => {
   // Conector lead → JEV, en el centro.
   const cx = Math.floor(W / 2)
   put(g, cx, y, '▾', 'mut')
-  if (hayTrabajo) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
+  if (hayTrabajo && animado) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
   y += 1
 
   // JEV · decisiones: el umbral, las tres últimas decisiones (hora, texto, ▮▯, confianza) y el tope.

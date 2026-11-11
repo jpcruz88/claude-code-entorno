@@ -4,7 +4,7 @@ import { UMBRAL_ERRORES, bannerDe, situacionDe } from '../hooks/situacion'
 
 // La franja grande de arriba dice, con un color, si el agente trabaja, te espera, está detenido o no hace nada.
 
-const base = { trabajando: false, permisosPendientes: 0, rachaErrores: 0 }
+const base = { trabajando: false, turnoActivo: false, permisosPendientes: 0, rachaErrores: 0 }
 
 test('sin trabajo, sin permisos y sin errores el agente está inactivo', () => {
   expect(situacionDe(base)).toBe('inactivo')
@@ -24,6 +24,11 @@ test('el umbral de errores seguidos es 3', () => {
 
 test('con errores seguidos en el umbral está detenido', () => {
   expect(situacionDe({ ...base, trabajando: true, rachaErrores: UMBRAL_ERRORES })).toBe('detenido')
+})
+
+test('con errores seguidos pero el turno del lead activo, sigue trabajando: el lead no paró', () => {
+  expect(situacionDe({ ...base, trabajando: true, turnoActivo: true, rachaErrores: UMBRAL_ERRORES })).toBe('trabajando')
+  expect(situacionDe({ ...base, trabajando: true, turnoActivo: true, rachaErrores: UMBRAL_ERRORES + 4 })).toBe('trabajando')
 })
 
 test('con un error menos que el umbral sigue trabajando', () => {

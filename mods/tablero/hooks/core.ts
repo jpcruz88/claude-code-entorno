@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.9.0'
+export const MOD_VERSION = '0.10.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -362,16 +362,6 @@ export const limitOf = (r: { kind: string; percentUsed: number; resetsAt?: strin
   return { kind: r.kind, pct: r.percentUsed, resetsAt: Number.isFinite(at) ? at : null }
 }
 
-/** Time left until a window resets, its two largest units: `25m`, `3h10m`, `4d2h`; empty when unknown or past. */
-export const fmtResetIn = (resetsAt: number | null | undefined, now: number) => {
-  if (resetsAt === null || resetsAt === undefined || resetsAt <= now) return ''
-  const m = Math.max(1, Math.floor((resetsAt - now) / 60_000))
-  const d = Math.floor(m / 1440)
-  const h = Math.floor((m % 1440) / 60)
-  if (d > 0) return `${d}d${h}h`
-  return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
-}
-
 const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
 
 /** La hora de reinicio de una ventana: `hoy 23:05`, `mañana 01:30` o `vie 06:00`; vacío si no hay dato o ya pasó. */
@@ -465,6 +455,15 @@ export const settleCheck = (g: Gate, id: string, didRun: boolean): Gate => {
     totals: { ...g.totals, [c.bucket]: { ...t, ask: Math.max(0, t.ask - 1), [verdict]: t[verdict] + 1 } },
   }
 }
+
+/**
+ * Retira las `ask` que nadie va a responder: el turno del lead terminó (solo las del lead, `soloLead`) o empezó otro
+ * proceso (todas). La llamada no corrió, así que cuentan como denegadas, igual que en `settleCheck`.
+ */
+export const retireAsks = (g: Gate, soloLead: boolean): Gate =>
+  g.recent
+    .filter(c => c.verdict === 'ask' && !(soloLead && c.inSubagent))
+    .reduce((acc, c) => settleCheck(acc, c.id, false), g)
 
 export const gateSummary = (g: Gate) => {
   const all = (['file', 'shell', 'other'] as const).reduce(
@@ -667,4 +666,3 @@ export const adviceLine = (report: string) => {
   return shorten(first.replace(/\*\*|__/g, '').replace(/^[#>*\s-]+/, ''), 160)
 }
 
-export const elapsedOf = (c: AgentCard, now: number) => (c.endedAt ?? now) - c.spawnedAt

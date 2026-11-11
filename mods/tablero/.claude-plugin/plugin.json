@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
@@ -79,7 +79,7 @@
     },
     "layout": {
       "title": "Distribución",
-      "description": "auto: resumen de máximo 8 filas con el panel en línea sobre el prompt, diagrama desde 66 columnas acoplado, una columna en otro caso. diagrama: lead, asesor, JEV y tarjetas en diagrama (con menos de 66 columnas, una columna)",
+      "description": "auto: el mapa (situación, estado, lead, JEV, subagentes y AL DÍA), acoplado desde 40 columnas y sobre el prompt desde 100; sobre el prompt entre 66 y 99 columnas, el diagrama, y más angosto, un resumen de hasta 8 filas; acoplado con menos de 40 columnas, una columna. compact (una columna), wide (dos columnas), mini (el resumen) y diagrama (lead, asesor, JEV y tarjetas; con menos de 66 columnas, una columna) son las distribuciones anteriores",
       "type": "string",
       "options": [
         "auto",

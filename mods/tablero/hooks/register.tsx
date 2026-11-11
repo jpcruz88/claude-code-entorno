@@ -68,6 +68,7 @@ import {
   adviceLine,
   receiptOf,
   recordCheck,
+  retireAsks,
   settleCheck,
   shorten,
   startConsult,
@@ -77,10 +78,9 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, type ModoReloj } from './clave-redibujo'
 import { nombreDeTipo } from './nombres'
-import { filasVida, svgVida, vidaDe } from './vida'
-import { COLOR_DE } from './banda'
+import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
@@ -168,14 +168,18 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
-  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Roto o ausente es «sin dato».
+  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Ausente es «sin dato»; roto (por ejemplo,
+  // a medio escribir) deja el último válido.
   const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
-  const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const leidos = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const limites = typeof textoLimites === 'string' && leidos === null ? (await getJev($)).limites : leidos
   // Lo que actualizó la revisión «Al día»; ausente o roto es «sin dato» (la caja no se dibuja).
   const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
   const alDia = typeof textoAlDia === 'string' ? textoAlDia : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  await update($, jev, () => ({ decisiones: ds, limites, alDia }))
+  // Escribir el estado redibuja el panel: solo se escribe si algo cambió.
+  const nuevo: JevEstado = { decisiones: ds, limites, alDia }
+  if (JSON.stringify(await getJev($)) !== JSON.stringify(normalizeJev(nuevo))) await update($, jev, () => nuevo)
   return ds
 }
 
@@ -218,18 +222,12 @@ async function migrate($: EngineInterface) {
   await update($, meta, () => ({ schemaVersion: SCHEMA_VERSION }))
 }
 
-// El footer nativo ya no lleva nada del mod.
-async function refreshStatus($: EngineInterface) {
-  $.ui.status(undefined)
-}
-
 async function consultStarted($: EngineInterface, cfg: Config, id: string, via: string) {
   const t = await getTurn($)
   const moment = momentOf(t)
   const at = await $.clock.now()
   await update($, architect, a => startConsult(normalize(DEFAULT_ARCHITECT, a), { id, at, moment, via }))
   if (moment === 'before done') await update($, turn, x => ({ ...normalize(DEFAULT_TURN, x), isReviewing: true }))
-  await refreshStatus($)
 }
 
 async function consultEnded($: EngineInterface, cfg: Config, advice: string | null, id?: string) {
@@ -238,7 +236,6 @@ async function consultEnded($: EngineInterface, cfg: Config, advice: string | nu
   const text = first ? shorten(first.replace(/^[#>*\s-]+/, ''), 160) : null
   await update($, architect, a => endConsult(normalize(DEFAULT_ARCHITECT, a), at, text, id))
   await update($, turn, t => ({ ...normalize(DEFAULT_TURN, t), isReviewing: false }))
-  await refreshStatus($)
 }
 
 async function noteAdvice($: EngineInterface, cfg: Config, advice: string) {
@@ -289,41 +286,32 @@ async function noteMode($: EngineInterface, mode: string | undefined) {
   if (mode) await update($, main, m => (normalize(DEFAULT_MAIN, m).mode === mode ? normalize(DEFAULT_MAIN, m) : { ...normalize(DEFAULT_MAIN, m), mode }))
 }
 
-// ---------------------------------------------------------------- banda de Tablero
+// ---------------------------------------------------------------- reloj del panel
 
 
-// Lo que la banda muestra ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
+// Lo que el reloj ve ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
 const mostrado = { contexto: null as number | null, usos: new Map<string, number>() }
 let fase = 0
-// Verdadero mientras el último dibujo fue la rejilla animada: entonces el reloj redibuja con cada marco.
-let mapaVivo = false
+// Verdadero mientras el último dibujo fue el mapa: sus relojes tienen segundos y, con trabajo, se anima con cada marco.
+let mapaVisible = false
 /** El costo de la sesión a lo largo del tiempo, para la gráfica costo/min del mapa. */
 const muestrasCosto: MuestraCosto[] = []
 let ultimaClave = ''
+// El reloj del panel: corre solo mientras el panel se dibuja (lo arranca su `ui.render`, lo paran `ui.close` y
+// `session.end`), rápido con trabajo en curso y lento en reposo.
 let reloj: { cancel: () => void } | null = null
+let modoActual: ModoReloj = 'lento'
 const redondeo = (n: number) => Math.round(n * 10) / 10
 
-async function entradaDe($: EngineInterface, columnas: number): Promise<BandaEntrada> {
-  const [u, g, cards, ahora, cwd, modelo] = await Promise.all([
-    getUsage($),
-    getGate($),
-    getCards($),
-    $.clock.now(),
-    $.session.cwd().catch(() => ''),
-    $.session.model().catch(() => ''),
-  ])
+async function entradaDe($: EngineInterface): Promise<BandaEntrada> {
+  const [u, g, cards, ahora] = await Promise.all([getUsage($), getGate($), getCards($), $.clock.now()])
   return {
-    cwd,
-    modelo: prettyModel(modelo),
     costoUsd: u.costUsd,
     contextoPct: contextFill(u).pct,
     agentesActivos: cards.filter(c => c.status === 'running').length,
-    agentesTotal: cards.length,
     permisosPendientes: g.recent.filter(c => c.verdict === 'ask').length,
-    permisosDenegados: gateSummary(g).deny,
-    limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct, resetsAt: l.resetsAt ?? null })),
+    limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct })),
     ahora,
-    columnas,
   }
 }
 
@@ -343,12 +331,17 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
 
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
-  const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = claveDeRedibujo({ ...e, marco: mapaVivo ? fase : undefined })
+  const [e, m] = await Promise.all([entradaDe($), getMain($)])
+  if (!reloj) return
+  const modo = modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || e.agentesActivos > 0 })
+  const s = suavizar(cfg, e)
+  const clave = claveDeRedibujo({ ...s, marco: mapaVisible && modo === 'rapido' ? fase : undefined, segundos: mapaVisible })
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
   }
+  // Empezó o terminó el trabajo: el reloj cambia de ritmo.
+  if (modo !== modoActual) iniciarReloj($, cfg, modo)
 }
 
 function detenerReloj() {
@@ -356,10 +349,11 @@ function detenerReloj() {
   reloj = null
 }
 
-function iniciarReloj($: EngineInterface, cfg: Config) {
+function iniciarReloj($: EngineInterface, cfg: Config, modo: ModoReloj) {
   detenerReloj()
+  modoActual = modo
   // Un cuadro por periodo; solo redibuja si la clave cambió (ver PERIODO_RELOJ_MS).
-  reloj = $.clock.every(PERIODO_RELOJ_MS(cfg.animacion), () => void cuadroDeReloj($, cfg).catch(() => undefined))
+  reloj = $.clock.every(PERIODO_RELOJ_MS[modo], () => void cuadroDeReloj($, cfg).catch(() => undefined))
 }
 
 // ---------------------------------------------------------------- hooks
@@ -377,6 +371,16 @@ export const register: Register = (on, options) => {
       argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama]',
     })
     await migrate($)
+    // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
+    // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
+    const inicio = await $.clock.now()
+    await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+    await update($, agents, list =>
+      listOf<unknown>(list)
+        .map(normalizeCard)
+        .map(c => (c.status === 'running' ? { ...c, status: 'stopped' as const, endedAt: c.endedAt ?? inicio } : c)),
+    )
+    await update($, gate, g => retireAsks(normalizeGate(g), false))
     // A host without usage (headless, an SDK host, a session not yet bound) just starts without it.
     const u = await $.session.usage().catch(() => null)
     // A resumed session has a fill to draw already: its compaction window is read now, not at its first
@@ -400,13 +404,9 @@ export const register: Register = (on, options) => {
     // Lo que actualizó la revisión «Al día» ya está en disco al abrir la sesión: la caja sale desde el primer cuadro.
     await releerJev($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
-    // El reloj redibuja el panel (animación, cuenta del turno, cambio de minuto): siempre corre.
-    iniciarReloj($, cfg)
-    await refreshStatus($)
     const done = await next(e)
     if (resumedWindow > 0) {
       await readCompactWindow($, resumedWindow)
-      await refreshStatus($)
     }
     return done
   })
@@ -415,7 +415,6 @@ export const register: Register = (on, options) => {
     detenerReloj()
     if (e.reason === 'clear') {
       await resetAll($)
-      await refreshStatus($)
     }
     return next(e)
   })
@@ -428,7 +427,6 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'reset' || verb === 'reiniciar') {
       await resetAll($)
-      await refreshStatus($)
       return { text: 'Tablero reiniciado.' }
     }
     if (verb === 'layout') {
@@ -440,7 +438,7 @@ export const register: Register = (on, options) => {
     }
     const opened = await openPane($, cfg)
     if (!opened.isPlaced) return { text: `Tablero aún no se muestra: ${opened.reason}` }
-    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab; 1-6 abren tarjetas, a/s/o abren las filas de permisos (archivo, shell, otro).' }
+    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab.' }
   })
 
   // Un panel que el mod abre solo, al iniciar, espera sin dibujar por debajo de 144 columnas. El primer
@@ -517,20 +515,11 @@ export const register: Register = (on, options) => {
     // A step from an agent whose card finished means it was resumed (SendMessage): it runs again.
     const before = (await getCards($)).find(c => c.id === id)
     if (before && before.status !== 'running') {
-      // Flipped in the write: a resume its agent.spawn already logged is not logged again.
-      let isResumed = false
       await update($, agents, list =>
         listOf<unknown>(list)
           .map(normalizeCard)
-          .map(c => {
-            if (c.id !== id || c.status === 'running') return c
-            isResumed = true
-            return resumeCard(c)
-          }),
+          .map(c => (c.id !== id || c.status === 'running' ? c : resumeCard(c))),
       )
-      if (isResumed) {
-        await refreshStatus($)
-      }
     }
     const result = yield* next(e)
     const [cards, a] = await Promise.all([getCards($), getArchitect($)])
@@ -560,11 +549,9 @@ export const register: Register = (on, options) => {
         limits: e.rateLimits.map(limitOf),
       }
     })
-    if (e.changed.includes('context')) await refreshStatus($)
     const done = await next(e)
     if (isStale) {
       await readCompactWindow($, e.context.window)
-      await refreshStatus($)
     }
     return done
   })
@@ -594,10 +581,6 @@ export const register: Register = (on, options) => {
         at: await $.clock.now(),
       }
       await update($, gate, g => recordCheck(normalizeGate(g), check))
-      // The status line updates when the call settles; only a refusal ends here.
-      if (verdict.decision === 'deny') {
-        await refreshStatus($)
-      }
     }
     return verdict
   })
@@ -620,10 +603,7 @@ export const register: Register = (on, options) => {
       }
       return ran
     }
-      if (e.tool === 'Agent') {
-      if (isSettled) await refreshStatus($)
-      return ran
-    }
+    if (e.tool === 'Agent') return ran
     const uso = didRun ? usoDe(String(e.tool), e) : null
     if (uso) await update($, usos, x => noteUso(normalize(DEFAULT_USOS, x), uso))
     const hasFailed = didRun && ran.isError === true
@@ -651,7 +631,6 @@ export const register: Register = (on, options) => {
       )
     }
     if (hasFailed) await releerJev($)
-    if (isSettled || !didRun) await refreshStatus($)
     return ran
   })
 
@@ -706,13 +685,8 @@ export const register: Register = (on, options) => {
       spawnedAt: await $.clock.now(),
     }
     // Decided in the write: a resume whose first step already put its card back to running is not logged again.
-    await update($, agents, list => {
-      const cards = listOf<unknown>(list).map(normalizeCard)
-      const known = cards.find(c => c.id === id)
-      return addCard(cards, card)
-    })
+    await update($, agents, list => addCard(listOf<unknown>(list).map(normalizeCard), card))
     await update($, loops, l => listOf<Loop>(l).filter(x => x.id !== id))
-    await refreshStatus($)
     return started
   })
 
@@ -731,7 +705,8 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
-      await refreshStatus($)
+      // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
+      await update($, gate, g => retireAsks(normalizeGate(g), true))
       return done
     }
     if ((await getArchitect($)).ids.includes(id)) {
@@ -749,11 +724,20 @@ export const register: Register = (on, options) => {
     } else {
       await update($, loops, l => listOf<Loop>(l).map(x => (x.id === id ? { ...x, isDone: true, lastAt: now } : x)))
     }
-    await refreshStatus($)
     return done
   })
 
   // ---------------------------------------------------------------- drawing
+
+  // Un panel cerrado no se ve: el reloj se para hasta que vuelva a dibujarse.
+  on('ui.close', async ($, e, next) => {
+    const r = await next(e)
+    if (e.id === PANE) {
+      detenerReloj()
+      mapaVisible = false
+    }
+    return r
+  })
 
   // After a surface module faults on a surface, this load draws it there as plain text; the other
   // module, and other surfaces, keep theirs. Keyed by faultKey: `desktop:rail.tsx`.
@@ -809,6 +793,9 @@ export const register: Register = (on, options) => {
     const viewed = e.props.view?.agentId ?? null
     const advising = isAdvising(a)
     const running = cards.filter(c => c.status === 'running')
+    // El panel se está dibujando: si el reloj no corre (recién abierto o reabierto), arranca al ritmo que toca.
+    mapaVisible = enMapa
+    if (!reloj) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
@@ -1134,7 +1121,7 @@ export const register: Register = (on, options) => {
       return (
         <Text>
           {[...antes, ...despues].map((t, k) => (
-            <Text key={k} color={color(t)}>{t.texto}</Text>
+            <Text key={String(k)} color={color(t)}>{t.texto}</Text>
           ))}
         </Text>
       )
@@ -1532,7 +1519,6 @@ export const register: Register = (on, options) => {
     }) : null
 
     // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
-    mapaVivo = enMapa && cfg.animacion
     const colorDeTinta = (k: Tinta): string =>
       ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, jevd: '#1f6f4f', enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
     const rit = ritmoSemana(jevs.limites, now / 1000)
@@ -1540,7 +1526,7 @@ export const register: Register = (on, options) => {
     const ritmoMapa = rit && nivelRit
       ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: (nivelRit === 'verde' ? 'jev' : nivelRit === 'ambar' ? 'amb' : 'warn') as Tinta }
       : undefined
-    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
+    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, turnoActivo: m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
     // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
     const topeVigente = topeAhora(jevs.limites, now / 1000)
     anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
@@ -1611,10 +1597,10 @@ export const register: Register = (on, options) => {
     }
     const mapaBody = enMapa ? (
       <Box flexDirection="column" width={Math.min(W, MAPA_ANCHO)}>
-        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W)).map((tramos, y) => (
-          <Text key={y}>
+        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W, cfg.animacion)).map((tramos, y) => (
+          <Text key={String(y)}>
             {tramos.map((tr, i) => (
-              <Text key={i} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
+              <Text key={String(i)} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
                 {tr.c}
               </Text>
             ))}

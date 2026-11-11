@@ -1,6 +1,6 @@
 # Tablero
 
-Mod de Claude Code que dibuja un panel en español con la carpeta actual, el modelo, el costo, el contexto, los subagentes, los permisos y el uso con su hora de reseteo. En modo inline deja además una franja compacta sobre el prompt. Es de observación: no bloquea nada.
+Mod de Claude Code que dibuja un panel en español junto al chat: un mapa con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt, en una terminal angosta, se queda en un resumen de hasta 8 filas.
 
 Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»).
 

@@ -41,6 +41,7 @@ const RANGO = new Map<string, number>([
   ['haiku', 0],
   ['sonnet', 1],
   ['opus', 2],
+  ['fable', 3],
   ['low', 0],
   ['medium', 1],
   ['high', 2],
@@ -95,7 +96,8 @@ export const leerDecisiones = (texto: string, sessionId: string): DecisionJev[] 
   return ds
 }
 
-const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus']
+/** Las familias que acepta guard-subagentes.py, de la más barata a la más capaz. */
+const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus', 'fable']
 
 /** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
 const familiaDe = (modelo: string): string => {
@@ -151,14 +153,17 @@ export const resumenJev = (ds: DecisionJev[]): { total: number; filas: FilaJev[]
 /**
  * El tope como línea de log: `tope → sonnet · semana +12 pts`, `tope → haiku · 5h 90%` o, si solo bajó el esfuerzo,
  * `tope → opus · semana +6 pts · esfuerzo medium`. Sale del motivo que guarda el guardián (`tope <causa> → <límite>`).
+ * Cuando ninguna ventana recorta pero el modelo pedido no pasa, el guardián escribe `tope: <pedido> → <límite>`:
+ * se lee `tope → opus · pedía <pedido>`.
  */
 const lineaTope = (d: DecisionJev): string => {
   const partes: string[] = []
   // El motivo trae partes separadas por «; »: `tope semana +12 pts → sonnet; esfuerzo high → medium`.
-  for (const parte of d.motivo.replace(/^tope[;\s]*/, '').split('; ')) {
+  for (const parte of d.motivo.replace(/^tope[:;\s]*/, '').split('; ')) {
     const [causa = '', ...cambios] = parte.split(' → ').map(x => x.trim())
     const final = cambios.at(-1)
     if (causa.startsWith('esfuerzo')) partes.push(final ? `esfuerzo ${final.replace(/^esfuerzo\s+/, '')}` : causa)
+    else if (FAMILIAS_MODELO.includes(familiaDe(causa))) partes.push(`pedía ${familiaDe(causa)}`)
     else {
       if (causa) partes.push(causa)
       if (final?.startsWith('esfuerzo')) partes.push(final)
@@ -347,6 +352,9 @@ const tope5h = (cinco: VentanaLimite, ahora: number): Candidato => {
   return { modelo, esfuerzo, causa }
 }
 
+/** La causa que pone `topeVigente` cuando no hay ningún dato de uso vigente. */
+const SIN_DATO = 'sin dato de uso'
+
 /**
  * El tope vigente, igual que `calcular_tope` de jev_limites.py con los valores por defecto (no lee config.json):
  * de cada ventana vigente sale un máximo y gana el más bajo. xhigh y Fable solo pasan si se conoce la semana y,
@@ -356,7 +364,7 @@ const tope5h = (cinco: VentanaLimite, ahora: number): Candidato => {
 const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ahora: number, sinDato = false): Candidato => {
   const cincoVigente = !sinDato && cinco && cinco.reinicio > ahora ? cinco : undefined
   const candidatos = [...(r ? [topeSemana(r)] : []), ...(cincoVigente ? [tope5h(cincoVigente, ahora)] : [])]
-  if (!candidatos.length) return { modelo: 'opus', esfuerzo: 'high', causa: 'sin dato de uso' }
+  if (!candidatos.length) return { modelo: 'opus', esfuerzo: 'high', causa: SIN_DATO }
   const rango = (c: Candidato) => MODELOS_TOPE.indexOf(c.modelo) * 10 + ESFUERZOS_TOPE.indexOf(c.esfuerzo)
   const manda = candidatos.reduce((a, b) => (rango(b) < rango(a) ? b : a))
   const modelo = candidatos.map(c => c.modelo).reduce((a, b) => (MODELOS_TOPE.indexOf(b) < MODELOS_TOPE.indexOf(a) ? b : a))
@@ -370,33 +378,36 @@ const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ah
   return { modelo, esfuerzo, causa: modelo === 'fable' && esfuerzo === 'xhigh' ? 'sin recorte' : manda.causa }
 }
 
-/** Lo más alto que el tope de jev_limites.py dejaría pasar ahora: ` · fable ok`, ` · xhigh ok` o nada. */
-const margenOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): string => {
-  const t = topeVigente(r, cinco, ahora)
-  return t.modelo === 'fable' ? ' · fable ok' : t.esfuerzo === 'xhigh' ? ' · xhigh ok' : ''
+/**
+ * El color de un tope: verde si deja pasar Opus o Fable con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
+ * Sin dato de uso no se sabe si hay margen: ámbar, nunca verde.
+ */
+const nivelDeTope = (t: Candidato): NivelRitmo => {
+  if (t.causa === SIN_DATO) return 'ambar'
+  const libre = (t.modelo === 'opus' || t.modelo === 'fable') && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
+  return libre ? 'verde' : t.modelo === 'haiku' ? 'rojo' : 'ambar'
 }
 
 /**
- * La línea del tope que rige ahora para los subagentes: `tope ahora: sonnet high · semana +12 pts`.
- * Verde si deja pasar Opus o Fable con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
- * `ahora` y los datos van en segundos epoch.
+ * La línea del tope que rige ahora para los subagentes: `tope ahora: sonnet high · semana +12 pts`, con el color
+ * de `nivelDeTope`. `ahora` y los datos van en segundos epoch.
  */
 export const topeAhora = (limites: LimitesJev | null, ahora: number, zona: Zona = zonaDelSistema): { texto: string; nivel: NivelRitmo } => {
   const sinDato = !limites || ahora - limites.actualizado > CFG_RITMO.maxAntiguedadH * 3600
   const t = topeVigente(ritmoSemana(limites, ahora, undefined, zona), limites?.five_hour, ahora, sinDato)
-  const libre = (t.modelo === 'opus' || t.modelo === 'fable') && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
-  return { texto: `tope ahora: ${t.modelo} ${t.esfuerzo} · ${t.causa}`, nivel: libre ? 'verde' : t.modelo === 'haiku' ? 'rojo' : 'ambar' }
+  return { texto: `tope ahora: ${t.modelo} ${t.esfuerzo} · ${t.causa}`, nivel: nivelDeTope(t) }
 }
 
 /**
  * La fila de la caja JEV: `semana 52% · ritmo 40% · +12`, con su nivel de color; null si no hay ritmo.
- * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok` o el `· fable ok`.
+ * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok` o el `· fable ok`. El color es el
+ * del tope que rige con estos datos, el mismo que el de la línea `tope ahora`: las dos filas nunca se contradicen.
  */
 export const filaRitmo = (r: RitmoSemana | null, cinco?: VentanaLimite, ahora = 0): { texto: string; nivel: NivelRitmo } | null => {
   if (!r) return null
   const exceso = Math.round(r.exceso)
   const signo = exceso < 0 ? `−${-exceso}` : `+${exceso}`
-  const margen = margenOk(r, cinco, ahora)
-  const nivel: NivelRitmo = r.exceso <= 5 ? 'verde' : r.exceso <= 15 ? 'ambar' : 'rojo'
-  return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel }
+  const t = topeVigente(r, cinco, ahora)
+  const margen = t.modelo === 'fable' ? ' · fable ok' : t.esfuerzo === 'xhigh' ? ' · xhigh ok' : ''
+  return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel: nivelDeTope(t) }
 }

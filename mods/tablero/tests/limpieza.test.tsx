@@ -186,7 +186,7 @@ test('sin consultas, el diagrama tampoco muestra la caja del asesor', { options:
   await ui.unmount()
 })
 
-test('el reloj del panel corre siempre: redibuja mientras el lead trabaja', async ($, on) => {
+test('con el panel a la vista, el reloj redibuja mientras el lead trabaja', async ($, on) => {
   const reloj = motor(on)
   on('ui.open', () => ({ value: { isPlaced: true as const } }))
   let invalidaciones = 0
@@ -195,10 +195,12 @@ test('el reloj del panel corre siempre: redibuja mientras el lead trabaja', asyn
     return { value: undefined }
   })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount(pane(100) as never)
   await $.turn.start({ text: 'go', turnId: 'T5' })
   const antes = invalidaciones
   await reloj.advance(3_000)
   expect(invalidaciones).toBeGreaterThan(antes)
+  await ui.unmount()
 })
 
 test('el tablero ya no registra las herramientas progreso y paso (las da savvy-progress)', async ($, on) => {
@@ -214,4 +216,23 @@ test('el tablero ya no registra las herramientas progreso y paso (las da savvy-p
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   expect(nombres).not.toContain('paso')
   expect(nombres).not.toContain('progreso')
+})
+
+test('el footer nativo no muestra datos del mod', async ($, on) => {
+  mock.clock(on)
+  const estados: string[] = []
+  on('ui.status', (_$, e) => {
+    estados.push(JSON.stringify(e))
+    return { value: undefined }
+  })
+  on('session.cwd', () => ({ value: '/work' }))
+  on('session.model', () => ({ value: 'claude-sonnet-5-5' }))
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  await $.session.measure({
+    context: { window: 1_000_000, tokens: 420_000, percent: 42 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 63, resetsAt: new Date(2 * 3_600_000).toISOString() }],
+    cost: { usd: 1.2 },
+    changed: ['context'],
+  } as never)
+  expect(estados.some(s => /ctx|\$1\.20/.test(s))).toBe(false)
 })

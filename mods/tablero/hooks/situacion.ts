@@ -6,12 +6,16 @@ export type Situacion = 'trabajando' | 'espera' | 'detenido' | 'inactivo'
 /** Cuántos errores seguidos dejan al agente «detenido». */
 export const UMBRAL_ERRORES = 3
 
-export type EntradaSituacion = { trabajando: boolean; permisosPendientes: number; rachaErrores: number }
+/** `trabajando`: el lead o algún subagente trabajan. `turnoActivo`: el turno del lead sigue abierto. */
+export type EntradaSituacion = { trabajando: boolean; turnoActivo: boolean; permisosPendientes: number; rachaErrores: number }
 
-/** Un permiso pendiente manda (lo desbloqueas tú); después, los errores seguidos, el trabajo y, si no hay nada, inactivo. */
+/**
+ * Un permiso pendiente manda (lo desbloqueas tú); después, los errores seguidos, el trabajo y, si no hay nada, inactivo.
+ * Los errores seguidos solo dicen «detenido» cuando el turno del lead ya terminó: mientras sigue abierto, el lead no paró.
+ */
 export const situacionDe = (e: EntradaSituacion): Situacion => {
   if (e.permisosPendientes > 0) return 'espera'
-  if (e.rachaErrores >= UMBRAL_ERRORES) return 'detenido'
+  if (e.rachaErrores >= UMBRAL_ERRORES && !e.turnoActivo) return 'detenido'
   return e.trabajando ? 'trabajando' : 'inactivo'
 }
 

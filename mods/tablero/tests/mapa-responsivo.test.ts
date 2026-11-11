@@ -44,9 +44,12 @@ test('angosto: con tareas aparece la lista AGENTES con cada nombre', () => {
 })
 
 test('angosto: con más de 8 tareas muestra 7 y «+N más»', () => {
+  // datos(9): en curso las impares. Salen 9, 7, 5, 3, 1 (en curso) y 8, 6 (las más recientes); quedan fuera 4 y 2.
   const s = texto(componerMapa(datos(9), 0, 60))
-  expect(s).toContain('tarea 7')
-  expect(s).not.toContain('tarea 8')
+  expect(s).toContain('tarea 9')
+  expect(s).toContain('tarea 8')
+  expect(s).not.toContain('tarea 4')
+  expect(s).not.toContain('tarea 2')
   expect(s).toContain('+2 más')
 })
 

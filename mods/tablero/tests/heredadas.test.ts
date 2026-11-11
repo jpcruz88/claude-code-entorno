@@ -24,7 +24,6 @@ import {
   describeInput,
   endConsult,
   fitLegend,
-  fmtResetIn,
   fmtSpeed,
   gateSummary,
   lanes,
@@ -224,12 +223,10 @@ test('a request\'s speed is its time to the first piece of response, and no outp
   expect(fmtSpeed({ ttftMs: 800, tokPerS: 9844 } as { ttftMs: number })).toBe('1er token 0.8s')
 })
 
-test('a window keeps its reset time, drawn as the time left', () => {
+test('a window keeps its reset time', () => {
   expect(limitOf({ kind: 'five_hour', percentUsed: 19, resetsAt: '1970-01-01T03:10:00.000Z' })).toEqual({ kind: 'five_hour', pct: 19, resetsAt: 11_400_000 })
   expect(limitOf({ kind: 'seven_day', percentUsed: 3 }).resetsAt).toBe(null)
   expect(limitOf({ kind: 'spend_limit', percentUsed: 1, resetsAt: 'soon' }).resetsAt).toBe(null)
-  expect([fmtResetIn(11_400_000, 0), fmtResetIn(25 * 60_000 + 5_000, 0), fmtResetIn(4 * 86_400_000 + 2 * 3_600_000, 0)]).toEqual(['3h10m', '25m', '4d2h'])
-  expect([fmtResetIn(null, 0), fmtResetIn(undefined, 0), fmtResetIn(5, 10)]).toEqual(['', '', ''])
 })
 
 // ---------------------------------------------------------------- drawing
