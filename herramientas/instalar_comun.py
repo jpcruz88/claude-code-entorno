@@ -160,6 +160,10 @@ class Instalador:
             copia = Path("%s.bak-%s" % (destino, sello()))
             shutil.copy2(str(destino), str(copia))
             self.info("respaldo: %s" % copia)
+            borrados = fusionar_settings.podar_respaldos(destino)
+            if borrados:
+                self.info("respaldos viejos borrados: %d (se conservan los %d más recientes)"
+                          % (len(borrados), fusionar_settings.CONSERVAR_RESPALDOS))
         destino.write_bytes(contenido)
         if ejecutable and not ES_WINDOWS:
             destino.chmod(0o755)
