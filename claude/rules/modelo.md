@@ -25,9 +25,9 @@ agente.
 **Workflows:** cada `agent()` fija `model` (`haiku`, `sonnet` u `opus`) y `effort`
 (hasta `high`). `fable` y `xhigh` se bloquean ahí, porque un workflow no se puede bajar.
 
-**Sesión principal:** arranca con **Haiku**. Solo cambia de modelo si el usuario lo
-pide de forma explícita en ese mensaje (por ejemplo «usa opus», «/model opus»). Esa
-petición vale solo para esa tarea; la siguiente vuelve a Haiku.
+**Sesión principal:** usa el modelo que el usuario tiene elegido (en `settings.json`
+o con `/model`). Ya no hay un modelo fijo por omisión: aquí pesa más no perder el hilo
+ni inventar datos que el gasto.
 
 **Siempre:**
 - Fuera de los subagentes de Agent y Task, nunca uses Fable (sesión, workflows, comandos,

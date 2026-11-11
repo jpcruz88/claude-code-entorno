@@ -29,6 +29,7 @@
       "memoria-maestra.py": {},
       "al-dia.py": {},
       "caveman-activo.py": {},
+      "hilo.py": {},
       "jev-reintento.py": {
         "matcher": "*"
       }
