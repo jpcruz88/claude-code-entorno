@@ -87,3 +87,29 @@ test('una llamada real permitida (allow) no notifica', async ($, on) => {
 
   expect(avisos).toEqual([])
 })
+
+test('en modo automático una llamada con ask no notifica: lo decide el clasificador', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.notify', (_, e) => (
+    avisos.push(e.text),
+    { value: { isSent: true, channel: 'terminal_bell' } }
+  ))
+  on('agent.spawn', (_$, e) => ({ model: 'claude-sonnet-5-5', agentId: e.tool_use_id ?? 'a' }))
+  on('tool.check', () => ({ decision: 'ask' }))
+  on('tool.call', () => ({ result: {} }))
+
+  await $.agent.spawn({
+    prompt: 'haz el trabajo',
+    description: 'revisar auth',
+    subagentType: 'general-purpose',
+    tool_use_id: 'auto1',
+    provider: { plugin: 'engine', tier: 'core' as const },
+    parentModel: 'claude-opus-5-5',
+    background: true,
+    fork: false,
+    permissionMode: 'auto',
+  } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+
+  expect(avisos).toEqual([])
+})

@@ -73,6 +73,8 @@ export type Check = {
   bucket: Bucket
   verdict: Verdict
   inSubagent: boolean
+  /** El subagente en cuyo bucle se decidió la llamada; ausente en el lead. */
+  agente?: string
   detail: string
   at: number
 }

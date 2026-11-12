@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1 (tablero)
+
+`TE ESPERA` solo sale cuando de verdad hay algo que responder.
+
+- En modo automático, un permiso que decide el clasificador ya no cuenta como pendiente ni pone la franja en `TE ESPERA`: no hay diálogo que contestar. La llamada entra al recuento cuando termina (`auto` o denegado). El permiso que pide el hook de un plugin sigue contando: ese siempre lo responde la persona.
+- El permiso pendiente de un subagente se retira cuando ese subagente termina. Antes se quedaba en `1 pend.` hasta abrir otra sesión.
+
 ## 0.10.0 (tablero)
 
 Revisión: el panel deja de enseñar estados viejos, no se contradice y no redibuja cuando no hace falta.

@@ -115,3 +115,70 @@ test('con tres fallos seguidos y el lead aún en su turno, la franja no dice DET
   expect(s).toContain('T R A B A J A N D O')
   expect(s).not.toContain('D E T E N I D O')
 })
+
+// En modo automático un `ask` lo responde el clasificador, no la persona: no hay diálogo que contestar.
+
+/** Deja el modo de permisos en automático: lo trae el lanzamiento de un agente del lead. */
+const modoAuto = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
+  $.agent.spawn({
+    prompt: 'haz el trabajo',
+    description: 'revisar auth',
+    subagentType: 'general-purpose',
+    tool_use_id: 'auto1',
+    provider: { plugin: 'engine', tier: 'core' as const },
+    parentModel: 'claude-opus-5-5',
+    background: true,
+    fork: false,
+    permissionMode: 'auto',
+  } as never)
+
+test('en modo automático un ask no deja la franja en TE ESPERA ni cuenta como pendiente', async ($, on) => {
+  const reloj = motor(on)
+  await reloj.advance(1_000)
+  await iniciar($)
+  await $.turn.start({ text: 'go', turnId: 'T1' })
+  await modoAuto($)
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'k1' } as never)
+  const s = await texto($)
+  expect(s).not.toContain('T E   E S P E R A')
+  expect(s).toMatch(/0 pend\./)
+})
+
+test('en modo automático, la llamada con ask entra al recuento cuando termina', { options: { layout: 'mini' } }, async ($, on) => {
+  const reloj = motor(on)
+  on('tool.call', () => ({ result: {} }))
+  await reloj.advance(1_000)
+  await iniciar($)
+  await $.turn.start({ text: 'go', turnId: 'T1' })
+  await modoAuto($)
+  await $.tool.call({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'k1' } as never)
+  const s = await texto($)
+  expect(s).toContain('1 auto')
+  expect(s).not.toContain('pendiente')
+})
+
+test('el permiso pendiente de un subagente se retira cuando ese subagente termina', async ($, on) => {
+  const reloj = motor(on)
+  await reloj.advance(1_000)
+  await iniciar($)
+  await $.turn.start({ text: 'go', turnId: 'T1' })
+  await lanzar($, 'a1')
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'k1', agentId: 'a1' } as never)
+  expect(await texto($)).toContain('T E   E S P E R A')
+  await $.turn.complete({ answer: 'listo', durationMs: 10, isAborted: false, turnId: 'T2', reason: 'answer', agentId: 'a1' } as never)
+  const s = await texto($)
+  expect(s).not.toContain('T E   E S P E R A')
+  expect(s).toMatch(/0 pend\./)
+})
+
+test('el permiso pendiente de un subagente no se retira cuando termina otro subagente', async ($, on) => {
+  const reloj = motor(on)
+  await reloj.advance(1_000)
+  await iniciar($)
+  await $.turn.start({ text: 'go', turnId: 'T1' })
+  await lanzar($, 'a1')
+  await lanzar($, 'a2')
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'k1', agentId: 'a1' } as never)
+  await $.turn.complete({ answer: 'listo', durationMs: 10, isAborted: false, turnId: 'T2', reason: 'answer', agentId: 'a2' } as never)
+  expect(await texto($)).toContain('T E   E S P E R A')
+})

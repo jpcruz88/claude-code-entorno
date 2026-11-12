@@ -69,6 +69,8 @@ import {
   receiptOf,
   recordCheck,
   retireAsks,
+  retireAsksDe,
+  esperaPersona,
   settleCheck,
   shorten,
   startConsult,
@@ -363,6 +365,9 @@ export const register: Register = (on, options) => {
   const C = PALETTES[cfg.palette]
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
+  // Las `ask` que en modo automático decide el clasificador: no esperan a la persona, así que no se anotan como
+  // pendientes. Se anotan al terminar su llamada, con lo que pasó.
+  const autoAsks = new Map<string, Check>()
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -571,16 +576,19 @@ export const register: Register = (on, options) => {
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (e.tool_use_id) {
+      const agente = e.agentId ?? callLoop.get(e.tool_use_id) ?? undefined
       const check: Check = {
         id: e.tool_use_id,
         tool: e.tool,
         bucket: bucketOf(e.tool),
         verdict: verdict.decision === 'allow' ? 'rule' : verdict.decision,
-        inSubagent: Boolean(callLoop.get(e.tool_use_id)),
+        inSubagent: Boolean(agente),
+        ...(agente ? { agente } : {}),
         detail: shorten(describeInput(e.tool, e.input), 90),
         at: await $.clock.now(),
       }
-      await update($, gate, g => recordCheck(normalizeGate(g), check))
+      if (verdict.decision === 'ask' && !esperaPersona((await getMain($)).mode, verdict)) autoAsks.set(e.tool_use_id, check)
+      else await update($, gate, g => recordCheck(normalizeGate(g), check))
     }
     return verdict
   })
@@ -589,6 +597,12 @@ export const register: Register = (on, options) => {
     callLoop.set(e.tool_use_id, e.agentId ?? null)
     const ran = await next(e).finally(() => callLoop.delete(e.tool_use_id))
     const didRun = ran.deny === undefined
+    // Una `ask` que decidió el clasificador se anota ahora, ya resuelta: corrió o fue rechazada.
+    const auto = autoAsks.get(e.tool_use_id)
+    if (auto) {
+      autoAsks.delete(e.tool_use_id)
+      await update($, gate, g => recordCheck(normalizeGate(g), { ...auto, verdict: didRun ? 'cleared' : 'deny' }))
+    }
     // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
     const g0 = await getGate($)
     const isSettled = settleCheck(g0, e.tool_use_id, didRun) !== g0
@@ -709,6 +723,9 @@ export const register: Register = (on, options) => {
       await update($, gate, g => retireAsks(normalizeGate(g), true))
       return done
     }
+    // Un permiso de este subagente que sigue pendiente al terminar ya no se va a responder.
+    const g0 = await getGate($)
+    if (retireAsksDe(g0, id) !== g0) await update($, gate, g => retireAsksDe(normalizeGate(g), id))
     if ((await getArchitect($)).ids.includes(id)) {
       await consultEnded($, cfg, e.answer, id)
       return done
