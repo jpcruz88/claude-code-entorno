@@ -35,7 +35,7 @@
       "name": "sound-notify",
       "source": "./mods/sound-notify",
       "description": "Avisa al terminar un turno largo y cuando Claude espera un permiso",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "spec-gate",
@@ -47,7 +47,7 @@
       "name": "tablero",
       "source": "./mods/tablero",
       "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
-      "version": "0.10.0"
+      "version": "0.10.1"
     },
     {
       "name": "tdd-gate",

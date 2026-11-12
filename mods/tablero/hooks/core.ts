@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.10.0'
+export const MOD_VERSION = '0.10.1'
 
 // ---------------------------------------------------------------- defaults
 
@@ -464,6 +464,19 @@ export const retireAsks = (g: Gate, soloLead: boolean): Gate =>
   g.recent
     .filter(c => c.verdict === 'ask' && !(soloLead && c.inSubagent))
     .reduce((acc, c) => settleCheck(acc, c.id, false), g)
+
+/** Retira las `ask` de un subagente que terminó: ya nadie va a responderlas. Cuentan como denegadas. */
+export const retireAsksDe = (g: Gate, agente: string): Gate =>
+  g.recent
+    .filter(c => c.verdict === 'ask' && c.agente === agente)
+    .reduce((acc, c) => settleCheck(acc, c.id, false), g)
+
+/**
+ * Si un veredicto deja a la persona con algo que responder. Un `ask` va a quien decide en el modo: el diálogo o, en
+ * modo automático, el clasificador. El `ask` que hizo el hook de un plugin (`plugin`) siempre va a la persona.
+ */
+export const esperaPersona = (modo: string | undefined, v: { decision: string; plugin?: string }): boolean =>
+  v.decision === 'ask' && (modo !== 'auto' || v.plugin !== undefined)
 
 export const gateSummary = (g: Gate) => {
   const all = (['file', 'shell', 'other'] as const).reduce(
