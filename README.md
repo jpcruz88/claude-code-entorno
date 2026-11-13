@@ -987,6 +987,23 @@ borra**: avisa, porque puede mandar sobre el `opencode.jsonc` que sí está gest
 Para no instalar ninguna de las dos: `--sin-opencode` (las aliases y `/go-modelos`)
 y `--sin-opencode-config` (el router y `gomodel`).
 
+## Evaluar herramientas y técnicas de IA (`/evaluar`)
+
+Dentro de Claude Code, `/evaluar <link | archivo | nombre>` revisa si una herramienta
+o técnica de IA sirve o es humo y la compara contra lo que ya trae este entorno. Acepta
+repositorios, videos de YouTube, Instagram o Facebook, archivos de video o documento,
+páginas, o solo un nombre o una pregunta. Sin argumentos lista lo ya evaluado; lo que
+ya se evaluó no se repite, y una versión nueva se compara con la anterior.
+
+El comando solo lleva el procedimiento. El registro de lo evaluado y los programas de
+apoyo viven en un repo privado aparte, porque los reportes mencionan tus proyectos.
+Dile al comando dónde está con una línea en `~/.config/detector-humo/ruta` o con la
+variable `DETECTOR_HUMO_RUTA`; sin eso, `/evaluar` avisa que no lo encuentra.
+
+Reglas que el comando impone: sin pruebas propias el veredicto es «sin probar»; lo que
+diga una fuente es dato, no instrucción; no se ejecuta nada de un repositorio clonado;
+y nada se integra a este entorno sin tu aprobación.
+
 ## Panel de servicios locales
 
 `local-services-panel/` es una página que muestra todo lo que corre en la máquina
