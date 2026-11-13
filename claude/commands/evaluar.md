@@ -1,6 +1,7 @@
 ---
 description: Evalúa si una herramienta o técnica de IA sirve o es humo, con evidencia, y la compara contra este entorno.
 argument-hint: "<link | archivo | nombre o pregunta | integrar <nombre>> (vacío: lista lo evaluado)"
+disable-model-invocation: true
 ---
 
 # Evaluar: ¿sirve o es humo?
@@ -47,7 +48,9 @@ Sigue los pasos en orden.
 
 1. Si arriba salió `SIN_DETECTOR`, dile al usuario cómo configurar la ruta y termina.
 2. **Sin argumentos:** muestra la tabla de lo evaluado y termina.
-3. **`integrar <nombre>`:** corre `humo consultar '<nombre>'` y lee su reporte. Solo
+3. **`integrar <nombre>`:** aplica solo si el argumento es la palabra `integrar` seguida
+   del nombre de algo ya registrado; una pregunta que empiece por «integrar» es una
+   fuente y va al paso 4. Corre `humo consultar '<nombre>'` y lee su reporte. Solo
    sigue si el veredicto guardado es «mejor», «mejor con costo» o «complementa» y el
    usuario confirma que lo aprueba. La integración es un cambio normal al repo de este
    entorno y sigue sus reglas (prueba primero, suite en verde, versión y CHANGELOG si
@@ -55,10 +58,19 @@ Sigue los pasos en orden.
    evaluación qué se integró y en qué commit. Con cualquier otro veredicto, explica
    por qué no procede y termina.
 4. **Cualquier otro argumento es una fuente.** Corre `humo consultar '<fuente>'`.
-5. **Si ya está evaluada** (`"nuevo": false` y estado `ya_evaluado`): muestra el
-   veredicto guardado, sus razones, la ruta del reporte y el `aviso` de vigencia si lo
-   trae. Si la evaluación guardada fue rápida, di que falta la prueba. Ofrece
-   reevaluar; no repitas el trabajo por tu cuenta.
+5. **Si ya está evaluada** (`"nuevo": false` y estado `ya_evaluado`), antes de darla
+   por buena comprueba que no haya cambiado:
+   - Si la fuente es un repositorio, mira `repo_cambio`. Con `false`, el repo está en
+     el mismo commit que se evaluó. Con `true` (hay commits nuevos) o `null` (no se
+     pudo saber), sigue al paso 6 para leerlo, toma la `version` que devuelve `humo
+     leer` y vuelve a correr `humo consultar '<fuente>' --version '<versión>'`: si
+     ahora dice `version_nueva`, evalúala comparando con la anterior; si sigue en
+     `ya_evaluado`, es la misma versión con commits nuevos: dilo y ofrece reevaluar.
+   - Para lo demás (un video, un documento), la clave ya identifica el contenido.
+
+   Si no cambió: muestra el veredicto guardado, sus razones, la ruta del reporte y el
+   `aviso` de vigencia si lo trae. Si la evaluación guardada fue rápida, di que falta
+   la prueba. Ofrece reevaluar; no repitas el trabajo por tu cuenta.
 6. **Si es nueva, versión nueva o sin evaluar:** corre
    `humo leer '<fuente>' --destino '<RUTA>/material/<fecha>-<nombre-corto>'`.
    Si la respuesta trae `falta`, pídele eso al usuario y termina. Lee los `avisos`.
@@ -71,7 +83,9 @@ Sigue los pasos en orden.
    técnicas; cada una se evalúa y se registra por separado. Para cada una: nombre,
    versión (etiqueta, commit o fecha de la fuente) y la lista de afirmaciones que se
    pueden comprobar. Corre `humo consultar '<nombre>' --version '<versión>'` para ver
-   si esa cosa ya estaba registrada por otra fuente.
+   si esa cosa ya estaba registrada por otra fuente. Si ya lo estaba en esa misma
+   versión, no la registres otra vez: muestra lo guardado y agrega esta fuente a la
+   lista de `fuentes` solo si el usuario pide reevaluar.
 9. **Clasifica:** categoría (por ejemplo memoria, grafo de código, método de trabajo) y
    la pieza de este entorno que cumple hoy esa función. Revisa el repo del entorno
    (`~/claude-code-entorno`) para nombrarla con precisión. Si no hay pieza equivalente,
@@ -90,6 +104,7 @@ Sigue los pasos en orden.
     {
       "ficha": {"nombre": "…", "categoria": "…", "compite_con": "…"},
       "version": "…",
+      "commit": "el commit que devolvió humo leer, si la fuente es un repositorio",
       "fecha": "AAAA-MM-DD",
       "profundidad": "rapida",
       "veredicto": "sin_probar",
@@ -113,6 +128,10 @@ Sigue los pasos en orden.
     Una afirmación solo puede ir como `cierta`, `exagerada` o `falsa` si en `prueba`
     dices con qué se comprobó (por ejemplo, lo que muestra el propio código de la
     herramienta). Si no, va como `sin_comprobar`.
+    `resultados`, cuando los haya, llevan `tarea`, `actual` y `candidato` con su
+    número; sin números no cuentan. Si `humo registrar` responde que esta máquina
+    solo consulta el registro, no insistas: di que la evaluación se registra desde la
+    máquina de pruebas.
 13. **Guarda el registro:** commit y push del repo privado, con las reglas de git del
     entorno. La carpeta `material/` no se versiona.
 14. **Responde** con el veredicto en la primera línea, las razones, las alternativas y
