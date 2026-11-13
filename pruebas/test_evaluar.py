@@ -64,6 +64,16 @@ class EvaluarTest(unittest.TestCase):
         for frase in ("humo probar", "--piloto", "tope", "perfil controlado"):
             self.assertIn(frase, minusculas)
 
+    def test_el_veredicto_de_las_corridas_no_se_cambia(self):
+        # Una capacidad que el banco no mide no convierte un «no supera» o un «no
+        # concluyente» en «complementa»: se anota como afirmación sin comprobar.
+        self.assertNotIn("pasar a «complementa»", self.texto)
+        self.assertIn("no lo cambies", self.texto.lower())
+        self.assertIn("sin_comprobar", self.texto)
+
+    def test_el_piloto_comprueba_que_cada_lado_uso_su_pieza(self):
+        self.assertIn("herramientas_usadas", self.texto)
+
     def test_el_codigo_del_candidato_solo_corre_encerrado(self):
         minusculas = self.texto.lower()
         self.assertIn("sin red", minusculas)
