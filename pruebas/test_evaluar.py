@@ -57,6 +57,18 @@ class EvaluarTest(unittest.TestCase):
     def test_la_maquina_de_solo_lectura_no_registra(self):
         self.assertIn("solo consulta", self.texto.lower())
 
+    def test_sabe_hacer_una_evaluacion_completa(self):
+        # Con banco para la categoría, la evaluación corre pruebas reales: piloto para
+        # estimar el costo, tope de gasto, y el aviso de que se mide un perfil controlado.
+        minusculas = self.texto.lower()
+        for frase in ("humo probar", "--piloto", "tope", "perfil controlado"):
+            self.assertIn(frase, minusculas)
+
+    def test_el_codigo_del_candidato_solo_corre_encerrado(self):
+        minusculas = self.texto.lower()
+        self.assertIn("sin red", minusculas)
+        self.assertIn("contenedor", minusculas)
+
     def test_avisa_si_falta_el_detector(self):
         self.assertIn("SIN_DETECTOR", self.texto)
 
