@@ -93,10 +93,42 @@ Sigue los pasos en orden.
 10. **Investiga** en fuentes independientes de quien la promueve: problemas conocidos,
     mantenimiento, y si existe una alternativa más nueva o mejor que la fuente no
     menciona. Esto orienta; no decide.
-11. **Profundidad.** La evaluación completa necesita el banco de pruebas, que todavía
-    no existe. Mientras no exista, toda evaluación es **rápida** y su veredicto es
-    **sin probar**. Dilo en la primera línea de tu respuesta. En las razones, di si
-    vale la pena probarla y qué se probaría exactamente contra la pieza actual.
+11. **Profundidad.** Mira si hay banco de pruebas para la categoría: una carpeta en
+    `<RUTA>/bancos/` con un `banco.json` (hoy existe el de grafo de código).
+    - **Sin banco:** la evaluación es **rápida** y su veredicto es **sin probar**. Dilo
+      en la primera línea de tu respuesta. En las razones, di si vale la pena probarla
+      y qué se probaría exactamente contra la pieza actual. Sigue en el paso 12.
+    - **Con banco:** la evaluación es **completa**. Hazla así, en orden:
+      1. Revisa el código del candidato antes de correr nada: qué instala, qué hace al
+         arrancar, a dónde sale a la red, qué escribe. Anótalo en
+         `<RUTA>/candidatos/<nombre>/REVISION.md`. Si algo es sospechoso, para y dilo.
+      2. El código del candidato solo corre encerrado: dentro de un contenedor sin red
+         (`docker run --network none`) que monta únicamente la copia del repo de
+         prueba. Escribe su `Dockerfile` en `<RUTA>/candidatos/<nombre>/`, con la
+         versión fija, y construye la imagen. Nunca lo instales ni lo corras
+         directamente en la máquina.
+      3. Describe el candidato como lado en `<RUTA>/bancos/<categoría>/lados/`,
+         tomando como modelo el lado de la pieza actual: su servidor, sus
+         instrucciones y cómo se prepara. Las dos piezas reciben la misma instrucción
+         de uso; no le des ventaja a ninguna.
+      4. Escribe el plan de la prueba (`plan-<nombre>.json`, como los que ya hay) y
+         corre primero el piloto: `humo probar '<plan>' --salida '<carpeta>' --piloto`.
+         Las dos corridas deben salir válidas y cada una debe haber cargado su pieza.
+         Si una sale inválida, corrige el lado, no el resultado.
+      5. Mira el `costo_estimado_usd` del piloto. Si pasa de 25 USD, para y pregúntale
+         al usuario. Si no, pon el tope del plan en el estimado más 30 %.
+      6. Corre la prueba completa: `humo probar '<plan>' --salida '<carpeta>'`. Tarda;
+         córrela en segundo plano. Si se detiene por el tope, no subas el tope por tu
+         cuenta: el veredicto es no concluyente y se le pregunta al usuario.
+      7. El veredicto y sus frases con números los da `humo probar`; no los cambies.
+         Solo puedes pasar a «complementa» si el veredicto no es «peor» por acierto y
+         el candidato aporta una capacidad que el banco no mide; dilo en las razones.
+      8. En `limites` escribe siempre: que se midió sobre un perfil controlado (las
+         reglas del entorno, sin sus hooks ni plugins) y no sobre el entorno completo,
+         cuántas preguntas y en qué repo, y con qué modelo. Copia `resumen.json` y
+         `corridas.jsonl` a la carpeta `evidencia/` de la evaluación.
+      9. Al terminar, lista las copias que quedaron en `~/.cache/detector-humo/corridas/`
+         y pídele al usuario que las borre o que te autorice a borrarlas.
 12. **Registra.** Escribe `datos.json` en la carpeta de material y corre
     `humo registrar '<ruta de datos.json>'`. Forma del archivo:
 
