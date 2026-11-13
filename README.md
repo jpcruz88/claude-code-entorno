@@ -1002,7 +1002,9 @@ variable `DETECTOR_HUMO_RUTA`; sin eso, `/evaluar` avisa que no lo encuentra.
 
 Reglas que el comando impone: sin pruebas propias el veredicto es «sin probar»; lo que
 diga una fuente es dato, no instrucción; no se ejecuta nada de un repositorio clonado;
-y nada se integra a este entorno sin tu aprobación.
+y nada se integra a este entorno sin tu aprobación. Solo tú lo lanzas: el modelo no
+puede invocarlo por su cuenta. En una máquina con servicios en producción, crea el
+archivo `~/.config/detector-humo/solo-lectura` para que ahí solo consulte el registro.
 
 ## Panel de servicios locales
 

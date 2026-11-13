@@ -43,6 +43,20 @@ class EvaluarTest(unittest.TestCase):
         self.assertIn(".config/detector-humo/ruta", self.texto)
         self.assertNotRegex(self.texto, r"/Users/|/Volumes/|/home/")
 
+    def test_solo_lo_invoca_el_usuario(self):
+        # Una página o un README no deben poder hacer que el modelo lance una evaluación.
+        cabecera = self.texto.split("---\n")[1]
+        self.assertIn("disable-model-invocation: true", cabecera)
+
+    def test_no_da_por_evaluado_un_repo_que_cambio(self):
+        # `humo consultar` dice en repo_cambio si el repo tiene commits nuevos; el
+        # procedimiento no puede terminar en «ya evaluado» sin mirarlo.
+        self.assertIn("repo_cambio", self.texto)
+        self.assertIn('"commit"', self.texto)
+
+    def test_la_maquina_de_solo_lectura_no_registra(self):
+        self.assertIn("solo consulta", self.texto.lower())
+
     def test_avisa_si_falta_el_detector(self):
         self.assertIn("SIN_DETECTOR", self.texto)
 
