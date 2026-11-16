@@ -94,7 +94,8 @@ Sigue los pasos en orden.
     mantenimiento, y si existe una alternativa más nueva o mejor que la fuente no
     menciona. Esto orienta; no decide.
 11. **Profundidad.** Mira si hay banco de pruebas para la categoría: una carpeta en
-    `<RUTA>/bancos/` con un `banco.json` (hoy existe el de grafo de código).
+    `<RUTA>/bancos/` con un `banco.json` (hoy: grafo de código, continuidad, vara, salida de
+    comandos y código mínimo; la lista y sus programas están en el README del repo privado).
     - **Sin banco:** la evaluación es **rápida** y su veredicto es **sin probar**. Dilo
       en la primera línea de tu respuesta. En las razones, di si vale la pena probarla
       y qué se probaría exactamente contra la pieza actual. Sigue en el paso 12.
