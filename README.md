@@ -996,7 +996,8 @@ páginas, o solo un nombre o una pregunta. Sin argumentos lista lo ya evaluado; 
 ya se evaluó no se repite, y una versión nueva se compara con la anterior.
 
 El comando solo lleva el procedimiento. El registro de lo evaluado y los programas de
-apoyo viven en un repo privado aparte, porque los reportes mencionan tus proyectos.
+apoyo viven en un repo privado aparte (Aduana, antes detector-humo; los datos locales
+siguen en `~/.config/detector-humo`), porque los reportes mencionan tus proyectos.
 Dile al comando dónde está con una línea en `~/.config/detector-humo/ruta` o con la
 variable `DETECTOR_HUMO_RUTA`; sin eso, `/evaluar` avisa que no lo encuentra.
 
