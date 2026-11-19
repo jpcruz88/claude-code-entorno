@@ -1,0 +1,6 @@
+{
+  "name": "aduana-panel",
+  "version": "0.1.0",
+  "description": "Franja sobre el prompt con el avance de las pruebas largas de Aduana: corridas hechas, en curso y costo",
+  "types": "./types/index.d.ts"
+}
