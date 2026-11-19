@@ -185,5 +185,53 @@ class ArchivoTerminal(unittest.TestCase):
         self.assertEqual(self.orden(), [])
 
 
+@unittest.skipUnless(shutil.which("zsh") and shutil.which("bash"), "hacen falta zsh y bash")
+class ClaudeReanudado(unittest.TestCase):
+    """herdr reanuda con `claude --resume <id>`: la función añade --dangerously-skip-permissions
+    solo si CLAUDE_RESUME_SALTAR_PERMISOS=1."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.home = self.tmp / "home"
+        self.bin = self.tmp / "bin"
+        self.home.mkdir()
+        self.bin.mkdir()
+        claude = self.bin / "claude"
+        claude.write_text('#!/bin/sh\necho "ARGS:$*"\n', encoding="utf-8")
+        claude.chmod(0o755)
+        self.env = {"HOME": str(self.home), "TMPDIR": str(self.tmp), "TERM": "dumb",
+                    "PATH": os.pathsep.join([str(self.bin), "/usr/bin", "/bin"])}
+
+    def tearDown(self):
+        shutil.rmtree(str(self.tmp), ignore_errors=True)
+
+    def claude(self, shell, argumentos, activo=True):
+        env = dict(self.env)
+        if activo:
+            env["CLAUDE_RESUME_SALTAR_PERMISOS"] = "1"
+        r = subprocess.run([shell, "-i", "-c", '. "%s"; claude %s' % (TERMINAL, argumentos)],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, env=env, timeout=30)
+        return r.stdout.decode("utf-8", "replace").strip()
+
+    def test_resume_recibe_la_bandera(self):
+        for shell in ("zsh", "bash"):
+            for forma in ("--resume abc", "-r abc", "--continue", "-c", "--resume=abc"):
+                self.assertEqual(self.claude(shell, forma),
+                                 "ARGS:--dangerously-skip-permissions " + forma, (shell, forma))
+
+    def test_sin_la_variable_no_cambia_nada(self):
+        self.assertEqual(self.claude("zsh", "--resume abc", activo=False), "ARGS:--resume abc")
+
+    def test_no_duplica_ni_pisa_lo_que_el_usuario_pidio(self):
+        for forma in ("--resume abc --dangerously-skip-permissions",
+                      "-r abc --permission-mode plan", "--resume abc -p hola"):
+            self.assertEqual(self.claude("zsh", forma), "ARGS:" + forma, forma)
+
+    def test_una_sesion_nueva_queda_igual(self):
+        for forma in ("", "-p hola", "mcp list"):
+            self.assertEqual(self.claude("zsh", forma), "ARGS:" + forma, forma)
+
+
 if __name__ == "__main__":
     unittest.main()
