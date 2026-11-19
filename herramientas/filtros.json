@@ -46,7 +46,8 @@
     "memoria.md",
     "nunca-fable.md",
     "git.md",
-    "mods-version.md"
+    "mods-version.md",
+    "codigo-minimo.md"
   ],
   "_skills_permitidas": "Únicas skills que se exportan (con su origen de .skill-lock.json, que debe ser un repositorio público de GitHub). Una skill usada que no esté aquí no se exporta; exportar.sh avisa.",
   "skills_permitidas": [
