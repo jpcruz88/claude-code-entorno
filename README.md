@@ -895,6 +895,7 @@ instalado:
 | `alt+c` | Entra a una subcarpeta (`fzf`). |
 | `ctrl+r` | Busca en el historial de todas tus terminales (`atuin`; en bash, el de `fzf`). La flecha arriba sigue como siempre. |
 | `bat <archivo>` | Muestra un archivo con colores, con el tema de VS Code. |
+| `claude --resume <id>` | Con `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu rc, añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`: así reanuda tus sesiones herdr al reiniciar. Apagado por omisión; no toca sesiones nuevas ni `-p`, ni repite una bandera que ya pasaste. |
 
 No cambia `ls` ni `cat`: Claude Code y los scripts los usan y esperan su salida de
 siempre. Para pasar a atuin el historial que ya tenías: `atuin import auto` (se
