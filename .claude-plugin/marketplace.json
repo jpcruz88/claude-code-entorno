@@ -8,6 +8,12 @@
   },
   "plugins": [
     {
+      "name": "aduana-panel",
+      "source": "./mods/aduana-panel",
+      "description": "Franja sobre el prompt con el avance de las pruebas largas de Aduana (hechas, en curso y costo)",
+      "version": "0.1.0"
+    },
+    {
       "name": "caveman-badge",
       "source": "./mods/caveman-badge",
       "description": "Muestra en la línea de estado el modo caveman (aproximado)",
