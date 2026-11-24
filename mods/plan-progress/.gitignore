@@ -1,5 +1,0 @@
-# Lo escribe Claude Code al cargar el mod (tipos de la API para el editor y tsc)
-.claude-plugin/types/
-node_modules/
-.DS_Store
-*.js
