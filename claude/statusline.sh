@@ -135,6 +135,45 @@ guardar_uso() {
 }
 guardar_uso 2>/dev/null || true
 
+# Lo que solo recibe la statusline (nombre, thinking, cache, PR) para el mod tablero:
+# ~/.claude/tablero/linea/<session_id>.json, escrito de forma atómica.
+guardar_linea() {
+  local id json carpeta tmp
+  [ -n "${HOME:-}" ] || return 0
+  id=$(jq -r '.session_id // empty' <<<"$entrada" 2>/dev/null | tr -d '\r') || return 0
+  # Solo ids de letras, cifras, guion y guion bajo: nada de rutas.
+  [[ "$id" =~ ^[A-Za-z0-9_-]+$ ]] || return 0
+  json=$(jq -c '{
+      actualizado: (now | floor),
+      session_id: .session_id,
+      session_name: (.session_name // null),
+      thinking: (.thinking.enabled // null),
+      prompt_cache: (if (.prompt_cache | type) == "object" then
+          {warm: .prompt_cache.warm, ttl: .prompt_cache.ttl,
+           expires_at: .prompt_cache.expires_at, hit_ratio: .prompt_cache.hit_ratio}
+        else null end),
+      pr: (if (.pr | type) == "object" then
+          {number: .pr.number, url: .pr.url, review_state: (.pr.review_state // null)}
+        else null end)
+    }' <<<"$entrada" 2>/dev/null | tr -d '\r') || return 0
+  [ -n "$json" ] || return 0
+  carpeta="$HOME/.claude/tablero/linea"
+  mkdir -p "$carpeta" 2>/dev/null && chmod 700 "$carpeta" 2>/dev/null
+  tmp=$(mktemp "$carpeta/.linea.XXXXXX" 2>/dev/null) || return 0
+  if printf '%s\n' "$json" >"$tmp" 2>/dev/null && mv -f "$tmp" "$carpeta/$id.json" 2>/dev/null; then
+    :
+  else
+    rm -f "$tmp" 2>/dev/null
+  fi
+  return 0
+}
+guardar_linea 2>/dev/null || true
+
+# Con el mod tablero activo, todo esto lo muestra el tablero: la statusline calla.
+if jq -e '.enabledPlugins["tablero@claude-code-entorno"] == true' "${HOME:-}/.claude/settings.json" >/dev/null 2>&1; then
+  exit 0
+fi
+
 # Colores
 R=$'\e[0m'; DIM=$'\e[2m'; B=$'\e[1m'
 CYAN=$'\e[36m'; MAG=$'\e[35m'; GRN=$'\e[32m'; YEL=$'\e[33m'; RED=$'\e[31m'; BLU=$'\e[34m'
