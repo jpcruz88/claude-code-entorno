@@ -32,6 +32,12 @@
       "version": "0.1.0"
     },
     {
+      "name": "plan-progress",
+      "source": "./mods/plan-progress",
+      "description": "Barras de progreso del plan sobre el prompt: etapas, pasos, subagentes y sonidos. Copia de zycck/claude-mods (MIT) sin auto-actualización",
+      "version": "1.0.1"
+    },
+    {
       "name": "secret-guard",
       "source": "./mods/secret-guard",
       "description": "Bloquea escribir secretos en archivos y comandos y pregunta antes de leer archivos sensibles",

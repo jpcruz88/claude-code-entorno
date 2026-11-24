@@ -80,7 +80,7 @@ dices que sí.
 | Hook `caveman-activo.py` | `claude/hooks/` | Activa el modo caveman solo: al abrir, reanudar, limpiar o compactar una sesión mete en el contexto las reglas del modo en corto (no la skill entera), y en cada mensaje recuerda el modo en una línea. Sigue `/caveman lite\|full\|ultra`, «stop caveman» y «modo normal»; el modo de cada sesión se guarda en `~/.claude/caveman/`. Sin él, caveman dependía solo del texto de la regla `caveman.md`. |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
-| Mods | `mods/` | Nueve mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify`, `caveman-badge`, `tablero` (panel en español sobre el prompt) y `aduana-panel` (avance de las pruebas largas de Aduana). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
+| Mods | `mods/` | Diez mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify`, `caveman-badge`, `tablero` (panel en español sobre el prompt) `aduana-panel` (avance de las pruebas largas de Aduana) y `plan-progress` (barras del plan sobre el prompt, de zycck/claude-mods). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
@@ -466,7 +466,7 @@ modelo y esfuerzo de los subagentes; ver «Tope por uso de la cuenta» en
 
 ## Mods
 
-Nueve mods de Claude Code en `mods/`, cada uno con su plugin y sus pruebas. Se
+Diez mods de Claude Code en `mods/`, cada uno con su plugin y sus pruebas. Se
 instalan por defecto en todas las computadoras (`--sin-mods` / `-SinMods` para
 omitirlos).
 
@@ -481,6 +481,7 @@ omitirlos).
 | `caveman-badge` | Muestra en la línea de estado el modo caveman (aproximado). |
 | `tablero` | Panel en español con carpeta, modelo, costo, contexto, subagentes, permisos y uso. Derivado de Flightdeck (MIT). |
 | `aduana-panel` | Franja sobre el prompt con el avance de las pruebas largas de Aduana: hechas del total, en curso y costo. Lee `~/.cache/detector-humo/en-curso.json`. |
+| `plan-progress` | Barras de progreso del plan sobre el prompt: etapas, pasos, subagentes de cada tarea, `tok/s` y sonidos. Complementa a `tablero` (que muestra el estado de la sesión, no el avance del plan). Copia de [zycck/claude-mods](https://github.com/zycck/claude-mods) (MIT) sin auto-actualización; gasta algunos tokens porque Claude mueve la barra con la herramienta `plan_progress`. Ver `mods/plan-progress/ORIGEN.md`. |
 
 El repo es su propio marketplace: `.claude-plugin/marketplace.json` lista cada mod
 con su carpeta. El instalador agrega el marketplace por la ruta de este repo y
@@ -489,7 +490,7 @@ repo, vuelve a correr el instalador; si falla, quita primero el marketplace con
 `claude plugin marketplace remove claude-code-entorno`.
 
 Cada mod se prueba con `claude plugin test mods/<nombre>`; `exportar.sh` las corre
-todas. Licencia MIT (ver `LICENSE`); `tablero` conserva el aviso de Flightdeck.
+todas. Licencia MIT (ver `LICENSE`); `tablero` conserva el aviso de Flightdeck y `plan-progress` el de zycck/claude-mods.
 
 Para agregar un mod: crea `mods/<nombre>/` con `.claude-plugin/plugin.json` y sus
 hooks, agrégalo a `.claude-plugin/marketplace.json` y corre sus pruebas.
