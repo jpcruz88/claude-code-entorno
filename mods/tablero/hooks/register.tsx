@@ -5,7 +5,10 @@ import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop
 import { CAIDA_MS, aplicar, resumen as resumenPlan } from './planes'
 import { siguienteModo, type Modo } from './caveman'
 import { leerLinea } from './linea-sesion'
-import type { EstadoAduana, Extra } from '../types'
+import type { EstadoAduana, Extra, Fuentes } from '../types'
+import { estadoCi, parseShortstat, parseSinSubir } from './git-ci'
+import { URL_SERVICIO, leerServicio } from './servicio'
+import { contarConfig, contarHooks, servidoresMcp } from './config-cargada'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -136,6 +139,54 @@ let relojAduana: { cancel: () => void } | null = null
 let aduanaAvisada = 0
 // El modo caveman (antes caveman-badge): lo cambian «/caveman lite|full|ultra», «stop caveman» y «modo normal».
 const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as Modo)
+// Las fuentes externas: git cada 10 s, el CI del PR cada 60 s y la página de estado y la config cada 5 min.
+const DEFAULT_FUENTES: Fuentes = { git: null, ci: null, servicio: null, config: null }
+const fuentes = atom({ plugin: 'tablero', key: 'fuentes' } as const, DEFAULT_FUENTES)
+let relojFuentes: { cancel: () => void } | null = null
+let vueltaFuentes = 0
+/** Lo que tarde más que `ms` se da por perdido: el panel no espera a una red lenta. */
+const conTope = <T,>($: EngineInterface, ms: number, p: Promise<T>): Promise<T | null> =>
+  Promise.race([p.catch(() => null), $.clock.sleep(ms).then(() => null)])
+const ponerFuente = ($: EngineInterface, parte: Partial<Fuentes>) => update($, fuentes, f => ({ ...normalize(DEFAULT_FUENTES, f), ...parte }))
+const leerGit = async ($: EngineInterface) => {
+  const cwd = await $.session.cwd().catch(() => '')
+  const stat = await conTope($, 5000, $.process.run(['git', 'diff', '--shortstat', 'HEAD'], { cwd, timeoutMs: 5000 }))
+  if (!stat || stat.exitCode !== 0) return ponerFuente($, { git: null })
+  const sub = await conTope($, 5000, $.process.run(['git', 'rev-list', '--count', '@{u}..HEAD'], { cwd, timeoutMs: 5000 }))
+  return ponerFuente($, { git: { ...parseShortstat(stat.stdout), sinSubir: sub && sub.exitCode === 0 ? parseSinSubir(sub.stdout) : null } })
+}
+const leerCi = async ($: EngineInterface) => {
+  const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr
+  if (!pr) return ponerFuente($, { ci: null })
+  const cwd = await $.session.cwd().catch(() => '')
+  const r = await conTope($, 10_000, $.process.run(['gh', 'pr', 'checks', String(pr.number), '--json', 'bucket'], { cwd, timeoutMs: 10_000 }))
+  // gh sale con 8 mientras hay comprobaciones pendientes: su JSON sigue valiendo.
+  return ponerFuente($, { ci: r && r.stdout ? estadoCi(r.stdout) : null })
+}
+const leerServicioClaude = async ($: EngineInterface) => {
+  const r = await conTope($, 5000, $.http.fetch(URL_SERVICIO))
+  return ponerFuente($, { servicio: r ? leerServicio(r.status, r.text) : null })
+}
+const leerConfig = async ($: EngineInterface) => {
+  const [casa, raiz, ajustes, herramientas] = await Promise.all([
+    $.env.get('HOME'),
+    $.session.root().catch(() => ''),
+    $.settings.read().catch(() => ({}) as Record<string, unknown>),
+    $.tool.list().catch(() => []),
+  ])
+  const existe = (ruta: string) => $.fs.stat(ruta).then(() => 1).catch(() => 0)
+  const mds = (carpeta: string) => $.fs.list(carpeta).then(l => l.filter(x => x.name.endsWith('.md')).length).catch(() => 0)
+  const cuentas = await Promise.all([
+    ...[`${casa}/.claude/CLAUDE.md`, `${raiz}/CLAUDE.md`, `${raiz}/AGENTS.md`, `${raiz}/.claude/CLAUDE.md`].map(existe),
+    mds(`${casa}/.claude/rules`),
+    mds(`${raiz}/.claude/rules`),
+  ])
+  const claudeMd = cuentas.slice(0, 4).reduce((a, b) => a + b, 0)
+  const reglas = (cuentas[4] ?? 0) + (cuentas[5] ?? 0)
+  const hooks = contarHooks((ajustes as { hooks?: unknown }).hooks)
+  const mcp = servidoresMcp(herramientas.map(h => h.name))
+  return ponerFuente($, { config: contarConfig({ claudeMd, reglas, hooks, mcp }) })
+}
 // Lo que solo tiene la statusline, el tiempo de trabajo del lead, la cache leída y el arranque del día.
 const DEFAULT_EXTRA: Extra = { linea: null, trabajoMs: 0, cacheLeida: 0, dia: '', base: 0 }
 const extra = atom({ plugin: 'tablero', key: 'extra' } as const, DEFAULT_EXTRA)
@@ -456,6 +507,20 @@ export const register: Register = (on, options) => {
         },
       },
     }).catch(() => undefined)
+    if (relojFuentes === null) {
+      vueltaFuentes = 0
+      const vuelta = async () => {
+        const n = vueltaFuentes++
+        const tareas: Promise<unknown>[] = []
+        if (cfg.extras.has('git')) tareas.push(leerGit($))
+        if (cfg.extras.has('ci') && n % 6 === 0) tareas.push(leerCi($))
+        if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
+        if (n % 30 === 0) tareas.push(leerConfig($))
+        await Promise.all(tareas.map(t => t.catch(() => undefined)))
+      }
+      void vuelta()
+      relojFuentes = $.clock.every(10_000, vuelta)
+    }
     if (relojAduana === null) {
       relojAduana = $.clock.every(5000, async () => {
         await refrescarExtra($).catch(() => undefined)
@@ -518,6 +583,8 @@ export const register: Register = (on, options) => {
     detenerReloj()
     relojAduana?.cancel()
     relojAduana = null
+    relojFuentes?.cancel()
+    relojFuentes = null
     if (e.reason === 'clear') {
       await resetAll($)
     }
