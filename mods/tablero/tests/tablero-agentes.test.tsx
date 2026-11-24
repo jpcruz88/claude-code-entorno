@@ -51,3 +51,29 @@ test('los tipos de Claude Code se nombran en español; uno desconocido queda igu
   expect(nombreDeTipo('Explore')).toBe('explorar')
   expect(nombreDeTipo('mi-agente')).toBe('mi-agente')
 })
+
+// Una tarjeta de agente va sin marco: su estado lo dice el símbolo y el texto, no una caja alrededor.
+const textoDe = (n: unknown): string => {
+  if (typeof n === 'string') return n
+  if (typeof n !== 'object' || n === null) return ''
+  const nodo = n as { children?: unknown[]; props?: { label?: string } }
+  return (nodo.props?.label ?? '') + (nodo.children ?? []).map(textoDe).join('')
+}
+const marcosDeCarta = (n: unknown, out: unknown[] = []): unknown[] => {
+  if (typeof n !== 'object' || n === null) return out
+  const nodo = n as { type?: string; props?: { borderStyle?: string }; children?: unknown[] }
+  const hijos = nodo.children ?? []
+  if (nodo.type === 'Box' && nodo.props?.borderStyle && hijos.some(k => typeof k === 'object' && k !== null && textoDe(k).includes('revisar auth'))) out.push(nodo)
+  for (const k of hijos) marcosDeCarta(k, out)
+  return out
+}
+
+test('una tarjeta de agente no lleva marco', { options: { layout: 'diagrama' } }, async ($, on) => {
+  motor(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await lanzar($)
+  const ui = await $.ui.mount(pane as never)
+  expect(await ui.find({ text: /revisar auth/ })).toBeDefined()
+  expect(marcosDeCarta(await ui.drawn())).toEqual([])
+  await ui.unmount()
+})

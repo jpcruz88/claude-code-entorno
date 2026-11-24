@@ -45,7 +45,7 @@ test('sin alDia el mapa sale idéntico al de siempre', () => {
   }
 })
 
-test('sin alDia el mapa es idéntico al de antes de la rama (instantánea de 2281d5e)', () => {
+test('sin alDia el mapa es idéntico a su instantánea de 1.0.0 (solo cambian los glifos respecto a 2281d5e)', () => {
   const claves = Object.keys(INSTANTANEAS_MAPA)
   expect(claves.length).toBe(6)
   for (const n of [0, 1, 3]) for (const w of [66, 100]) {

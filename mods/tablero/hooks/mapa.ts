@@ -105,7 +105,6 @@ export const filasDeMapa = (g: Celda[][]): Tramo[][] =>
   })
 
 const SPIN = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-const LUNA = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘']
 const BL = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉', '█']
 const SK = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█']
 /** Celdas de la gráfica costo/min. */
@@ -248,11 +247,11 @@ const barraPasos = (g: Celda[][], x: number, y: number, ancho: number, hechos: n
 }
 
 const glifo = (t: TarjetaMapa, idx: number, tiempo: number): [string, Tinta, string] => {
-  if (t.estado === 'D') return ['✅', 'jev', 'listo']
-  if (t.estado === 'Q') return ['⏳', 'mut', 'en cola']
-  if (t.estado === 'S') return ['⛔', 'mut', 'detenido']
-  if (t.estado === 'F') return ['❌', 'warn', 'falló']
-  return [LUNA[(Math.floor(tiempo * 4) + idx) % LUNA.length], 'enj', 'en curso']
+  if (t.estado === 'D') return ['✓', 'jev', 'listo']
+  if (t.estado === 'Q') return ['○', 'mut', 'en cola']
+  if (t.estado === 'S') return ['○', 'mut', 'detenido']
+  if (t.estado === 'F') return ['✗', 'warn', 'falló']
+  return [SPIN[(Math.floor(tiempo * 4) + idx) % SPIN.length], 'enj', 'en curso']
 }
 
 /** Color del borde o de la barra de una tarea. */

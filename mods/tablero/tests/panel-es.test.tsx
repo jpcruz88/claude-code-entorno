@@ -117,7 +117,7 @@ test('el panel principal junta costo, contexto, subagentes, permisos y uso con s
   expect(await ui.find({ text: /contexto/ })).toBeDefined()
   expect(await ui.find({ text: /agentes 1\/1/ })).toBeDefined()
   expect(await ui.find({ text: /permisos 1/ })).toBeDefined()
-  expect(await ui.find({ text: /19% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
+  expect(await ui.find({ text: /19% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -188,4 +188,22 @@ test('la cabecera muestra el tiempo de la sesión y la hora local', { options: {
   expect(await ui.find({ text: /⏱/ })).toBeDefined()
   expect(await ui.find({ text: /🕐 (\d\d:\d\d|--:--)/ })).toBeDefined()
   await ui.unmount()
+})
+
+// El cupo de 5 h con 70 % cuando ya ha pasado la mitad de la ventana: va 20 puntos por delante, ⇡20%.
+test('el cupo muestra su ritmo frente al tiempo de la ventana: ⇡ si va por delante', { options: { layout: 'diagrama' } }, async ($, on) => {
+  motor(on)
+  await $.session.measure({
+    context: { window: 200_000, tokens: 100_000, percent: 50 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt: new Date(2.5 * 3_600_000).toISOString() }],
+    cost: { usd: 1.2 },
+    changed: ['context', 'rateLimits'],
+  } as never)
+  const ui = await $.ui.mount(pane(120))
+  expect(await ui.find({ text: /70% +⇡20%/ })).toBeDefined()
+  await ui.unmount()
+  // En un panel de 64 columnas no cabe: el ritmo se oculta antes que partir la línea.
+  const estrecho = await $.ui.mount(pane(64))
+  expect(await estrecho.find({ text: /⇡20%/ })).toBeUndefined()
+  await estrecho.unmount()
 })
