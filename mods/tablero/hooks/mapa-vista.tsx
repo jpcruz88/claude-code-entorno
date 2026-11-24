@@ -3,7 +3,8 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { AgentCard, Architect, JevEstado, Loop, Main, Receipt, Turn, Usage, Usos } from '../types'
-import { fmtClock, fmtDuration, fmtTimer, fmtUsd, MOD_VERSION, prettyModel, type Colors, type Panel, type gateSummary } from './core'
+import { fmtClock, fmtDuration, fmtMinutos, fmtTimer, fmtUsd, MOD_VERSION, prettyModel, type Colors, type Panel, type gateSummary } from './core'
+import { enReposo } from './clave-redibujo'
 import { leerAlDia } from './al-dia-modelo'
 import { costoPorMinuto, type MuestraCosto } from './costo-min'
 import { lineaRegistroJev, recientesJev, type NivelRitmo } from './jev-modelo'
@@ -52,8 +53,10 @@ export const datosDelMapa = (x: EntradaMapa): DatosMapa => {
   const juntar = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ')
   const ultimaConsulta = a.consults[a.consults.length - 1]
   const situacion = situacionDe({ trabajando: agentesActivos > 0 || m.isRunning, turnoActivo: m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
+  // En reposo (sin trabajo ni permisos pendientes, igual que el reloj) el tiempo y el «hace» van en minutos: el reloj redibuja por minuto.
+  const reposo = enReposo({ hayTrabajo: agentesActivos > 0 || m.isRunning, permisosPendientes: s.ask })
   return {
-    tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
+    tiempo: u.startedAt ? (reposo ? fmtMinutos(now - u.startedAt) : fmtTimer(now - u.startedAt)) : '--:--',
     reloj: fmtClock(now).slice(0, 5),
     rama: rama || null,
     version: MOD_VERSION,
@@ -84,7 +87,7 @@ export const datosDelMapa = (x: EntradaMapa): DatosMapa => {
         ? {
             estado: asesorActivo ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`,
             consultas: a.consults.length,
-            ultima: ultimaConsulta ? `hace ${fmtDuration(now - ultimaConsulta.at)}` : null,
+            ultima: ultimaConsulta ? `hace ${reposo ? fmtMinutos(now - ultimaConsulta.at) : fmtDuration(now - ultimaConsulta.at)}` : null,
           }
         : null,
     lead: {

@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.12.0'
+export const MOD_VERSION = '0.13.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -267,6 +267,13 @@ export const fmtDuration = (ms: number) => {
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   return m < 60 ? `${m}m${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
+}
+
+/** Minutos para el reloj del mapa en reposo: `<1m` bajo un minuto, `12m`, y `1h05m` pasada la hora. */
+export const fmtMinutos = (ms: number) => {
+  const m = Math.floor(Math.max(0, ms) / 60_000)
+  if (m === 0 && ms < 60_000) return '<1m'
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
 }
 
 /** A running clock as the live cards draw it: m:ss, or XhYY past an hour. */

@@ -15,6 +15,8 @@ export type EntradaClave = {
   marco?: number
   /** El mapa enseña relojes con segundos: la clave cambia cada segundo en vez de cada minuto. */
   segundos?: boolean
+  /** En reposo (sin trabajo) los relojes van por minuto aunque haya `segundos`: la clave cambia cada minuto. */
+  reposo?: boolean
 }
 
 /**
@@ -41,10 +43,13 @@ export const claveDeRedibujo = (e: EntradaClave): string =>
     e.contextoPct,
     e.limites.map(l => l.pct),
     e.pulso,
-    Math.floor(e.ahora / (e.segundos ? 1000 : 60_000)),
+    Math.floor(e.ahora / (e.segundos && !e.reposo ? 1000 : 60_000)),
     e.agentesActivos,
     fotogramaDeMarcha(e.ahora, e.agentesActivos),
     e.permisosPendientes,
     e.costoUsd,
     ...(e.marco === undefined ? [] : [e.marco]),
   ])
+
+/** Reposo: nada trabaja y nadie espera un permiso. Con un permiso pendiente, «TE ESPERA» sigue latiendo cada segundo. */
+export const enReposo = (e: { hayTrabajo: boolean; permisosPendientes: number }) => !e.hayTrabajo && e.permisosPendientes === 0
