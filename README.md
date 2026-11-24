@@ -90,7 +90,7 @@ dices que sí.
 | Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
-| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan. Mac y Linux. Opcional: `--sin-opencode`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
+| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan (Mac y Linux). En Windows, `cl-go` y `cl-or` se cargan desde tu perfil de PowerShell. Opcional: `--sin-opencode` (en Windows, `-SinOpencode`). Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Config de OpenCode | *fuera de este repo* | Trae de [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config) la config global de OpenCode en `~/.config/opencode`: el router que elige modelo por complejidad y el script `gomodel`. Va en un repo aparte **a propósito**: si se copiara aquí, esa config tendría dos fuentes de verdad. Mac y Linux. Opcional: `--sin-opencode-config`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
@@ -302,11 +302,13 @@ cd claude-code-entorno
 11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-12. **OpenCode** (Mac y Linux): copia `opencode/opencode.sh` a
+12. **OpenCode**: en Mac y Linux copia `opencode/opencode.sh` a
     `~/.config/claude-code-entorno/` y `opencode/opencode-go-modelos` a
-    `~/.local/bin/`, y agrega al rc la línea que carga el primero. Solo define las
-    aliases `cl-go` y `cl-or` si su variable de entorno existe; no pide ni escribe
-    claves. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+    `~/.local/bin/`, y agrega al rc la línea que carga el primero. En Windows copia
+    `opencode/opencode.ps1` a `%USERPROFILE%\.config\claude-code-entorno\` y lo
+    carga desde tu perfil de PowerShell (7 y 5.1). Solo define `cl-go` y `cl-or` si
+    su variable de entorno existe; no pide ni escribe claves. Ver
+    [OpenCode como respaldo](#opencode-como-respaldo).
 13. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
     a `~/.config/opencode` — clon, `git pull` si ya estaba, o conversión de una
     carpeta que ya existiera (sin tocar sus archivos sin seguimiento, como
@@ -933,6 +935,17 @@ cada máquina:
 export OPENCODE_API_KEY="…"    # de https://opencode.ai/console
 export OPENROUTER_API_KEY="…"  # de https://openrouter.ai/keys
 ```
+
+En Windows, `opencode/opencode.ps1` hace lo mismo en PowerShell: `instalar.ps1` lo
+carga desde tu perfil, y las claves van como variables de usuario (abre después
+una terminal nueva):
+
+```powershell
+[Environment]::SetEnvironmentVariable('OPENCODE_API_KEY', '…', 'User')
+[Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', '…', 'User')
+```
+
+`/go-modelos` y la config de OpenCode (abajo) siguen siendo solo de Mac y Linux.
 
 Ponlas en un archivo que no esté en el repo (`~/.config/secrets.env`, por ejemplo)
 y cárgalas desde tu `.zshrc`; nunca dentro de este repo.
