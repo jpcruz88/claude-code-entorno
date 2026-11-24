@@ -1,8 +1,36 @@
 # Tablero
 
-Mod de Claude Code que dibuja un panel en español junto al chat: una lista de secciones con título, sin cajas, con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt se queda en un resumen de hasta 8 filas. El mapa de cajas de versiones anteriores sigue disponible con `/tablero layout mapa`.
+Mod de Claude Code que dibuja un panel en español junto al chat con todo el estado de la sesión, en un solo sitio y sin datos repetidos. Desde 1.3.0 absorbe los antiguos mods `barra-plan`, `aduana-panel` y `caveman-badge`.
 
-Es de observación: no bloquea ni retrasa nada. No usa red, no lanza procesos y no escribe archivos. Solo lee cuatro archivos, cada uno con un tope de 2 000 000 de caracteres: `~/.claude/jev/decisiones.jsonl` (las decisiones de Jev, ver «Jev»), `~/.claude/jev/limites.json` (el uso de la cuenta, ver «Tope por uso de la cuenta»), `~/.claude/al-dia/resultado.json` (lo que actualizó «Al día») y el `.git/HEAD` del repo, o el de su worktree, para la rama.
+La vista por defecto es una lista de secciones con título, sin cajas:
+
+- **Cabecera:** estado (`⠹ Trabajando` / `○ En espera`), modo caveman, servicio de Claude, versión y tiempo. La rama y la hora solo salen fuera de herdr.
+- **Sesión:** Modelo, Contexto, Cache, Costo, Hoy, Cupo 5 h, Cupo 7 d, Proyecto, Git y Config.
+- **Planes:** los de la herramienta `mcp__tablero__plan_progress`.
+- **Agentes:** tarjetas animadas.
+- **Jev.**
+- **Aduana:** solo mientras corren las pruebas largas.
+- **Gasto:** plegada, se abre con `g`.
+- **Sesiones:** plegada, se abre con `v`.
+- **Permisos.**
+
+Con el panel sin colocar, un resumen de hasta 8 filas va sobre el prompt. El mapa de cajas de versiones anteriores sigue en `/tablero layout mapa`.
+
+Qué lee, qué lanza y qué escribe. Cada fuente se apaga con la opción `extras`, y un fallo oculta su fila, nunca el panel:
+
+- **Lee:**
+  - `~/.claude/jev/decisiones.jsonl` y `~/.claude/jev/limites.json` (Jev);
+  - `~/.claude/al-dia/resultado.json`;
+  - `.git/HEAD`;
+  - `~/.claude/tablero/linea/<sesión>.json`: lo que deja la statusline (cache, nombre de la sesión, thinking, PR);
+  - `~/.claude/tablero/sesiones/*.json`: las demás sesiones;
+  - `~/.cache/detector-humo/en-curso.json` (Aduana);
+  - los mensajes de la propia sesión, para Gasto.
+
+  Cada lectura de archivo tiene un tope de 2 000 000 de caracteres.
+- **Lanza:** `git diff --shortstat` y `git rev-list` cada 10 s, y `gh pr checks` cada minuto si hay PR. Cada uno con tope de tiempo.
+- **Red:** `https://status.claude.com/api/v2/status.json` cada 5 min.
+- **Escribe:** su propio `~/.claude/tablero/sesiones/<sesión>.json`, con su estado, para las demás sesiones y el presupuesto.
 
 ## Instalar
 

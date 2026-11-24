@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '1.2.0'
+export const MOD_VERSION = '1.3.1'
 
 // ---------------------------------------------------------------- defaults
 
@@ -140,6 +140,10 @@ export type Config = {
   openOnStart: boolean
   /** Animación del panel: spinner, paquetes en las líneas, bordes que respiran. */
   animacion: boolean
+  /** Las fuentes nuevas de 1.3.0 que están encendidas (opción `extras`). */
+  extras: ReadonlySet<Fuente>
+  /** Tope de gasto diario en USD; 0 oculta la fila Hoy. */
+  presupuestoDiario: number
 }
 
 const safeRegExp = (source: string, fallback: string) => {
@@ -151,6 +155,9 @@ const safeRegExp = (source: string, fallback: string) => {
 }
 
 /** The plugin's `/config` values, read leniently: anything malformed falls back to the default. */
+export const FUENTES = ['cache', 'git', 'ci', 'servicio', 'presupuesto', 'gasto', 'sesiones'] as const
+export type Fuente = (typeof FUENTES)[number]
+
 export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
   const str = (k: string, d: string) => (typeof o[k] === 'string' && o[k] !== '' ? (o[k] as string) : d)
   const bool = (k: string, d: boolean) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : d)
@@ -176,6 +183,13 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     palette: (['theme', 'pastel', 'neon'] as const).find(p => p === str('palette', 'theme')) ?? 'theme',
     openOnStart: bool('openOnStart', true),
     animacion: bool('animacion', true),
+    extras: new Set(
+      (typeof o.extras === 'string' ? o.extras : FUENTES.join(','))
+        .split(',')
+        .map(s => s.trim())
+        .filter((f): f is Fuente => (FUENTES as readonly string[]).includes(f)),
+    ),
+    presupuestoDiario: typeof o.presupuestoDiario === 'number' && o.presupuestoDiario > 0 ? o.presupuestoDiario : 0,
   }
 }
 
@@ -302,7 +316,7 @@ export const momentLabel = (m: string) =>
 
 /** El estado de una tarjeta de agente como se lee en pantalla; el valor guardado sigue siendo el interno. */
 export const statusLabel = (s: string) =>
-  ({ running: 'en curso', done: 'listo', failed: 'fallido', stopped: 'detenido' } as Record<string, string>)[s] ?? s
+  ({ running: 'En curso', done: 'Hecho', failed: 'Falló', stopped: 'Detenido' } as Record<string, string>)[s] ?? s
 
 export const fmtUsd = (n: number) => (n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`)
 

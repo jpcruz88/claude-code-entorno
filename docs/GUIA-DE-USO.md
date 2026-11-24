@@ -23,7 +23,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `guard-kill-visible` | Antes de comandos que matan procesos | Solo avisa; no bloquea. |
 | Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Te avisa, y le pide a Claude guardar el handoff antes de que se compacte. |
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
-| Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
+| Mod `tablero` | Siempre | Muestra en su cabecera el modo caveman (`Caveman full`). |
 | Hook `hilo.py` | Al compactar, reanudar o abrir sesión | Devuelve los mensajes del usuario tal como los escribió, para no depender del resumen. Con `buscar` cita lo dicho en sesiones pasadas. |
 | Hook `caveman-activo.py` | Siempre | Activa el modo caveman al abrir la sesión y lo recuerda en cada mensaje. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |

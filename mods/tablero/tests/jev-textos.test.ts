@@ -62,10 +62,10 @@ test('resumen: cada fila dice qué pasó en la última decisión', () => {
 })
 
 test('fila de la caja JEV: porcentaje de seguridad y qué pasó, largo y corto', () => {
-  expect(textoFilaJev(0.97, 'cambio')).toEqual({ largo: '97% seguro · lo cambió Jev', corto: '97% · lo cambió Jev' })
-  expect(textoFilaJev(0.98, 'igual').largo).toBe('98% seguro · igual a Claude')
-  expect(textoFilaJev(0.9, 'eligio').largo).toBe('90% seguro · lo eligió Jev')
-  expect(textoFilaJev(0.62, 'claude').largo).toBe('62% seguro · decide Claude')
+  expect(textoFilaJev(0.97, 'cambio')).toEqual({ largo: '97% seguro · Lo cambió Jev', corto: '97% · Lo cambió Jev' })
+  expect(textoFilaJev(0.98, 'igual').largo).toBe('98% seguro · Igual a Claude')
+  expect(textoFilaJev(0.9, 'eligio').largo).toBe('90% seguro · Lo eligió Jev')
+  expect(textoFilaJev(0.62, 'claude').largo).toBe('62% seguro · Decide Claude')
 })
 
 test('mapa (ancho y apilado): JEV como la maqueta, con umbral y sin sharp ni split', () => {

@@ -80,7 +80,7 @@ dices que sí.
 | Hook `caveman-activo.py` | `claude/hooks/` | Activa el modo caveman solo: al abrir, reanudar, limpiar o compactar una sesión mete en el contexto las reglas del modo en corto (no la skill entera), y en cada mensaje recuerda el modo en una línea. Sigue `/caveman lite\|full\|ultra`, «stop caveman» y «modo normal»; el modo de cada sesión se guarda en `~/.claude/caveman/`. Sin él, caveman dependía solo del texto de la regla `caveman.md`. |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
-| Mods | `mods/` | Diez mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify`, `caveman-badge`, `tablero` (panel en español sobre el prompt) `aduana-panel` (avance de las pruebas largas de Aduana) y `barra-plan` (barra del plan sobre el prompt). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
+| Mods | `mods/` | Siete mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify` y `tablero` (panel en español con todo el estado de la sesión: planes, subagentes, cache, git y CI, Aduana, gasto, otras sesiones y modo caveman). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
@@ -478,10 +478,7 @@ omitirlos).
 | `guard-kill-visible` | Avisa cuando un comando mata procesos por nombre. Solo avisa, no bloquea. |
 | `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto, y le pide a Claude actualizar `handoff.md` antes de que se compacte. |
 | `sound-notify` | Avisa al terminar un turno largo y cuando Claude espera un permiso. |
-| `caveman-badge` | Muestra en la línea de estado el modo caveman (aproximado). |
-| `tablero` | Panel en español con carpeta, modelo, costo, contexto, subagentes, permisos y uso. Derivado de Flightdeck (MIT). |
-| `aduana-panel` | Franja sobre el prompt con el avance de las pruebas largas de Aduana: hechas del total, en curso y costo. Lee `~/.cache/detector-humo/en-curso.json`. |
-| `barra-plan` | Barra de progreso del plan sobre el prompt: una línea por plan abierto, con su avance, paso activo y tiempo. Complementa a `tablero`. La herramienta del modelo es `mcp__barra-plan__plan_progress`. |
+| `tablero` | Panel en español con todo el estado de la sesión, sin duplicados: modelo, contexto, cache, costo y presupuesto, cupos, git y CI, planes (herramienta `mcp__tablero__plan_progress`), subagentes, Jev, Aduana, gasto, otras sesiones, permisos y modo caveman. Con él activo, la statusline no imprime nada. Derivado de Flightdeck (MIT). |
 
 El repo es su propio marketplace: `.claude-plugin/marketplace.json` lista cada mod
 con su carpeta. El instalador agrega el marketplace por la ruta de este repo y
