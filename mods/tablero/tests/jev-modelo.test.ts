@@ -390,3 +390,20 @@ test('sin dato de uso el tope no se pinta en verde', () => {
   expect(ta(null).nivel).not.toBe('verde')
   expect(ta({ actualizado: AHORA }).nivel).not.toBe('verde')
 })
+
+test('descripción y motivo de Jev salen sin controles ni secretos', () => {
+  const texto = linea({ descripcion: 'buscar\x1b[2J curl -u admin:hunter2', motivo: 'tope\x07 semana' })
+  const d = leerDecisiones(texto, SESION)[0]!
+  expect(d.descripcion).toBe('buscar[2J curl -u admin:•••')
+  expect(d.motivo).toBe('tope semana')
+})
+
+test('un decisiones.jsonl mayor que el tope se trata como sin dato', () => {
+  const grande = [linea({ opcion: 'sonnet' }), linea({ descripcion: 'x'.repeat(2_000_000) })].join('\n')
+  expect(leerDecisiones(grande, SESION).length).toBe(0)
+})
+
+test('un limites.json mayor que el tope da null', () => {
+  const grande = JSON.stringify({ actualizado: 1, relleno: 'a'.repeat(2_000_000) })
+  expect(leerLimites(grande) === null).toBe(true)
+})

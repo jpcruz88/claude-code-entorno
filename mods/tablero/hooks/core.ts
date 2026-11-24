@@ -249,8 +249,14 @@ export const prettyModel = (id: string) => {
   return shorten(id, 22)
 }
 
+/** Tope de lectura de un archivo de datos: lo que pase de aquí no se toma como dato («sin dato»). */
+export const TOPE_LECTURA = 2_000_000
+
+/** Espacios normales y sin caracteres de control (ESC, BEL, C1…): lo que se puede guardar o dibujar. */
+export const sinControles = (s: string) => s.replace(/\s+/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim()
+
 export const shorten = (s: string, n: number) => {
-  const one = s.replace(/\s+/g, ' ').trim()
+  const one = limpio(s)
   return n <= 0 ? '' : one.length > n ? `${one.slice(0, Math.max(0, n - 1)).trimEnd()}…` : one
 }
 
@@ -392,14 +398,22 @@ const SECRETS: [RegExp, string][] = [
   [/(authorization\s*[:=]\s*)(bearer\s+|basic\s+)?\S+/gi, '$1$2•••'],
   [/\b(bearer)\s+[A-Za-z0-9._~+/-]{8,}=*/gi, '$1 •••'],
   [/\b(sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g, '•••'],
-  [/((?:api[_-]?key|access[_-]?token|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
+  [/((?:api[_-]?key|access[_-]?token|secret[_-]?key|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
   [/(--(?:token|password|api-key|secret)[= ])\S+/gi, '$1•••'],
   [/(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)=)\S+/g, '$1•••'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s@]+@/gi, '$1•••@'],
+  [/(\b(?:mysql|mariadb|mysqldump)\b[^\n|;&]*?\s-p)\S+/gi, '$1•••'],
+  [/(\baws_secret_access_key\s+)\S+/gi, '$1•••'],
+  [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '•••'],
+  [/\bAIza[0-9A-Za-z_-]{35}/g, '•••'],
+  [/(\b(?:curl|wget)\b[^\n|;&]*?\s(?:-u|--user)[ =]*[^\s:]+:)(?!\/\/)\S+/gi, '$1•••'],
 ]
 
 /** What the gate drill-down may store: credentials masked before anything is written to state. */
 export const redact = (s: string) => SECRETS.reduce((t, [re, to]) => t.replace(re, to), s)
+
+/** Todo texto de fuera antes de guardarse o dibujarse: sin controles y con los secretos tapados. */
+export const limpio = (s: string) => redact(sinControles(s))
 
 // ---------------------------------------------------------------- tools and gate
 
@@ -418,7 +432,7 @@ export const describeInput = (tool: string, input: unknown) => {
     typeof i.command === 'string'
       ? i.command
       : path || (typeof i.pattern === 'string' ? i.pattern : typeof i.url === 'string' ? i.url : typeof i.description === 'string' ? i.description : '')
-  return redact(what ? `${tool} → ${what}` : tool)
+  return limpio(what ? `${tool} → ${what}` : tool)
 }
 
 /** Keeps the last `max` checks, but never drops a pending ask: its settle must still find it. */
