@@ -332,6 +332,11 @@ class LineaParaTablero(unittest.TestCase):
         self.assertGreaterEqual(datos["actualizado"], antes)
         self.assertEqual(oct(self.linea.stat().st_mode & 0o777), "0o700")
 
+    def test_thinking_apagado_se_guarda_como_false(self):
+        correr(dict(self.ENTRADA, thinking={"enabled": False}), home=self.home)
+        datos = json.loads((self.linea / "abc.json").read_text(encoding="utf-8"))
+        self.assertIs(datos["thinking"], False)
+
     def test_silencio_con_tablero(self):
         self.con_tablero(True)
         datos = dict(self.ENTRADA, rate_limits={"five_hour": {"used_percentage": 10, "resets_at": 1900000000}})

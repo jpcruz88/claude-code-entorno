@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 (tablero)
+
+Arreglos de la revisión final de 1.3.0.
+
+- **Statusline:** `thinking: false` se guarda como `false` (antes salía `null` y la fila Modelo no decía `thinking off`).
+- **Sesiones:** una sesión que lleva más de 30 s sin escribir cuenta como inactiva. Una sesión cerrada con un permiso pendiente ya no sale como «Te espera» durante horas.
+- **CI:** `gh pr checks` se lanza en cuanto aparece un PR y después como mucho una vez por minuto, aunque `gh` falle o el PR no tenga comprobaciones. Antes se lanzaba cada 10 s.
+- **Teclas:** Sesiones se abre con `v`. La `s` ya era del grupo «shell» de Permisos.
+- **Cache:** la fila sale siempre que la statusline mande datos de cache, también con la cache fría y sin dato de aciertos (`○ Fría`).
+- **40 columnas:** Gasto abierto, su consejo y Sesiones abiertas caben a 40 columnas. La prueba mide ahora cada fila con sus Text anidados.
+- **Fuentes:** la vuelta de las fuentes externas nunca lanza.
+
 ## 1.3.0 (tablero)
 
 Todo el estado de la sesión en un solo sitio, sin datos repetidos. Absorbe tres mods y la statusline.
@@ -17,7 +29,7 @@ Todo el estado de la sesión en un solo sitio, sin datos repetidos. Absorbe tres
   - **Git:** cambios, commits sin subir, PR y CI.
   - **Config:** cuántos CLAUDE.md, reglas, hooks y servidores MCP carga la sesión.
 - **Cabecera:** el estado del servicio de Claude (`status.claude.com`).
-- **Secciones nuevas.** Planes, Aduana (solo mientras corre), Gasto (lo que más contexto consume, plegada, tecla `g`) y Sesiones (las demás sesiones de la máquina y cuál te espera, plegada, tecla `s`).
+- **Secciones nuevas.** Planes, Aduana (solo mientras corre), Gasto (lo que más contexto consume, plegada, tecla `g`) y Sesiones (las demás sesiones de la máquina y cuál te espera, plegada, tecla `v`).
 - **Con el panel sin colocar**, el resumen de hasta 8 filas va sobre el prompt.
 - **Reglas que se relajan:** el tablero ahora lanza `git` y `gh`, consulta la página de estado y escribe su archivo de sesión. Todo con topes de tiempo y apagable con la opción `extras`. Un fallo oculta su fila y nunca el panel.
 - Opciones nuevas: `extras` y `presupuestoDiario`.

@@ -11,7 +11,7 @@ La vista por defecto es una lista de secciones con título, sin cajas:
 - **Jev.**
 - **Aduana:** solo mientras corren las pruebas largas.
 - **Gasto:** plegada, se abre con `g`.
-- **Sesiones:** plegada, se abre con `s`.
+- **Sesiones:** plegada, se abre con `v`.
 - **Permisos.**
 
 Con el panel sin colocar, un resumen de hasta 8 filas va sobre el prompt. El mapa de cajas de versiones anteriores sigue en `/tablero layout mapa`.

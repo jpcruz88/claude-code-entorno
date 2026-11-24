@@ -62,7 +62,7 @@ tablero, statusline), y hay tres franjas sueltas encima del prompt
    - **Gasto** (plegada por omisión, tecla `g`): las 4 llamadas de herramienta
      cuyo resultado más contexto ocupó, y los archivos leídos más de una vez,
      con un consejo.
-   - **Sesiones** (plegada, tecla `s`): las demás sesiones de la máquina, con
+   - **Sesiones** (plegada, tecla `v`): las demás sesiones de la máquina, con
      su estado (`◆ Te espera`, `⠹ Trabajando`, `○ Inactiva`), su nombre y el
      tiempo. Cada tablero escribe `~/.claude/tablero/sesiones/<id>.json` con su
      estado; nadie lee transcripciones ajenas.
