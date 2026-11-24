@@ -127,7 +127,7 @@ test('el costo de ESTADO sale del costo medido, no de $0.00', async ($, on) => {
   await $.session.measure({ context: { window: 1_000_000, tokens: 1000, percent: 1 }, rateLimits: [], cost: { usd: 1.2 }, changed: ['cost'] } as never)
   const ui = await $.ui.mount(pane(66) as never)
   const s = await dibujado(ui)
-  expect(s).toMatch(/costo\s*\$1\.20/)
+  expect(s).toMatch(/[Cc]osto\s*\$1\.20/)
   await ui.unmount()
 })
 

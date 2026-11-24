@@ -228,7 +228,7 @@ test('auto con menos de 40 columnas usa la disposición apilada de siempre', asy
   await lanzar($, 'revisar auth', 'd2')
   const ui = await $.ui.mount(pane(39) as never)
   expect(await ui.find({ text: /delegar a subagentes/ })).toBeUndefined()
-  expect(await ui.find({ text: /agentes ·/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Agentes$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -241,16 +241,16 @@ test('caja JEV con tres filas y total 1,382', { options: { layout: 'diagrama' } 
   motor(on, lineas.join('\n'))
   await lanzar($, 'revisar auth', 'd2')
   const ui = await $.ui.mount(pane(100) as never)
-  expect(await ui.find({ text: /^JEV/ })).toBeDefined()
+  expect(await ui.find({ text: /^Jev ·/ })).toBeDefined()
   expect(await ui.find({ text: /^1,382$/ })).toBeDefined()
-  expect(await ui.find({ text: /qué modelo/ })).toBeDefined()
-  expect(await ui.find({ text: /qué esfuerzo/ })).toBeDefined()
-  expect(await ui.find({ text: /reintentar o parar/ })).toBeDefined()
+  expect(await ui.find({ text: /Qué modelo/ })).toBeDefined()
+  expect(await ui.find({ text: /Qué esfuerzo/ })).toBeDefined()
+  expect(await ui.find({ text: /Reintentar o parar/ })).toBeDefined()
   expect(await ui.find({ text: /^94%$/ })).toBeDefined()
   expect(await ui.find({ text: /^86%$/ })).toBeDefined()
   expect(await ui.find({ text: /^64%$/ })).toBeDefined()
-  expect(await ui.find({ text: /^lo cambió Jev$/ })).toBeDefined()
-  expect(await ui.find({ text: /^decide Claude$/ })).toBeDefined()
+  expect(await ui.find({ text: /^Lo cambió Jev$/ })).toBeDefined()
+  expect(await ui.find({ text: /^Decide Claude$/ })).toBeDefined()
   expect(await ui.find({ text: /Jev cambia lo de Claude si está ≥80% seguro/ })).toBeDefined()
   expect(await ui.find({ text: /sharp|split/ }).catch(() => undefined)).toBeUndefined()
   await ui.unmount()
@@ -319,7 +319,7 @@ const sinFila = async ($: Parameters<Parameters<typeof test>[1]>[0]) => {
   await lanzar($, 'revisar auth', 'n1')
   const ui = await $.ui.mount(pane(100) as never)
   expect(await ui.find({ text: /^semana \d+%/ })).toBeUndefined()
-  expect(await ui.find({ text: /^JEV/ })).toBeDefined()
+  expect(await ui.find({ text: /^Jev ·/ })).toBeDefined()
   await ui.unmount()
 }
 
@@ -347,12 +347,12 @@ test('con el reinicio de la semana vencido no hay fila de ritmo', { options: { l
   await sinFila($)
 })
 
-test('sin decisiones aún', { options: { layout: 'diagrama' } }, async ($, on) => {
+test('Sin decisiones aún', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(100) as never)
-  expect(await ui.find({ text: /^JEV/ })).toBeDefined()
-  expect(await ui.find({ text: /sin decisiones aún/ })).toBeDefined()
-  expect(await ui.find({ text: /qué modelo/ })).toBeUndefined()
+  expect(await ui.find({ text: /^Jev ·/ })).toBeDefined()
+  expect(await ui.find({ text: /Sin decisiones aún/ })).toBeDefined()
+  expect(await ui.find({ text: /Qué modelo/ })).toBeUndefined()
   await ui.unmount()
 })
 

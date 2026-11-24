@@ -359,7 +359,7 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
   await $.agent.spawn(spawn('general-purpose', 'Review the parser'))
   for (const surface of ['terminal', 'desktop'] as const) {
     const lanesUi = await $.ui.mount({ ...pane(64), surface })
-    expect(await lanesUi.find({ text: /4 total/ })).toBeDefined()
+    expect(await lanesUi.find({ text: /4 en total/ })).toBeDefined()
     expect(await lanesUi.find({ text: /━/ })).toBeDefined()
     expect(await lanesUi.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧]/u })).toBeDefined() // el giro del carril
     await lanesUi.unmount()
@@ -631,8 +631,8 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   await $.turn.complete({ answer: 'ok', durationMs: 10, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
   await step()
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧] en curso/u })).toBeDefined()
-  expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
+  expect(await ui.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧] En curso/u })).toBeDefined()
+  expect(await ui.find({ text: /✓ Hecho/ })).toBeUndefined()
   expect(await ui.find({ text: /ctx 10 · sal 10 · 2 pas\./ })).toBeDefined()
   await ui.unmount()
 })
