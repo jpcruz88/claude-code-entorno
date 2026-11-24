@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.11.0 (tablero)
+
+Revisión de seguridad, correctitud y rendimiento.
+
+- El texto que llega de fuera (comandos, descripciones y respuestas de subagentes, decisiones de Jev, «Al día», nombre de rama) pierde los caracteres de control antes de guardarse o dibujarse. Antes un ESC en la descripción de un subagente hacía que el motor rechazara el panel entero.
+- La redacción de secretos cubre también `mysql -p<clave>`, `curl -u usuario:clave`, IDs de clave de AWS (`AKIA…`, `ASIA…`), el valor de `aws_secret_access_key`, claves de Google (`AIza…`) y `secret_key=`. Las respuestas, descripciones y consejos de subagentes pasan por la misma redacción.
+- Las lecturas de `decisiones.jsonl`, `limites.json`, `al-dia/resultado.json` y `.git/HEAD` tienen tope de 2 MB. Un `gitdir:` relativo de un worktree se resuelve contra su carpeta. `SECURITY.md` y el README dicen qué archivos lee el mod.
+- Una consulta al asesor interrumpida ya no queda «asesorando» para siempre: se cierra al abrir la sesión y al terminar el turno del lead (todas si fue con Esc; si no, solo las de la herramienta de servidor). Un asesor reanudado vuelve a «asesorando».
+- El tope de 24 tarjetas quita primero las terminadas, nunca la de un subagente en curso.
+- La vista mini y la línea de tiempo de escritorio respetan `panels`. En el mapa, que tiene cajas fijas, solo se ocultan `architect` y `aldia`; la descripción de la opción lo dice.
+- Una tarjeta terminada o fallida sin pasos enseña su estado, no «iniciando…».
+- `/clear` limpia también el contexto mostrado y las muestras de costo por minuto.
+- `decisiones.jsonl` no se vuelve a parsear si no cambió desde la última lectura, y un dibujo tardío ya no reinicia el reloj después de cerrar el panel o la sesión.
+- Una prueba del repo (`pruebas/test_tablero_topes.py`) compara los topes del panel con `DEFAULTS_LIMITES` de `jev_limites.py`.
+- README: la fila de ritmo va en ámbar hasta +25 (no +15) y un agente detenido sale con 🛑.
+- Refactor sin cambio visible: el mapa y piezas de línea salen de `register.tsx` a `mapa-vista.tsx`, `carriles-svg.tsx` y `linea.tsx`.
+
 ## 0.10.1 (tablero)
 
 `TE ESPERA` solo sale cuando de verdad hay algo que responder.
