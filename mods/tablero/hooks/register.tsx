@@ -15,7 +15,7 @@ import { URL_SERVICIO, leerServicio } from './servicio'
 import { contarConfig, contarHooks, servidoresMcp, soloImporta } from './config-cargada'
 import { consejoGasto, topGasto } from './gasto'
 import { abiertas, estadoSesion, leerSesiones } from './sesiones'
-import { anotar, destinoHerdr, envioDe, leerConversaciones, type Envio, type Mensaje } from './conversaciones'
+import { anotar, destinoHerdr, envioDe, filasConversaciones, leerConversaciones, resumenConversaciones, type Envio, type Mensaje } from './conversaciones'
 import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
@@ -1159,7 +1159,7 @@ export const register: Register = (on, options) => {
       read($, gitBranch),
       read($, usos).then(x => normalize(DEFAULT_USOS, x)),
     ])
-    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr] = await Promise.all([
+    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr, convNow, idPropio] = await Promise.all([
       read($, planes).then(x => listOf<Plan>(x)),
       read($, aduana),
       read($, caveman),
@@ -1167,8 +1167,10 @@ export const register: Register = (on, options) => {
       read($, fuentes).then(x => normalize(DEFAULT_FUENTES, x)),
       read($, otras).then(x => listOf<RegistroSesion>(x)),
       read($, gasto),
-      read($, plegado).then(x => normalize({ gasto: true, sesiones: true }, x)),
+      read($, plegado).then(x => normalize({ gasto: true, sesiones: true, conversaciones: true }, x)),
       $.env.get('HERDR_ENV').then(x => x === '1').catch(() => false),
+      read($, conv).then(x => normalize(DEFAULT_CONV, x)),
+      $.session.id().catch(() => ''),
     ])
     const rit = ritmoSemana(jevs.limites, now / 1000)
     const filaRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)
@@ -1498,8 +1500,8 @@ export const register: Register = (on, options) => {
     }
 
     // ---- Gasto y Sesiones: plegadas en una línea; g y s las abren.
-    const plegar = (k: 'gasto' | 'sesiones') => () => update($, plegado, x => {
-      const v = normalize({ gasto: true, sesiones: true }, x)
+    const plegar = (k: 'gasto' | 'sesiones' | 'conversaciones') => () => update($, plegado, x => {
+      const v = normalize({ gasto: true, sesiones: true, conversaciones: true }, x)
       return { ...v, [k]: !v[k] }
     })
     const gastoFilas = cfg.extras.has('gasto') ? (gastoNow?.filas ?? []) : []
@@ -1587,6 +1589,59 @@ export const register: Register = (on, options) => {
                   <Text dimColor>{fmtDuration(Math.max(0, now - o.desde))}</Text>
                 </Text>
               ))}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+
+    // Conversaciones: quién le habla a quién y quién espera respuesta (conversaciones.ts).
+    const turnosFin = new Map<string, number>(otrasNow.filter(o => o.turnoFin !== undefined).map(o => [o.id, o.turnoFin!]))
+    if (convNow.turnoFin !== null && idPropio) turnosFin.set(idPropio, convNow.turnoFin)
+    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnosFin.get(id), now) : []
+    const conversacionesPanel = (w: number) => {
+      if (filasConv.length === 0) return null
+      const abierto = !plegadoNow.conversaciones
+      const ESTADO: Record<string, { t: string; c?: string; dim?: boolean }> = {
+        teToca: { t: '◆ Te pidió algo   ', c: C.amber },
+        espera: { t: '◆ Espera respuesta', c: C.amber },
+        respondio: { t: '✓ Respondió       ', c: C.gate },
+        enviado: { t: '○ Enviado         ', dim: true },
+      }
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Conversaciones</Text>
+              <Text dimColor>{`  ${shorten(abierto ? 'Quién le habla a quién' : resumenConversaciones(filasConv), Math.max(4, w - 27))}`}</Text>
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="conversaciones-plegar" plain hotkey="c" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('conversaciones')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {filasConv.slice(0, 6).map((f, i) => {
+                const est = ESTADO[f.teToca ? 'teToca' : f.estado]!
+                const quien = shorten(`${f.de} → ${f.a}`, Math.max(4, Math.min(24, w - 2 - 19 - 9)))
+                const cuando = f.estado === 'espera' ? fmtDuration(Math.max(0, now - f.desde)) : `hace ${fmtDuration(Math.max(0, now - f.desde))}`
+                const resto = w - 2 - [...quien].length - 2 - 19 - [...cuando].length - 2
+                return (
+                  <Text key={`conv-${i}`} wrap="truncate">
+                    {trozos(
+                      caben(
+                        [
+                          { t: `${quien}  ` },
+                          { t: `${est.t} `, c: est.c, dim: est.dim },
+                          { t: cuando, dim: true },
+                          resto > 6 && f.resumen ? { t: `  «${shorten(f.resumen, resto - 2)}»`, dim: true } : null,
+                        ],
+                        w - 2,
+                      ),
+                    )}
+                  </Text>
+                )
+              })}
             </Box>
           ) : null}
         </Box>
@@ -2279,6 +2334,7 @@ export const register: Register = (on, options) => {
           aduanaPanel(W),
           gastoPanel(W),
           sesionesPanel(W),
+          conversacionesPanel(W),
           !isEmpty.loops && cfg.panels.includes('loops') ? loopsPanel(W) : null,
           !isEmpty.gate && cfg.panels.includes('gate') ? gatePanel(W) : null,
           !isEmpty.receipt && cfg.panels.includes('receipt') ? receiptPanel(W) : null,
