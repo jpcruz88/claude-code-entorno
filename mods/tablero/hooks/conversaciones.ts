@@ -219,3 +219,16 @@ export const resumenConversaciones = (filas: readonly FilaConversacion[]): strin
   ].filter(Boolean)
   return partes.length > 0 ? partes.join(' · ') : `${filas.length} ${filas.length === 1 ? 'reciente' : 'recientes'}`
 }
+
+/** La sesión de Claude y el nombre de pestaña que da `herdr agent get <destino>`; null si no es JSON o no los trae. */
+export const destinoHerdr = (stdout: string): { id: string; nombre: string } | null => {
+  try {
+    const agente = (JSON.parse(stdout) as { result?: { agent?: { agent_session?: { value?: unknown }; terminal_title_stripped?: unknown } } })?.result?.agent
+    const id = agente?.agent_session?.value
+    if (typeof id !== 'string' || !id) return null
+    const nombre = typeof agente?.terminal_title_stripped === 'string' && agente.terminal_title_stripped.trim() ? agente.terminal_title_stripped.trim() : id
+    return { id, nombre }
+  } catch {
+    return null
+  }
+}

@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { anotar, envioDe, estadoMensaje, filasConversaciones, leerConversaciones, resumenConversaciones, type FilaConversacion, type Mensaje } from '../hooks/conversaciones'
+import { anotar, destinoHerdr, envioDe, estadoMensaje, filasConversaciones, leerConversaciones, resumenConversaciones, type FilaConversacion, type Mensaje } from '../hooks/conversaciones'
 
 test('SendMessage: destino por to, resumen por el mensaje', () => {
   expect(envioDe('SendMessage', { to: 'Mazda', message: '¿Subo el PR?' })).toEqual({ canal: 'claude', destino: 'Mazda', resumen: '¿Subo el PR?', espera: false, soloEspera: false })
@@ -113,4 +113,12 @@ test('anotar reemplaza por id y deja los 20 más nuevos', () => {
   expect(l).toHaveLength(20)
   expect(l.some(m => m.id === 't0')).toBe(false)
   expect(anotar(l, msg({ id: 't24', resumen: 'otro' }), AHORA).filter(m => m.id === 't24')).toEqual([msg({ id: 't24', resumen: 'otro' })])
+})
+
+test('destinoHerdr lee la sesión y el nombre de pestaña de herdr agent get', () => {
+  const salida = JSON.stringify({ result: { agent: { agent_session: { value: 'rev' }, terminal_title_stripped: ' Revisor ' } } })
+  expect(destinoHerdr(salida)).toEqual({ id: 'rev', nombre: 'Revisor' })
+  expect(destinoHerdr(JSON.stringify({ result: { agent: { agent_session: { value: 'rev' } } } }))).toEqual({ id: 'rev', nombre: 'rev' })
+  expect(destinoHerdr('no es json')).toBeNull()
+  expect(destinoHerdr('{"result":{}}')).toBeNull()
 })
