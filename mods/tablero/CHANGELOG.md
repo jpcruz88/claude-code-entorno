@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.2 (tablero)
+
+Textos que se entienden solos, sin conocer el mod.
+
+- **Cabecera:** el modo caveman se dice en palabras llanas: «Respuestas cortas» (`full`), «Respuestas breves» (`lite`) o «Respuestas mínimas» (`ultra`). En paneles de menos de 44 columnas no sale.
+- **Servicio:** el estado de status.claude.com dice de qué se trata: «Servicio de Claude: normal», «fallos parciales», «fallos graves», «caído» o «en mantenimiento».
+- **Config:** «1 archivo de instrucciones · 10 reglas · 33 hooks · 9 conexiones MCP». Un `CLAUDE.md` del proyecto que solo importa `@AGENTS.md` cuenta como un solo archivo, no como dos.
+- **Sesiones:** solo cuenta como abierta una sesión que escribió su registro en los últimos 30 s. Antes una sesión cerrada seguía como «1 más abierta» hasta 24 h. Las cerradas siguen contando para el gasto del día.
+
 ## 1.3.1 (tablero)
 
 Arreglos de la revisión final de 1.3.0.

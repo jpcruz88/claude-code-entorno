@@ -23,6 +23,6 @@ test('sin git ni red el panel se dibuja sin la fila Git ni el servicio', async (
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true } as never)
   const ui = await $.ui.mount(pane(108) as never)
   expect(await ui.find({ text: /TABLERO/ })).toBeDefined()
-  expect(await ui.find({ text: /CI corriendo|CI pasa|sin incidencias/ })).toBeUndefined()
+  expect(await ui.find({ text: /CI corriendo|CI pasa|Servicio de Claude/ })).toBeUndefined()
   await ui.unmount()
 })

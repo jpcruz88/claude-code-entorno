@@ -20,7 +20,7 @@ const banda = (bodyColumns = 100) => ({
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 12, bodyColumns, scroll: { offset: 0, bodyRows: 12 }, view: {}, rows: [] },
 })
 
-type Opciones = { herdr?: boolean; colocado?: boolean; cache?: Record<string, unknown>; ghFalla?: boolean; llamadasGh?: { n: number } }
+type Opciones = { herdr?: boolean; colocado?: boolean; cache?: Record<string, unknown>; ghFalla?: boolean; llamadasGh?: { n: number }; otraCerrada?: boolean; claudeMdSoloImporta?: boolean }
 
 const motor = (on: On, o: Opciones = {}) => {
   const reloj = mock.clock(on)
@@ -36,10 +36,18 @@ const motor = (on: On, o: Opciones = {}) => {
   on('session.id', () => ({ value: 'abc' }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('env.get', (_$, e) => ({ value: entorno[e.name] }))
+  on('fs.stat', (_$, e) => {
+    const ruta = String(e.path)
+    if (o.claudeMdSoloImporta && (ruta === '/x/claude-code-entorno/CLAUDE.md' || ruta === '/x/claude-code-entorno/AGENTS.md')) {
+      return { value: { kind: 'file', size: 10, mtimeMs: 0, isLink: false } } as never
+    }
+    throw new Error('ENOENT')
+  })
   on('fs.read', (_$, e) => {
+    if (o.claudeMdSoloImporta && String(e.path) === '/x/claude-code-entorno/CLAUDE.md') return { value: '@AGENTS.md\n' }
     if (String(e.path).endsWith('/.claude/tablero/sesiones/otra.json')) {
       return {
-        value: JSON.stringify({ id: 'otra', nombre: 'Mazda', carpeta: 'mazda', estado: 'espera', desde: reloj.now() - 120_000, costo: 2, base: 0, dia: '2026-11-24', actualizado: reloj.now() }),
+        value: JSON.stringify({ id: 'otra', nombre: 'Mazda', carpeta: 'mazda', estado: 'espera', desde: reloj.now() - 120_000, costo: 2, base: 0, dia: '2026-11-24', actualizado: o.otraCerrada ? reloj.now() - 24 * 60_000 : reloj.now() }),
       }
     }
     if (String(e.path).endsWith('/.claude/tablero/linea/abc.json')) {
@@ -63,9 +71,6 @@ const motor = (on: On, o: Opciones = {}) => {
   on('session.messages', () => ({
     value: [1, 2, 3].map(n => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `r${n}`, tool: 'Read', input: { file_path: 'src/a.ts' }, text: 'x'.repeat(4000) }] })),
   }) as never)
-  on('fs.stat', () => {
-    throw new Error('ENOENT')
-  })
   on('settings.read', () => ({ value: { hooks: {} } }) as never)
   on('tool.list', () => ({ value: [] }))
   on('process.run', (_$, e) => {
@@ -103,8 +108,8 @@ test('la cabecera dice el estado y Caveman, sin el modelo', async ($, on) => {
   const reloj = motor(on, { herdr: true })
   await preparar($, reloj)
   const ui = await $.ui.mount(pane(108) as never)
-  expect(await ui.find({ type: 'Text', text: /^TABLERO · ○ En espera · Caveman full$/ })).toBeDefined()
-  expect(await ui.find({ text: /Claude sin incidencias/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^TABLERO · ○ En espera · Respuestas cortas$/ })).toBeDefined()
+  expect(await ui.find({ text: /✓ Servicio de Claude: normal/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -152,6 +157,23 @@ test('Gasto y Sesiones salen plegadas en una línea', async ($, on) => {
   const ui = await $.ui.mount(pane(108) as never)
   expect(await ui.find({ text: /^Gasto +Lo que más gasta: Read src\/a\.ts, leído 3 veces/ })).toBeDefined()
   expect(await ui.find({ text: /^Sesiones +1 más abierta · ◆ Mazda te espera/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Config: un CLAUDE.md que solo importa AGENTS.md cuenta como un solo archivo de instrucciones', async ($, on) => {
+  const reloj = motor(on, { herdr: true, claudeMdSoloImporta: true })
+  await preparar($, reloj)
+  const ui = await $.ui.mount(pane(108) as never)
+  expect(await ui.find({ text: /^Config +1 archivo de instrucciones · / })).toBeDefined()
+  await ui.unmount()
+})
+
+test('una sesión que se cerró hace rato no cuenta como abierta: sin otras vivas no sale la fila Sesiones', async ($, on) => {
+  const reloj = motor(on, { herdr: true, otraCerrada: true })
+  await preparar($, reloj)
+  const ui = await $.ui.mount(pane(108) as never)
+  expect(await ui.find({ text: /^Sesiones/ })).toBeUndefined()
+  expect((await textos(ui)).join('\n')).not.toContain('Mazda')
   await ui.unmount()
 })
 

@@ -3,11 +3,11 @@
 export const URL_SERVICIO = 'https://status.claude.com/api/v2/status.json'
 
 const TEXTOS: Record<string, { ok: boolean; texto: string }> = {
-  none: { ok: true, texto: 'Claude sin incidencias' },
-  minor: { ok: false, texto: 'Claude con fallos menores' },
-  major: { ok: false, texto: 'Claude con fallos graves' },
-  critical: { ok: false, texto: 'Claude caído' },
-  maintenance: { ok: false, texto: 'Claude en mantenimiento' },
+  none: { ok: true, texto: 'Servicio de Claude: normal' },
+  minor: { ok: false, texto: 'Servicio de Claude: fallos parciales' },
+  major: { ok: false, texto: 'Servicio de Claude: fallos graves' },
+  critical: { ok: false, texto: 'Servicio de Claude: caído' },
+  maintenance: { ok: false, texto: 'Servicio de Claude: en mantenimiento' },
 }
 
 /** La respuesta de la página de estado; null si no es 2xx, no es JSON o el indicador es desconocido. */

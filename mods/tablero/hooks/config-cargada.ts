@@ -2,9 +2,20 @@
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
 
-/** La fila Config: «2 CLAUDE.md · 10 reglas · 33 hooks · 9 MCP». */
+/** La fila Config: «1 archivo de instrucciones · 10 reglas · 33 hooks · 9 conexiones MCP». */
 export const contarConfig = (x: { claudeMd: number; reglas: number; hooks: number; mcp: number }): string =>
-  [`${x.claudeMd} CLAUDE.md`, plural(x.reglas, 'regla', 'reglas'), plural(x.hooks, 'hook', 'hooks'), `${x.mcp} MCP`].join(' · ')
+  [
+    plural(x.claudeMd, 'archivo de instrucciones', 'archivos de instrucciones'),
+    plural(x.reglas, 'regla', 'reglas'),
+    plural(x.hooks, 'hook', 'hooks'),
+    plural(x.mcp, 'conexión MCP', 'conexiones MCP'),
+  ].join(' · ')
+
+/** Un CLAUDE.md que solo importa otros archivos (`@AGENTS.md`) no aporta instrucciones propias. */
+export const soloImporta = (texto: string): boolean => {
+  const lineas = texto.split('\n').map(l => l.trim()).filter(Boolean)
+  return lineas.length > 0 && lineas.every(l => l.startsWith('@'))
+}
 
 /** Los comandos de hook de un `hooks` de settings.json: por evento, por grupo, cada entrada de su `hooks`. */
 export const contarHooks = (hooks: unknown): number => {
