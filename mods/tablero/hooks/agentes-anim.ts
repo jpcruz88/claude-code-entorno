@@ -42,19 +42,20 @@ export const barraIndeterminada = (ahora: number, ancho: number): string => {
   return '░'.repeat(pos) + '█'.repeat(bloque) + '░'.repeat(ancho - bloque - pos)
 }
 
-// Indicador por estado (la captura aprobada): una luna que gira mientras el agente trabaja, y un emoji fijo al terminar.
-// Cada emoji ocupa dos celdas; todos están en el mismo ancho para que las filas no se desalineen.
-const LUNAS = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'] as const
-const FIJOS_EMOJI: Record<string, string> = { done: '✅', failed: '❌', stopped: '🛑' }
+// Indicador por estado: un giro de un carácter mientras el agente trabaja (un punto quieto si la animación está apagada);
+// ✓ terminado, ✗ fallido, ○ detenido o pendiente. Sin emoji: ocupan dos celdas y desalinean la columna.
+const GIRO = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧'] as const
+const FIJOS_SIMBOLO: Record<string, string> = { done: '✓', failed: '✗', stopped: '○' }
 
 /** Cuántos agentes caben en la lista antes de resumir el resto como «anteriores». */
 export const CARRILES_VISIBLES = 7
 
-/** El emoji de un agente en el momento `ahora` (ms). `desfase` separa a los agentes que giran a la vez. */
+/** El símbolo de un agente en el momento `ahora` (ms). `desfase` separa a los agentes que giran a la vez. */
 export const emojiDeEstado = (ahora: number, estado: string, desfase = 0, animado = true): string => {
   if (estado === 'running') {
-    const paso = animado ? Math.floor(ahora / PASO_AGENTE_MS) + desfase : 0
-    return LUNAS[((paso % LUNAS.length) + LUNAS.length) % LUNAS.length]!
+    if (!animado) return '●'
+    const paso = Math.floor(ahora / PASO_AGENTE_MS) + desfase
+    return GIRO[((paso % GIRO.length) + GIRO.length) % GIRO.length]!
   }
-  return FIJOS_EMOJI[estado] ?? '⏳'
+  return FIJOS_SIMBOLO[estado] ?? '○'
 }

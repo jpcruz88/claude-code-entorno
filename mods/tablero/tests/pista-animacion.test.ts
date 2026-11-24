@@ -45,7 +45,7 @@ const texto = (n: unknown): string => {
 }
 
 // La luna del agente: el nodo más pequeño que contiene una luna (el emoji de estado de su fila).
-const LUNA = /[🌑🌒🌓🌔🌕🌖🌗🌘]/u
+const LUNA = /[⠋⠙⠹⠸⠼⠴⠦⠧]/u
 const lunaDe = (arbol: unknown): string | undefined => {
   const hijos = (n: unknown): unknown[] =>
     n && typeof n === 'object' && Array.isArray((n as { children?: unknown }).children) ? (n as { children: unknown[] }).children : []

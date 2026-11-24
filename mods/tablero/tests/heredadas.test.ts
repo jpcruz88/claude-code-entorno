@@ -312,10 +312,10 @@ test('/clear starts the pane fresh', async ($, on) => {
   await ui.unmount()
 })
 
-test('the neon palette is on by default, with no config', { options: { layout: 'diagrama' } }, async ($, on) => {
+test('the theme palette is on by default, with no config', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('claude')
   await ui.unmount()
 })
 
@@ -361,7 +361,7 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
     const lanesUi = await $.ui.mount({ ...pane(64), surface })
     expect(await lanesUi.find({ text: /4 total/ })).toBeDefined()
     expect(await lanesUi.find({ text: /━/ })).toBeDefined()
-    expect(await lanesUi.find({ text: /[🌑🌒🌓🌔🌕🌖🌗🌘]/u })).toBeDefined() // la luna del carril
+    expect(await lanesUi.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧]/u })).toBeDefined() // el giro del carril
     await lanesUi.unmount()
   }
 })
@@ -498,8 +498,8 @@ test('each rate-limit window shows the time to its reset where the main panel ha
   })
   for (const cols of [64, 120]) {
     const ui = await $.ui.mount({ ...pane(cols), surface: 'terminal' })
-    expect(await ui.find({ text: /19% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
-    expect(await ui.find({ text: /3% ↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
+    expect(await ui.find({ text: /19% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined() // el ritmo va entre el % y el reinicio
+    expect(await ui.find({ text: /3% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
     await ui.unmount()
   }
   const narrow = await $.ui.mount({ ...pane(40), surface: 'terminal' })
@@ -631,8 +631,8 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   await $.turn.complete({ answer: 'ok', durationMs: 10, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
   await step()
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /[🌑🌒🌓🌔🌕🌖🌗🌘] en curso/u })).toBeDefined()
-  expect(await ui.find({ text: /✅ listo/ })).toBeUndefined()
+  expect(await ui.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧] en curso/u })).toBeDefined()
+  expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
   expect(await ui.find({ text: /ctx 10 · sal 10 · 2 pas\./ })).toBeDefined()
   await ui.unmount()
 })
