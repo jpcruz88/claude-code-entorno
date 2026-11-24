@@ -115,6 +115,8 @@ export const datosDelMapa = (x: EntradaMapa): DatosMapa => {
     alDia: panels.includes('aldia') ? leerAlDia(jevs.alDia ?? null, now) : null,
     asesorActivo,
     barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
+    // Lo que `panels` oculta: jev (JEV y su registro), agents (tarjetas y bus) y gate (permisos). `main` siempre.
+    ocultas: (['jev', 'agents', 'gate'] as const).filter(p => !panels.includes(p)),
   }
 }
 
