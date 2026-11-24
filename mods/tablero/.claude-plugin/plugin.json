@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
@@ -39,7 +39,7 @@
     },
     "panels": {
       "title": "Paneles",
-      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, aldia (la caja AL DÍA del mapa, con lo que se actualizó), receipt (último turno, fuera por defecto). Omite uno para ocultarlo.",
+      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, aldia (la caja AL DÍA del mapa, con lo que se actualizó), receipt (último turno, fuera por defecto). Omite uno para ocultarlo. El mapa tiene cajas fijas: ahí solo se ocultan architect y aldia; el resto se oculta en las demás distribuciones.",
       "type": "string",
       "default": "main,jev,architect,gate,agents,loops,aldia"
     },

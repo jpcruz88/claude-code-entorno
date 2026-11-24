@@ -1,5 +1,6 @@
 // Las decisiones de Jev que dejan los hooks en decisiones.jsonl, como datos para pintar el tablero:
 // lectura por sesión, resumen, línea de log y marca de tarjeta. Sin red ni disco: recibe el texto.
+import { TOPE_LECTURA, limpio } from './core'
 
 export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento' | 'tope'
 /** Los tipos con fila de confianza: el tope no decide nada, solo limita lo que ya se decidió. */
@@ -81,18 +82,25 @@ const aDecision = (linea: string, sessionId: string): DecisionJev | null => {
     sharp: o.sharp === true,
     claude: typeof o.claude === 'string' ? o.claude : null,
     aplicada: o.aplicada === true,
-    descripcion: typeof o.descripcion === 'string' ? o.descripcion : '',
-    motivo: typeof o.motivo === 'string' ? o.motivo : '',
+    descripcion: typeof o.descripcion === 'string' ? limpio(o.descripcion) : '',
+    motivo: typeof o.motivo === 'string' ? limpio(o.motivo) : '',
   }
 }
 
+// La última lectura: el archivo cambia poco entre un turno y otro, así que releer el mismo texto de la misma sesión
+// devuelve la misma lista, sin parsear de nuevo. La sesión va en la clave: una sesión nueva siempre se lee.
+let ultimaLectura: { sesion: string; texto: string; ds: DecisionJev[] } | null = null
+
 /** Las decisiones de una sesión, en el orden del archivo; las líneas rotas o ajenas se ignoran. */
 export const leerDecisiones = (texto: string, sessionId: string): DecisionJev[] => {
+  if (texto.length > TOPE_LECTURA) return []
+  if (ultimaLectura?.sesion === sessionId && ultimaLectura.texto === texto) return ultimaLectura.ds
   const ds: DecisionJev[] = []
   for (const linea of texto.split('\n')) {
     const d = aDecision(linea, sessionId)
     if (d) ds.push(d)
   }
+  ultimaLectura = { sesion: sessionId, texto, ds }
   return ds
 }
 
@@ -214,12 +222,15 @@ const queDecidio = (d: DecisionJev): string => {
 }
 
 /** Las tres últimas decisiones con confianza (sin topes), la más nueva primero, como filas de la caja JEV del mapa. */
-export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] =>
-  ds
-    .filter((d): d is DecisionJev & { confianza: number } => d.tipo !== 'tope' && d.confianza !== null)
-    .slice(-3)
-    .reverse()
-    .map(d => ({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza }))
+export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] => {
+  // Desde el final, hasta tener tres: el registro entero no hace falta.
+  const out: { hora: string; txt: string; conf: number }[] = []
+  for (let i = ds.length - 1; i >= 0 && out.length < 3; i--) {
+    const d = ds[i]
+    if (d && d.tipo !== 'tope' && d.confianza !== null) out.push({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza })
+  }
+  return out
+}
 
 /** La línea del REGISTRO del mapa para una decisión: `{ hora: '21:52', rol: 'jev', txt: 'modelo → sonnet (0.91)' }`. */
 export const lineaRegistroJev = (d: DecisionJev): { hora: string; rol: 'jev'; txt: string } => ({
@@ -256,6 +267,7 @@ const ventanaDe = (v: unknown): VentanaLimite | undefined =>
 
 /** limites.json como datos; null si el texto está roto (por ejemplo a medio escribir) o no trae `actualizado`. */
 export const leerLimites = (texto: string): LimitesJev | null => {
+  if (texto.length > TOPE_LECTURA) return null
   let o: unknown
   try {
     o = JSON.parse(texto)

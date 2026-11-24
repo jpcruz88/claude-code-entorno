@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, recientesJev, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
 import type { DecisionJev } from '../hooks/jev-modelo'
 
 const SESION = 'sesion-a'
@@ -389,4 +389,41 @@ test('el color de la fila de ritmo sale del mismo tope que la línea «tope ahor
 test('sin dato de uso el tope no se pinta en verde', () => {
   expect(ta(null).nivel).not.toBe('verde')
   expect(ta({ actualizado: AHORA }).nivel).not.toBe('verde')
+})
+
+test('descripción y motivo de Jev salen sin controles ni secretos', () => {
+  const texto = linea({ descripcion: 'buscar\x1b[2J curl -u admin:hunter2', motivo: 'tope\x07 semana' })
+  const d = leerDecisiones(texto, SESION)[0]!
+  expect(d.descripcion).toBe('buscar[2J curl -u admin:•••')
+  expect(d.motivo).toBe('tope semana')
+})
+
+test('un decisiones.jsonl mayor que el tope se trata como sin dato', () => {
+  const grande = [linea({ opcion: 'sonnet' }), linea({ descripcion: 'x'.repeat(2_000_000) })].join('\n')
+  expect(leerDecisiones(grande, SESION).length).toBe(0)
+})
+
+test('un limites.json mayor que el tope da null', () => {
+  const grande = JSON.stringify({ actualizado: 1, relleno: 'a'.repeat(2_000_000) })
+  expect(leerLimites(grande) === null).toBe(true)
+})
+
+test('leerDecisiones con el mismo texto y la misma sesión devuelve lo ya leído, sin parsear de nuevo', () => {
+  const texto = [linea({ opcion: 'sonnet' }), linea({ opcion: 'opus' })].join('\n')
+  expect(leerDecisiones(texto, SESION)).toBe(leerDecisiones(texto, SESION))
+  // Otra sesión o un texto distinto sí se lee de nuevo.
+  expect(leerDecisiones(texto, 'otra')).not.toBe(leerDecisiones(texto, SESION))
+  expect(leerDecisiones(texto + '\n' + linea({ opcion: 'haiku' }), SESION).length).toBe(3)
+})
+
+test('recientesJev solo mira el final del registro: no lee las decisiones viejas', () => {
+  const ds: DecisionJev[] = Array.from({ length: 5000 }, () => decision())
+  for (let i = 0; i < ds.length - 10; i++) {
+    Object.defineProperty(ds, i, {
+      get: () => {
+        throw new Error('leyó una decisión vieja')
+      },
+    })
+  }
+  expect(recientesJev(ds).length).toBe(3)
 })
