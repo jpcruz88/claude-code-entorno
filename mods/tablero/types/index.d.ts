@@ -149,6 +149,21 @@ export type Plan = {
   endedAt: number | null
 }
 
+/** Lo que escribe herramientas/estado_en_curso.py de Aduana (antes el mod aduana-panel). */
+export type CorridaViva = { lado: string; ronda: number; tarea: string; modelo: string; seg: number }
+export type EstadoAduana = {
+  titulo: string
+  hechas: number
+  total: number
+  invalidas: number
+  costo_usd: number
+  fase: number
+  fases: number
+  terminado: boolean
+  en_curso: CorridaViva[]
+  actualizado: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -171,6 +186,10 @@ declare module 'claude-code' {
       jev: JevEstado
       /** Los planes abiertos y los terminados hace menos de 30 s (herramienta plan_progress). */
       planes: Plan[]
+      /** Las pruebas largas de Aduana en curso; null sin archivo o con uno ilegible. */
+      aduana: EstadoAduana | null
+      /** El modo caveman que dicen los prompts de la sesión. */
+      caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
         title: string

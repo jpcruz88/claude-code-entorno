@@ -3,6 +3,8 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
 import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Plan, Receipt, Roster, Turn, Usage, View } from '../types'
 import { CAIDA_MS, aplicar, resumen as resumenPlan } from './planes'
+import { siguienteModo, type Modo } from './caveman'
+import type { EstadoAduana } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -126,6 +128,14 @@ const PLAN_TOOL = 'mcp__tablero__plan_progress'
 const planes = atom({ plugin: 'tablero', key: 'planes' } as const, [] as Plan[])
 const REGLAS_PLANES = `# Barras de progreso
 Las tareas de más de unos 3 pasos llevan una barra: créala una vez con ${PLAN_TOOL} (id, title y stages: 2 a 7 etapas con steps {title}; o steps como lista plana). Los títulos de 4 palabras como mucho, en el idioma del usuario; el primer paso abierto queda activo. Avanza con {id, next:true} cuando termina el paso activo, o con {id, done:[...], active:"..."}. Si un paso falla: {id, failed:"...", note}. Antes de pedir una decisión al usuario: {id, state:"needs_input", note}. No describas las barras al usuario.`
+// Aduana (antes aduana-panel): su escritor deja este archivo cada pocos segundos mientras corren pruebas largas.
+const ARCHIVO_ADUANA = '.cache/detector-humo/en-curso.json'
+const aduana = atom({ plugin: 'tablero', key: 'aduana' } as const, null as EstadoAduana | null)
+let relojAduana: { cancel: () => void } | null = null
+let aduanaAvisada = 0
+// El modo caveman (antes caveman-badge): lo cambian «/caveman lite|full|ultra», «stop caveman» y «modo normal».
+const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as Modo)
+
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
 const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
@@ -427,6 +437,21 @@ export const register: Register = (on, options) => {
         },
       },
     }).catch(() => undefined)
+    if (relojAduana === null) {
+      relojAduana = $.clock.every(5000, async () => {
+        try {
+          const casa = await $.env.get('HOME')
+          const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
+          await update($, aduana, () => leido)
+          if (leido.terminado && leido.actualizado !== aduanaAvisada) {
+            aduanaAvisada = leido.actualizado
+            $.ui.toast(`Aduana: pruebas terminadas, ${leido.hechas}/${leido.total}`)
+          }
+        } catch {
+          await update($, aduana, () => null)
+        }
+      })
+    }
     // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
     // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
     const inicio = await $.clock.now()
@@ -471,6 +496,8 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     detenerReloj()
+    relojAduana?.cancel()
+    relojAduana = null
     if (e.reason === 'clear') {
       await resetAll($)
     }
@@ -503,6 +530,7 @@ export const register: Register = (on, options) => {
   // prompt de la sesión sí cuenta como pedido de la persona y se coloca a cualquier ancho.
   let openedOnPrompt = false
   on('prompt.submit', async ($, e, next) => {
+    await update($, caveman, m => siguienteModo(m === 'lite' || m === 'ultra' || m === 'normal' ? m : 'full', e.text))
     // A branch switched since the last prompt shows now; a failed read leaves the last one.
     void refrescarRama($).catch(() => undefined)
     if (cfg.openOnStart && !openedOnPrompt) {
