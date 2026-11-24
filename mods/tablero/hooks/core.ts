@@ -232,7 +232,6 @@ export const SVG_COLORS = { running: '#3b82f6', done: '#16a34a', failed: '#dc262
 
 // ---------------------------------------------------------------- formatting
 
-/** `claude-opus-5-5` → `Opus 5.5`; anything else is shown as given. */
 /**
  * A model id as people say it, from any provider's spelling: `claude-opus-5-5[1m]` → `Opus 5.5 1M`,
  * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` → `Sonnet 4.5`, `claude-3-5-haiku-20241022` →
@@ -435,7 +434,10 @@ export const describeInput = (tool: string, input: unknown) => {
   return limpio(what ? `${tool} → ${what}` : tool)
 }
 
-/** Keeps the last `max` checks, but never drops a pending ask: its settle must still find it. */
+/**
+ * Guarda unos `max` controles: primero se quitan los más viejos ya resueltos. Un permiso pendiente nunca se quita,
+ * porque su resolución tiene que encontrarlo; por eso la lista puede pasar de `max`, hasta `max * 2`.
+ */
 export const trimRecent = (list: Check[], max: number): Check[] => {
   let extra = list.length - max
   if (extra <= 0) return list
@@ -522,8 +524,21 @@ export const afterCall = (t: Turn, c: { inSubagent: boolean; hasFailed: boolean;
 export const momentOf = (t: Pick<Turn, 'edits' | 'errorStreak'>): Moment =>
   t.errorStreak >= 2 ? 'error repeats' : t.edits === 0 ? 'before a plan' : 'before done'
 
+/** Abre una consulta. Si el id ya está, es el mismo asesor reanudado: su consulta se reabre con su hora de inicio. */
 export const startConsult = (a: Architect, c: { id: string; at: number; moment: Moment; via: string }): Architect =>
-  a.consults.some(x => x.id === c.id) ? a : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+  a.consults.some(x => x.id === c.id)
+    ? { ...a, consults: a.consults.map(x => (x.id === c.id ? { ...x, endAt: null } : x)) }
+    : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+
+/**
+ * Cierra las consultas abiertas que ya no tendrán respuesta. Al terminar el turno del lead se cierran las de la
+ * herramienta de servidor, pero no la de un subagente asesor (su id está en `ids`), que puede seguir en segundo plano
+ * y se cierra al terminar él. Con `todas` (al abrir la sesión) se cierran también esas.
+ */
+export const cerrarConsultas = (a: Architect, at: number, todas = false): Architect => ({
+  ...a,
+  consults: a.consults.map(c => (c.endAt === null && (todas || !a.ids.includes(c.id)) ? { ...c, endAt: at } : c)),
+})
 
 /** Ends the open consult (the latest without an end), or the one named. */
 export const endConsult = (a: Architect, at: number, advice: string | null, id?: string): Architect => {
@@ -591,10 +606,20 @@ export const resumeCard = (c: AgentCard): AgentCard => ({ ...c, status: 'running
  * A spawned card joins the list. An id already there is that agent resumed: its card runs again
  * where it stands, with its tallies and the new task and model, so no two cards share keys.
  */
-export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] =>
-  cards.some(c => c.id === card.id)
-    ? cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
-    : [...cards, card].slice(-24)
+export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] => {
+  if (cards.some(c => c.id === card.id))
+    return cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
+  // Pasado 24, se quitan primero las tarjetas terminadas más viejas. Una en curso se queda: si las 24 están en curso, la lista pasa de 24.
+  const out = [...cards, card]
+  let sobran = out.length - 24
+  return out.filter(c => {
+    if (sobran > 0 && c.status !== 'running') {
+      sobran -= 1
+      return false
+    }
+    return true
+  })
+}
 
 export const stepLoop = (loops: Loop[], id: string, at: number): Loop[] => {
   const found = loops.find(l => l.id === id)
