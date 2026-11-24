@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Receipt, Roster, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Plan, Receipt, Roster, Turn, Usage, View } from '../types'
+import { CAIDA_MS, aplicar, resumen as resumenPlan } from './planes'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -120,6 +121,11 @@ const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
+// Los planes de trabajo: la herramienta plan_progress (antes el mod barra-plan) los crea y los mueve.
+const PLAN_TOOL = 'mcp__tablero__plan_progress'
+const planes = atom({ plugin: 'tablero', key: 'planes' } as const, [] as Plan[])
+const REGLAS_PLANES = `# Barras de progreso
+Las tareas de más de unos 3 pasos llevan una barra: créala una vez con ${PLAN_TOOL} (id, title y stages: 2 a 7 etapas con steps {title}; o steps como lista plana). Los títulos de 4 palabras como mucho, en el idioma del usuario; el primer paso abierto queda activo. Avanza con {id, next:true} cuando termina el paso activo, o con {id, done:[...], active:"..."}. Si un paso falla: {id, failed:"...", note}. Antes de pedir una decisión al usuario: {id, state:"needs_input", note}. No describas las barras al usuario.`
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
 const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
@@ -399,6 +405,28 @@ export const register: Register = (on, options) => {
       argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama|mapa]',
     })
     await migrate($)
+    // Un host sin herramientas de plugin (o que la rechaza) no impide que el panel arranque.
+    await $.tool.register({
+      name: 'plan_progress',
+      description: 'Plan con barra de progreso en el tablero, uno por id. Créalo con title y stages; avanza con next, done, active, failed o state.',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          kind: { enum: ['plan', 'todo'] },
+          stages: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, steps: { type: 'array' } } } },
+          steps: { type: 'array' },
+          next: { type: 'boolean' },
+          done: { type: 'array', items: { type: 'string' } },
+          active: { type: 'string' },
+          failed: { type: 'string' },
+          note: { type: 'string' },
+          state: { enum: ['running', 'needs_input', 'error', 'done'] },
+        },
+      },
+    }).catch(() => undefined)
     // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
     // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
     const inicio = await $.clock.now()
@@ -611,6 +639,24 @@ export const register: Register = (on, options) => {
       else await update($, gate, g => recordCheck(normalizeGate(g), check))
     }
     return verdict
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    return { sections: [...result.sections, { id: 'tablero:planes', text: REGLAS_PLANES, scope: 'session' as const }] }
+  })
+
+  on('tool.call', { tool: PLAN_TOOL }, async ($, e) => {
+    const raw = e as unknown as Record<string, unknown>
+    const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+    if (!id) return { result: `${PLAN_TOOL}: el id es obligatorio, por ejemplo "arreglar-login".` }
+    const ahora = await $.clock.now()
+    const hecho = aplicar((await read($, planes)).find(p => p.id === id), raw, ahora)
+    if (typeof hecho === 'string') return { result: hecho }
+    await update($, planes, lista =>
+      [...listOf<Plan>(lista).filter(p => p.id !== id && (p.estado !== 'done' || ahora - (p.endedAt ?? ahora) < CAIDA_MS)), hecho],
+    )
+    return { result: resumenPlan(hecho) }
   })
 
   on('tool.call', async ($, e, next) => {
