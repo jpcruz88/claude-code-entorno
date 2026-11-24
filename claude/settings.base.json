@@ -1,6 +1,12 @@
 {
   "model": "opus",
   "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "medium"
+    },
+    "claude-sonnet-5-5": {
+      "effortLevel": "medium"
+    },
     "claude-haiku-5-5": {
       "effortLevel": "medium"
     }
@@ -11,72 +17,6 @@
     "padding": 0
   },
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/cbm-code-discovery-gate",
-            "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|PowerShell",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/guard-kill.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Agent|Task|Workflow",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/guard-subagentes.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/guard-fable.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PostToolUseFailure": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/jev-reintento.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ~/.claude/hooks/jev-reintento.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "matcher": "startup",
@@ -126,26 +66,70 @@
             "type": "command",
             "command": "python3 ~/.claude/hooks/memoria-maestra.py inicio",
             "timeout": 20
-          }
-        ]
-      },
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
+          },
           {
             "type": "command",
             "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/hilo.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/cbm-code-discovery-gate",
             "timeout": 5
           }
         ]
       },
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/hilo.py",
-            "timeout": 15
+            "command": "~/.claude/hooks/guard-kill.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/guard-subagentes.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task|Workflow|Bash|PowerShell|Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/guard-fable.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/jev-reintento.py",
+            "timeout": 5
           }
         ]
       }
@@ -167,6 +151,18 @@
           {
             "type": "command",
             "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/jev-reintento.py",
             "timeout": 5
           }
         ]
