@@ -39,7 +39,7 @@
     },
     "panels": {
       "title": "Paneles",
-      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, aldia (la caja AL DÍA del mapa, con lo que se actualizó), receipt (último turno, fuera por defecto). Omite uno para ocultarlo. El mapa tiene cajas fijas: ahí solo se ocultan architect y aldia; el resto se oculta en las demás distribuciones.",
+      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, aldia (la caja AL DÍA del mapa, con lo que se actualizó), receipt (último turno, fuera por defecto). Omite uno para ocultarlo. En el mapa, main (la cabecera, la franja, ESTADO y el LEAD) siempre se ve; se ocultan architect (la caja ASESOR), aldia (AL DÍA), jev (la caja JEV y su REGISTRO), agents (las tarjetas de agentes y su bus: el mapa pasa a la variante compacta) y gate (los datos de permisos de ESTADO). loops y receipt no tienen caja en el mapa. En las demás distribuciones, cada panel oculto se quita de la columna.",
       "type": "string",
       "default": "main,jev,architect,gate,agents,loops,aldia"
     },

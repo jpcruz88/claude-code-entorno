@@ -84,6 +84,8 @@ export type DatosMapa = {
   barra: { hechos: number; total: number }
   /** Lo que la revisión «Al día» actualizó; null (o ausente) y la caja no se dibuja. */
   alDia: AlDia | null
+  /** Paneles de `panels` que el mapa oculta: jev (JEV y su registro), agents (tarjetas y bus) y gate (permisos). Sin él, se dibuja todo. */
+  ocultas?: ('jev' | 'agents' | 'gate')[]
 }
 
 /** Un tramo de una fila: texto seguido del color que comparten sus celdas. */
@@ -378,8 +380,13 @@ export const componerAlDia = (a: AlDia, ancho: number): Celda[][] => {
   return g
 }
 
+/** Si `panels` oculta esta caja: jev (JEV y su registro), agents (tarjetas y bus) o gate (datos de permisos). */
+const oculta = (d: DatosMapa, p: 'jev' | 'agents' | 'gate'): boolean => d.ocultas?.includes(p) ?? false
+
 const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => {
-  const N = d.tarjetas.length
+  // Sin agentes en `panels`, el mapa no enseña tarjetas: N es 0 y entra la variante compacta.
+  const agentesOcultos = oculta(d, 'agents')
+  const N = agentesOcultos ? 0 : d.tarjetas.length
   const compacto = N <= 1
   const alto = compacto ? MAPA_ALTO_COMPACTO : MAPA_ALTO
   const g = crearRejilla(alto)
@@ -422,10 +429,12 @@ const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => 
       put(g, x0 + 9, 7, l.reinicio, 'box')
     }
   })
-  put(g, 78, 6, 'permisos', 'box')
-  put(g, 87, 6, `${e.permisos.pendientes} pend.`, e.permisos.pendientes > 0 ? 'amb' : 'fg')
-  put(g, 78, 7, `${e.permisos.denegados} den.`, e.permisos.denegados > 0 ? 'amb' : 'fg')
-  put(g, 85, 7, recortar(e.permisos.modo, 13), 'box')
+  if (!oculta(d, 'gate')) {
+    put(g, 78, 6, 'permisos', 'box')
+    put(g, 87, 6, `${e.permisos.pendientes} pend.`, e.permisos.pendientes > 0 ? 'amb' : 'fg')
+    put(g, 78, 7, `${e.permisos.denegados} den.`, e.permisos.denegados > 0 ? 'amb' : 'fg')
+    put(g, 85, 7, recortar(e.permisos.modo, 13), 'box')
+  }
   put(g, 2, 8, 'bucles', 'box')
   put(g, 9, 8, String(e.bucles), 'fg')
   put(g, 14, 8, 'racha errores', 'box')
@@ -472,33 +481,37 @@ const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => 
   put(g, 100 - 3 - menos.length, 16, `−${menos}`, 'amb')
   par(g, 51, 17, 49, 'respuestas', String(d.lead.respuestas))
 
-  // Conector lead → JEV
-  vl(g, 75, 19, 20, '│', 'mut')
-  put(g, 75, 21, '▾', 'mut')
-  paq(g, linea(75, 19, 75, 21), t, 7, 0.3, 'jev')
+  // Con JEV oculta no hay caja de la que colgar el conector: el lead baja directo al bus (ver más abajo).
+  const jevOculto = oculta(d, 'jev')
+  if (!jevOculto) {
+    // Conector lead → JEV
+    vl(g, 75, 19, 20, '│', 'mut')
+    put(g, 75, 21, '▾', 'mut')
+    paq(g, linea(75, 19, 75, 21), t, 7, 0.3, 'jev')
 
-  // JEV (derecha, bajo el lead): el umbral, las tres últimas decisiones y el tope.
-  caja(g, 51, 22, 49, 7, JEV_TITULO, 'jev')
-  par(g, 51, 23, 49, 'umbral', d.jev.umbral.toFixed(2))
-  d.jev.recientes.slice(0, 3).forEach((r, i) => {
-    put(g, 53, 24 + i, r.hora, 'box')
-    put(g, 59, 24 + i, recortar(r.txt, 16), 'fg')
-    barraConfianza(g, 76, 24 + i, r.conf)
-    put(g, 87, 24 + i, r.conf.toFixed(2), 'box')
-  })
-  if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 45), d.jev.topeTinta ?? 'amb')
+    // JEV (derecha, bajo el lead): el umbral, las tres últimas decisiones y el tope.
+    caja(g, 51, 22, 49, 7, JEV_TITULO, 'jev')
+    par(g, 51, 23, 49, 'umbral', d.jev.umbral.toFixed(2))
+    d.jev.recientes.slice(0, 3).forEach((r, i) => {
+      put(g, 53, 24 + i, r.hora, 'box')
+      put(g, 59, 24 + i, recortar(r.txt, 16), 'fg')
+      barraConfianza(g, 76, 24 + i, r.conf)
+      put(g, 87, 24 + i, r.conf.toFixed(2), 'box')
+    })
+    if (d.jev.tope) put(g, 53, 27, recortar(d.jev.tope, 45), d.jev.topeTinta ?? 'amb')
 
-  // Registro (izquierda, bajo el asesor): cinco filas, la más nueva arriba.
-  caja(g, 0, yReg, 44, 7, REGISTRO_TITULO, 'mut')
-  d.registro.slice(0, 5).forEach((r, i) => {
-    put(g, 2, yReg + 1 + i, r.hora, 'box')
-    put(g, 8, yReg + 1 + i, r.rol, TINTA_ROL[r.rol])
-    put(g, 15, yReg + 1 + i, recortar(r.txt, 27), 'box')
-  })
+    // Registro (izquierda, bajo el asesor): cinco filas, la más nueva arriba.
+    caja(g, 0, yReg, 44, 7, REGISTRO_TITULO, 'mut')
+    d.registro.slice(0, 5).forEach((r, i) => {
+      put(g, 2, yReg + 1 + i, r.hora, 'box')
+      put(g, 8, yReg + 1 + i, r.rol, TINTA_ROL[r.rol])
+      put(g, 15, yReg + 1 + i, recortar(r.txt, 27), 'box')
+    })
+  }
 
   // Pie: a la izquierda las tareas y los subagentes; a la derecha, la versión y el autor.
   const yPie = alto - 1
-  put(g, 0, yPie, recortar(textoPie(d), 60), 'box')
+  if (!agentesOcultos) put(g, 0, yPie, recortar(textoPie(d), 60), 'box')
   if (hayTrabajo && N > 0) put(g, Array.from(textoPie(d)).length + 1, yPie, sp, 'enj')
   const firma = `tablero v${d.version} · desarrollado por `
   put(g, MAPA_ANCHO - 2 - Array.from(firma).length, yPie, firma, 'mut')
@@ -528,7 +541,9 @@ const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => 
   const VL = (x: number, y1: number, y2: number, ch: string, k: Tinta) => vl(g, x, y1 + Y, y2 + Y, ch, k)
   const desplazar = (pts: Punto[]): Punto[] => pts.map(([x, y]) => [x, y + Y] as Punto)
   if (N <= 3) {
-    VL(OX, 20, 20, '│', 'mut')
+    // Sin JEV, el bus sale del lead: una línea seguida desde su borde.
+    if (jevOculto) vl(g, OX, 19, 30, '│', 'mut')
+    else VL(OX, 20, 20, '│', 'mut')
     HL(15, 84, 21, '─', 'mut')
     P(14, 21, '┌', 'mut')
     P(85, 21, '┐', 'mut')
@@ -568,7 +583,9 @@ const componerAncho = (d: DatosMapa, t: number, animado: boolean): Celda[][] => 
     P(2, 21, '┌', 'mut')
     P(97, 21, '┐', 'mut')
     P(OX, 21, '┼', 'mut')
-    VL(OX, 20, 20, '│', 'mut')
+    // Sin JEV, el bus sale del lead: una línea seguida desde su borde.
+    if (jevOculto) vl(g, OX, 19, 30, '│', 'mut')
+    else VL(OX, 20, 20, '│', 'mut')
     paq(g, desplazar(linea(OX, 20, OX, 21)), t, 7, 0.6, 'jev')
     caja(g, 2, 22 + Y, 96, 10, `AGENTES ${N} · ${enCurso} en curso · ${listos} ok · ${enCola} en cola`, 'enj')
     P(OX, 22, '┴', 'enj')
@@ -648,7 +665,9 @@ const parAjustado = (g: Celda[][], W: number, y: number, etiqueta: string, valor
 }
 
 const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): Celda[][] => {
-  const N = d.tarjetas.length
+  const agentesOcultos = oculta(d, 'agents')
+  const N = agentesOcultos ? 0 : d.tarjetas.length
+  const jevOculto = oculta(d, 'jev')
   const g = crearRejilla(120, W)
   const enCurso = d.tarjetas.filter(x => x.estado === 'R').length
   const listos = d.tarjetas.filter(x => x.estado === 'D').length
@@ -710,13 +729,15 @@ const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): 
     else if (l.reinicio) tr.push({ t: ' reinicia ', k: 'box' }, { t: l.reinicio, k: 'box' })
     trozos.push(tr)
   }
-  trozos.push([
-    { t: 'permisos ', k: 'box' },
-    { t: `${e.permisos.pendientes} pend.`, k: e.permisos.pendientes > 0 ? 'amb' : 'fg' },
-    { t: ' ', k: 'box' },
-    { t: `${e.permisos.denegados} den.`, k: e.permisos.denegados > 0 ? 'amb' : 'fg' },
-    { t: ` ${e.permisos.modo}`, k: 'box' },
-  ])
+  if (!oculta(d, 'gate')) {
+    trozos.push([
+      { t: 'permisos ', k: 'box' },
+      { t: `${e.permisos.pendientes} pend.`, k: e.permisos.pendientes > 0 ? 'amb' : 'fg' },
+      { t: ' ', k: 'box' },
+      { t: `${e.permisos.denegados} den.`, k: e.permisos.denegados > 0 ? 'amb' : 'fg' },
+      { t: ` ${e.permisos.modo}`, k: 'box' },
+    ])
+  }
   trozos.push([{ t: 'bucles ', k: 'box' }, { t: String(e.bucles), k: 'fg' }])
   trozos.push([{ t: 'racha errores ', k: 'box' }, { t: String(e.errores), k: e.errores > 0 ? 'warn' : 'fg' }])
   trozos.push([{ t: 'ediciones turno ', k: 'box' }, { t: String(e.ediciones), k: 'fg' }])
@@ -760,30 +781,32 @@ const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): 
   parAjustado(g, W, yLead + 5, 'respuestas', String(d.lead.respuestas))
   y = yLead + 7
 
-  // Conector lead → JEV, en el centro.
-  const cx = Math.floor(W / 2)
-  put(g, cx, y, '▾', 'mut')
-  if (hayTrabajo && animado) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
-  y += 1
+  // Conector lead → JEV, en el centro; con JEV oculta, no hay caja a la que llegar.
+  if (!jevOculto) {
+    const cx = Math.floor(W / 2)
+    put(g, cx, y, '▾', 'mut')
+    if (hayTrabajo && animado) paquete(g, linea(cx, y - 1, cx, y), t, 7, 0.3, 'jev')
+    y += 1
 
-  // JEV · decisiones: el umbral, las tres últimas decisiones (hora, texto, ▮▯, confianza) y el tope.
-  const yJev = y
-  const recientes = d.jev.recientes.slice(0, 3)
-  const altoJev = 2 + 1 + recientes.length + (d.jev.tope ? 1 : 0)
-  caja(g, 0, yJev, W, altoJev, JEV_TITULO, 'jev')
-  parAjustado(g, W, yJev + 1, 'umbral', d.jev.umbral.toFixed(2))
-  recientes.forEach((r, i) => {
-    const yy = yJev + 2 + i
-    // Derecha: ▮▯ y la confianza (15 celdas); izquierda: la hora y el texto en lo que quede.
-    const xConf = W - 2 - 4
-    const xBar = xConf - 1 - 10
-    put(g, xConf, yy, r.conf.toFixed(2), 'box')
-    barraConfianza(g, xBar, yy, r.conf)
-    put(g, 2, yy, r.hora, 'box')
-    put(g, 8, yy, recortar(r.txt, Math.max(0, xBar - 1 - 8)), 'fg')
-  })
-  if (d.jev.tope) put(g, 2, yJev + 2 + recientes.length, recortar(d.jev.tope, iw), d.jev.topeTinta ?? 'amb')
-  y = yJev + altoJev + 1
+    // JEV · decisiones: el umbral, las tres últimas decisiones (hora, texto, ▮▯, confianza) y el tope.
+    const yJev = y
+    const recientes = d.jev.recientes.slice(0, 3)
+    const altoJev = 2 + 1 + recientes.length + (d.jev.tope ? 1 : 0)
+    caja(g, 0, yJev, W, altoJev, JEV_TITULO, 'jev')
+    parAjustado(g, W, yJev + 1, 'umbral', d.jev.umbral.toFixed(2))
+    recientes.forEach((r, i) => {
+      const yy = yJev + 2 + i
+      // Derecha: ▮▯ y la confianza (15 celdas); izquierda: la hora y el texto en lo que quede.
+      const xConf = W - 2 - 4
+      const xBar = xConf - 1 - 10
+      put(g, xConf, yy, r.conf.toFixed(2), 'box')
+      barraConfianza(g, xBar, yy, r.conf)
+      put(g, 2, yy, r.hora, 'box')
+      put(g, 8, yy, recortar(r.txt, Math.max(0, xBar - 1 - 8)), 'fg')
+    })
+    if (d.jev.tope) put(g, 2, yJev + 2 + recientes.length, recortar(d.jev.tope, iw), d.jev.topeTinta ?? 'amb')
+    y = yJev + altoJev + 1
+  }
 
   // ASESOR: solo si hubo consultas.
   if (d.asesor) {
@@ -794,19 +817,22 @@ const componerAngosto = (d: DatosMapa, t: number, W: number, animado: boolean): 
     y += 5
   }
 
-  // REGISTRO: cinco filas, la más nueva arriba.
-  caja(g, 0, y, W, 7, REGISTRO_TITULO, 'mut')
-  d.registro.slice(0, 5).forEach((r, i) => {
-    put(g, 2, y + 1 + i, r.hora, 'box')
-    put(g, 8, y + 1 + i, r.rol, TINTA_ROL[r.rol])
-    put(g, 15, y + 1 + i, recortar(r.txt, Math.max(0, iw - 13)), 'box')
-  })
-  y += 8
+  // REGISTRO: cinco filas, la más nueva arriba (sale con JEV).
+  if (!jevOculto) {
+    caja(g, 0, y, W, 7, REGISTRO_TITULO, 'mut')
+    d.registro.slice(0, 5).forEach((r, i) => {
+      put(g, 2, y + 1 + i, r.hora, 'box')
+      put(g, 8, y + 1 + i, r.rol, TINTA_ROL[r.rol])
+      put(g, 15, y + 1 + i, recortar(r.txt, Math.max(0, iw - 13)), 'box')
+    })
+    y += 8
+  }
 
   // Pie: las tareas y los subagentes y, en la última fila, la versión y el autor a la derecha.
   // Si el pie de la maqueta no cabe, se deja fuera «el lead espera trabajo» antes que cortar los subagentes.
   const corto = d.tarjetas.length === 0 ? `SIN TAREAS · subagentes ${d.barra.hechos}/${d.barra.total}` : textoPie(d)
-  put(g, 2, y++, recortar(Array.from(textoPie(d)).length <= iw ? textoPie(d) : corto, iw), 'box')
+  if (!agentesOcultos) put(g, 2, y, recortar(Array.from(textoPie(d)).length <= iw ? textoPie(d) : corto, iw), 'box')
+  y++
   const firma = W >= 50 ? `tablero v${d.version} · desarrollado por ` : `v${d.version} · `
   put(g, W - 2 - Array.from(firma).length - 2, y, firma, 'mut')
   put(g, W - 4, y, 'JP', 'lead')

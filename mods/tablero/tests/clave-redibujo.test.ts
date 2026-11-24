@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { PASO_AGENTE_MS } from '../hooks/agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj } from '../hooks/clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, puedeArrancarReloj } from '../hooks/clave-redibujo'
 
 const base = {
   contextoPct: 40,
@@ -44,4 +44,11 @@ test('con el mapa animado, la clave cambia con cada marco de la animación', () 
   expect(a).not.toBe(b)
   // Sin mapa (sin `marco`) la clave es la de siempre.
   expect(claveDeRedibujo(base)).toBe(claveDeRedibujo({ ...base, marco: undefined }))
+})
+
+test('el reloj solo arranca si está parado y el dibujo es de la generación actual', () => {
+  expect(puedeArrancarReloj({ corriendo: false, generacionDibujo: 2, generacionActual: 2 })).toBe(true)
+  expect(puedeArrancarReloj({ corriendo: true, generacionDibujo: 2, generacionActual: 2 })).toBe(false)
+  // Un dibujo tardío de antes de `session.end` o `ui.close`: la generación ya cambió.
+  expect(puedeArrancarReloj({ corriendo: false, generacionDibujo: 1, generacionActual: 2 })).toBe(false)
 })
