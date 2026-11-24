@@ -14,6 +14,12 @@
       "version": "0.1.0"
     },
     {
+      "name": "barra-plan",
+      "source": "./mods/barra-plan",
+      "description": "Barra de progreso del plan sobre el prompt: una línea por plan abierto, con su avance, paso activo y tiempo. Sustituye a plan-progress",
+      "version": "0.1.0"
+    },
+    {
       "name": "caveman-badge",
       "source": "./mods/caveman-badge",
       "description": "Muestra en la línea de estado el modo caveman (aproximado)",
@@ -30,12 +36,6 @@
       "source": "./mods/guard-kill-visible",
       "description": "Avisa cuando un comando mata procesos por nombre (solo avisa, no bloquea)",
       "version": "0.1.0"
-    },
-    {
-      "name": "plan-progress",
-      "source": "./mods/plan-progress",
-      "description": "Barras de progreso del plan sobre el prompt: etapas, pasos, subagentes y sonidos. Copia de zycck/claude-mods (MIT) sin auto-actualización",
-      "version": "1.0.1"
     },
     {
       "name": "secret-guard",
