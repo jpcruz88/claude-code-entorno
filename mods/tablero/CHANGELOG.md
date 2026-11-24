@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.1 (tablero)
+
+Arreglos de la prueba real de Conversaciones.
+
+- **Nombres:** cada sesión sale con su nombre actual del registro de Sesiones. Antes salía el título que tenía la pestaña de herdr al enviar, que al arrancar es «Claude Code».
+- **Línea plegada:** sin esperas dice «1 mensaje reciente, sin esperas» en vez de «1 reciente».
+
 ## 1.4.0 (tablero)
 
 Quién le habla a quién entre sesiones, y quién espera respuesta.
