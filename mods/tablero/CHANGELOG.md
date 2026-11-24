@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0 (tablero)
+
+El mapa respeta `panels` y lo que faltaba probar tiene prueba.
+
+- En el mapa se pueden ocultar también `jev` (la caja JEV y su REGISTRO), `agents` (las tarjetas y su bus; el mapa pasa a la variante compacta) y `gate` (los datos de permisos de ESTADO). `main` siempre se ve. Las cajas ocultas no dejan conectores colgando.
+- La lógica de `ui.fault`, `SubagentHandback` y `agent.offer` vive en funciones de `core.ts` con pruebas propias.
+- La carrera del reloj tras cerrar el panel y la limpieza de `autoAsks` cuando una llamada lanza tienen prueba que falla con el código anterior.
+- El redibujo por segundo en reposo se queda: componer el mapa cuesta de 0,08 a 0,14 ms y la franja en reposo cambia cada segundo.
+
 ## 0.11.0 (tablero)
 
 Revisión de seguridad, correctitud y rendimiento.
