@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.0 (tablero)
+
+La vista por defecto es una lista limpia: secciones con título, sin cajas ni conectores.
+
+- `layout: auto` dibuja una columna de secciones separadas por una fila en blanco. La sección **Sesión** pone una fila por dato: modelo (con esfuerzo y modo), contexto, costo y cada cupo, con barras `█░` del mismo ancho, el porcentaje alineado (`tabular`), el ritmo `⇡/⇣` y la hora de reinicio. El color solo marca el umbral (aviso 65 %, alerta 85 %).
+- Cabecera de la lista en una línea: `TABLERO · modelo · ○ en espera` a la izquierda y versión, tiempo y hora atenuados a la derecha, con una línea fina debajo. Sin emoji ni leyenda de colores.
+- El mapa de cajas pasa a ser una opción: `layout: mapa` (o `/tablero layout mapa`). `diagrama`, `compact`, `wide` y `mini` siguen igual. Sobre el prompt, `auto` usa el resumen de 8 filas.
+- Corrige la entrada 1.1.0: allí se decía que el panel ya no dibujaba cajas, pero la vista por defecto (el mapa) las conservaba. Desde 1.2.0 la vista por defecto no tiene cajas.
+- Pruebas nuevas en `tests/lista-defecto.test.tsx`. Las pruebas que miran el mapa fijan `layout: 'mapa'`.
+
+Pendiente: estado del dibujo a `$.state`, el mapa con `Raster` y `$.ui.blit`, y `tabular` en los cronómetros de las demás distribuciones.
+
 ## 1.1.0 (tablero)
 
 Segunda pasada del rediseño: menos marcos y la línea de ritmo del mapa con ⇡/⇣.

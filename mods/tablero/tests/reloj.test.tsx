@@ -89,7 +89,7 @@ test('en reposo con el mapa a la vista, como mucho un redibujo por minuto', asyn
   await ui.unmount()
 })
 
-test('con el lead trabajando y la animación encendida, el mapa se anima rápido', async ($, on) => {
+test('con el lead trabajando y la animación encendida, el mapa se anima rápido', { options: { layout: 'mapa' } }, async ($, on) => {
   const m = motor(on)
   await m.reloj.advance(1_000)
   await iniciar($)
@@ -113,7 +113,7 @@ test('al cerrar el panel con /tablero cerrar, el reloj se para aunque haya traba
   await ui.unmount()
 })
 
-test('con la animación apagada y trabajo en curso, los relojes avanzan con un refresco lento', { options: { animacion: false } }, async ($, on) => {
+test('con la animación apagada y trabajo en curso, los relojes avanzan con un refresco lento', { options: { layout: 'mapa', animacion: false } }, async ($, on) => {
   const m = motor(on)
   await m.reloj.advance(1_000)
   await iniciar($)

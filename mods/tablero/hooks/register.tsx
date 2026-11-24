@@ -396,7 +396,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'tablero',
       description: 'Tablero: abre, cierra, reinicia o cambia la distribución del panel completo',
-      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama]',
+      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama|mapa]',
     })
     await migrate($)
     // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
@@ -460,8 +460,8 @@ export const register: Register = (on, options) => {
       return { text: 'Tablero reiniciado.' }
     }
     if (verb === 'layout') {
-      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' || arg === 'diagrama' ? arg : null
-      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini|diagrama' }
+      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' || arg === 'diagrama' || arg === 'mapa' ? arg : null
+      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini|diagrama|mapa' }
       await update($, view, v => ({ ...normalize(DEFAULT_VIEW, v), layout }))
       const opened = await openPane($, cfg)
       return { text: opened.isPlaced ? `Distribución de Tablero: ${layout}.` : `Distribución ${layout} guardada; el panel aún no se muestra: ${opened.reason}` }
@@ -817,12 +817,13 @@ export const register: Register = (on, options) => {
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
     const layout = v.layout ?? cfg.layout
-    // El diagrama: `auto` y `diagrama` desde 66 columnas; por debajo, la columna de siempre.
-    const enDiagramaPosible = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
-    // `auto` acoplado dibuja el mapa desde 40 columnas y se adapta al ancho (ver mapa.ts): dos columnas desde 100,
-    // apilado por debajo. Sobre el prompt (inline) el mapa es demasiado alto: ahí siguen el diagrama y el resumen.
-    // `diagrama` conserva el diagrama de siempre.
-    const enMapa = layout === 'auto' && W >= MAPA_MIN && (W >= MAPA_ANCHO || e.props.placement !== 'inline')
+    // El diagrama: `diagrama` desde 66 columnas; por debajo, la columna de siempre.
+    const enDiagramaPosible = W >= DIAGRAMA_MIN && layout === 'diagrama'
+    // `mapa` acoplado dibuja el mapa de cajas desde 40 columnas y se adapta al ancho (ver mapa.ts): dos columnas
+    // desde 100, apilado por debajo. Sobre el prompt (inline) el mapa es demasiado alto: ahí sigue la columna.
+    const enMapa = layout === 'mapa' && W >= MAPA_MIN && (W >= MAPA_ANCHO || e.props.placement !== 'inline')
+    // `auto` (1.2.0): la lista de secciones con título, sin cajas ni conectores.
+    const esLista = layout === 'auto'
     const enDiagrama = enDiagramaPosible && !enMapa
     const isWide = layout === 'wide'
     const colW = isWide ? Math.floor((W - 2) / 2) : W
@@ -894,6 +895,88 @@ export const register: Register = (on, options) => {
     // Solo el nombre de la carpeta, cortado para que la línea conserve agentes y permisos.
     const carpeta = carpetaDe(cwd, Math.max(8, Math.floor((colW - 4) / 3)))
     const ctxGauge = ctxFill.pct !== null ? gauge(ctxFill.pct, 10) : null
+
+    // ---- Sesión: la sección principal de la lista (layout auto). Una fila por dato, etiqueta a la izquierda,
+    // barras del mismo ancho y porcentajes alineados; el color solo marca el umbral (65 % aviso, 85 % alerta).
+    const ETIQUETA = 11
+    const tinta = (pct: number) => {
+      const t = tonoUso(pct)
+      return t === 'alerta' ? C.warn : t === 'aviso' ? C.amber : C.main
+    }
+    const filaBarra = (k: string, etiqueta: string, pct: number, ancho: number, extra: string, extraColor?: string, cola = '') => {
+      const llenas = celdasUso(pct, ancho)
+      return (
+        <Text key={k} wrap="truncate">
+          <Text dimColor>{etiqueta.padEnd(ETIQUETA)}</Text>
+          <Text color={tinta(pct)}>{'█'.repeat(llenas)}</Text>
+          <Text color={C.faint}>{'░'.repeat(ancho - llenas)}</Text>
+          <Text tabular>{`  ${String(Math.round(pct)).padStart(3)} %`}</Text>
+          {extra ? <Text color={extraColor}>{`  ${extra}`}</Text> : null}
+          {cola ? <Text dimColor>{`  ${cola}`}</Text> : null}
+        </Text>
+      )
+    }
+    const nombreCupo = (kind: string) => (/five/i.test(kind) ? 'cupo 5 h' : /seven/i.test(kind) ? 'cupo 7 d' : `cupo ${limitLabel(kind)}`)
+    const sesionPanel = (w: number) => {
+      const ancho = Math.max(6, Math.min(20, w - ETIQUETA - 26))
+      const detalle = [
+        carpeta,
+        branchNow ? `⎇ ${branchNow}` : '',
+        `agentes ${running.length}/${cards.length}`,
+        `permisos ${s.total}`,
+      ].filter(Boolean)
+      return (
+        <Box flexDirection="column" width={w}>
+          <Text weight="semibold">Sesión</Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            <Text wrap="truncate">
+              <Text dimColor>{'modelo'.padEnd(ETIQUETA)}</Text>
+              <Text>{modelName}</Text>
+              {m.effort ? <Text dimColor>{` · ${m.effort}`}</Text> : null}
+              {m.mode ? <Text dimColor>{` · ${m.mode}`}</Text> : null}
+            </Text>
+            {ctxFill.pct !== null
+              ? filaBarra(
+                  'ctx',
+                  'contexto',
+                  ctxFill.pct,
+                  ancho,
+                  u.compactions > 0 ? `⟲${u.compactions}` : '',
+                  C.amber,
+                  u.tokens !== null ? `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}` : '',
+                )
+              : null}
+            {u.costUsd !== null ? (
+              <Text wrap="truncate">
+                <Text dimColor>{'costo'.padEnd(ETIQUETA)}</Text>
+                <Text tabular>{fmtUsd(u.costUsd)}</Text>
+                <Text dimColor>{`  · ${plural(m.steps, 'respuesta', 'respuestas')}`}</Text>
+              </Text>
+            ) : null}
+            {u.limits.slice(0, 2).map(l => {
+              const ventana = /five/i.test(l.kind) ? 5 * 3_600_000 : 7 * 86_400_000
+              const fraccion = l.resetsAt == null ? null : Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / ventana))
+              const ritmo = ritmoCupo(l.pct, fraccion)
+              const reinicio = w >= 56 ? fmtReinicio(l.resetsAt, now) : ''
+              return filaBarra(`cupo-${l.kind}`, nombreCupo(l.kind), l.pct, ancho, ritmo, ritmo.startsWith('⇡') ? C.amber : C.gate, reinicio ? `↻ ${reinicio}` : '')
+            })}
+            <Text dimColor wrap="truncate">
+              {detalle.join(' · ')}
+            </Text>
+            {s.ask > 0 || s.deny > 0 ? (
+              <Text wrap="truncate">
+                {s.ask > 0 ? <Text color={C.amber}>{`? ${s.ask} permiso${s.ask === 1 ? '' : 's'} pendiente${s.ask === 1 ? '' : 's'}`}</Text> : null}
+                {s.ask > 0 && s.deny > 0 ? <Text dimColor>{'  '}</Text> : null}
+                {s.deny > 0 ? <Text color={C.warn}>{`✗ ${s.deny} denegado${s.deny === 1 ? '' : 's'}`}</Text> : null}
+              </Text>
+            ) : null}
+            {resumenUsos(usosNow) ? <Text dimColor wrap="truncate">{resumenUsos(usosNow)}</Text> : null}
+            {m.speed ? <Text dimColor wrap="truncate">{`última respuesta  ${fmtSpeed(m.speed)}`}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
     const mainPanel = (w: number) => (
       <Box flexDirection="column" paddingX={1} width={w}>
         <Box justifyContent="space-between">
@@ -1354,7 +1437,9 @@ export const register: Register = (on, options) => {
 
     const draw = (p: Panel, w: number) =>
       p === 'main'
-        ? mainPanel(w)
+        ? esLista
+          ? sesionPanel(w)
+          : mainPanel(w)
         : p === 'jev'
           ? jevPanel(w)
           : p === 'architect'
@@ -1368,12 +1453,13 @@ export const register: Register = (on, options) => {
                   : receiptPanel(w)
 
     // Panels with the flow between them; the agents panel draws its own rails.
+    // En la lista (auto) las secciones se separan con una fila en blanco, sin conectores.
     const column = (ps: Panel[], w: number) => (
-      <Box flexDirection="column" width={w}>
+      <Box flexDirection="column" width={w} gap={esLista ? 1 : 0}>
         {ps.map((p, i) => {
           const prev = ps[i - 1]
           const link =
-            i === 0 || p === 'agents' || prev === 'agents' || p === 'loops' || prev === 'loops'
+            esLista || i === 0 || p === 'agents' || prev === 'agents' || p === 'loops' || prev === 'loops'
               ? null
               : rail(`link-${p}`, p === 'architect' ? advising : m.isRunning, p === 'architect' ? C.arch : C.main, w)
           return (
@@ -1537,6 +1623,30 @@ export const register: Register = (on, options) => {
     ) : (
       column(panels, W)
     )
+
+    // La lista lleva una cabecera sobria: nombre, modelo y estado a la izquierda; versión, tiempo y hora a la derecha,
+    // atenuados; debajo, una línea fina. Sin emoji ni leyenda de colores.
+    if (esLista) {
+      const dcha = [W >= 48 ? `v${MOD_VERSION}` : '', W >= 40 && u.startedAt ? fmtDuration(now - u.startedAt) : '', fmtClock(now).slice(0, 5)].filter(Boolean).join('  ')
+      return (
+        <Box flexDirection="column" width={W}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">TABLERO</Text>
+              <Text dimColor>{` · ${modelName} · `}</Text>
+              <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? '● trabajando' : '○ en espera'}</Text>
+              {showArchitect ? <Text color={C.arch}>{advising ? ' · asesorando' : ''}</Text> : null}
+            </Text>
+            <Box flexShrink={0}>
+              <Text dimColor tabular>{dcha}</Text>
+            </Box>
+          </Box>
+          <Text color={C.faint}>{'─'.repeat(W)}</Text>
+          {body}
+          {svgLanes}
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column" width={W}>

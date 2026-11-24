@@ -126,7 +126,7 @@ export type Receipt = {
   reason: string
 }
 
-export type Layout = 'auto' | 'compact' | 'wide' | 'mini' | 'diagrama'
+export type Layout = 'auto' | 'compact' | 'wide' | 'mini' | 'diagrama' | 'mapa'
 
 export type View = { expanded: string | null; gateOpen: Bucket | null; layout: Layout | null }
 

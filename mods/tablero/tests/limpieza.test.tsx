@@ -131,7 +131,7 @@ test('el costo de ESTADO sale del costo medido, no de $0.00', async ($, on) => {
   await ui.unmount()
 })
 
-test('al terminar el turno, el LEAD deja de contar «turno»', async ($, on) => {
+test('al terminar el turno, el LEAD deja de contar «turno»', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   // El reloj simulado empieza en 0, que el mod lee como «sin turno»: arranca un poco después.
   await reloj.advance(1_000)
@@ -147,7 +147,7 @@ test('al terminar el turno, el LEAD deja de contar «turno»', async ($, on) => 
   await ui.unmount()
 })
 
-test('un subagente detenido dice «detenido» y uno fallido «falló»', async ($, on) => {
+test('un subagente detenido dice «detenido» y uno fallido «falló»', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on)
   await $.turn.start({ text: 'go', turnId: 'T2' })
   await lanzar($, 'uno', 'a1')

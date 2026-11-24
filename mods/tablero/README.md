@@ -1,6 +1,6 @@
 # Tablero
 
-Mod de Claude Code que dibuja un panel en español junto al chat: un mapa con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt, en una terminal angosta, se queda en un resumen de hasta 8 filas.
+Mod de Claude Code que dibuja un panel en español junto al chat: una lista de secciones con título, sin cajas, con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt se queda en un resumen de hasta 8 filas. El mapa de cajas de versiones anteriores sigue disponible con `/tablero layout mapa`.
 
 Es de observación: no bloquea ni retrasa nada. No usa red, no lanza procesos y no escribe archivos. Solo lee cuatro archivos, cada uno con un tope de 2 000 000 de caracteres: `~/.claude/jev/decisiones.jsonl` (las decisiones de Jev, ver «Jev»), `~/.claude/jev/limites.json` (el uso de la cuenta, ver «Tope por uso de la cuenta»), `~/.claude/al-dia/resultado.json` (lo que actualizó «Al día») y el `.git/HEAD` del repo, o el de su worktree, para la rama.
 
@@ -19,7 +19,7 @@ claude plugin marketplace add jpcruz88/claude-code-entorno
 claude plugin install tablero@claude-code-entorno --scope user
 ```
 
-Reinicia Claude. El panel sale junto al chat y su pie dice `tablero v<versión>`. Para verlo en marcha, pide a Claude que lance dos o tres subagentes: la franja pasa a TRABAJANDO y cada agente sale en el mapa. La caja JEV solo se llena si usas los hooks de Jev de este repo (ver «Jev»), y la caja AL DÍA solo si usas el hook `al-dia.py`.
+Reinicia Claude. El panel sale junto al chat y su cabecera dice `v<versión>`. Para verlo en marcha, pide a Claude que lance dos o tres subagentes: la cabecera pasa a `● trabajando` y cada agente sale en la sección de agentes. La caja JEV solo se llena si usas los hooks de Jev de este repo (ver «Jev»), y la caja AL DÍA solo si usas el hook `al-dia.py`.
 
 ## Atribución
 
