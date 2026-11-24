@@ -62,7 +62,7 @@ const texto = async ($: { ui: { mount: (p: never) => Promise<{ drawn: () => Prom
   return s
 }
 
-test('un nuevo session.start apaga el turno y los agentes «en curso» del proceso anterior', async ($, on) => {
+test('un nuevo session.start apaga el turno y los agentes «en curso» del proceso anterior', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
@@ -79,7 +79,7 @@ test('un nuevo session.start apaga el turno y los agentes «en curso» del proce
   expect(despues).toContain('detenido')
 })
 
-test('un permiso pendiente se retira cuando termina el turno del lead', async ($, on) => {
+test('un permiso pendiente se retira cuando termina el turno del lead', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
@@ -92,7 +92,7 @@ test('un permiso pendiente se retira cuando termina el turno del lead', async ($
   expect(s).toMatch(/0 pend\./)
 })
 
-test('un permiso pendiente se retira con un nuevo session.start', async ($, on) => {
+test('un permiso pendiente se retira con un nuevo session.start', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
@@ -104,7 +104,7 @@ test('un permiso pendiente se retira con un nuevo session.start', async ($, on) 
   expect(s).toMatch(/0 pend\./)
 })
 
-test('con tres fallos seguidos y el lead aún en su turno, la franja no dice DETENIDO', async ($, on) => {
+test('con tres fallos seguidos y el lead aún en su turno, la franja no dice DETENIDO', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   on('tool.call', () => ({ result: {}, text: 'falló', isError: true }))
   await reloj.advance(1_000)
@@ -132,7 +132,7 @@ const modoAuto = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
     permissionMode: 'auto',
   } as never)
 
-test('en modo automático un ask no deja la franja en TE ESPERA ni cuenta como pendiente', async ($, on) => {
+test('en modo automático un ask no deja la franja en TE ESPERA ni cuenta como pendiente', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
@@ -157,7 +157,7 @@ test('en modo automático, la llamada con ask entra al recuento cuando termina',
   expect(s).not.toContain('pendiente')
 })
 
-test('el permiso pendiente de un subagente se retira cuando ese subagente termina', async ($, on) => {
+test('el permiso pendiente de un subagente se retira cuando ese subagente termina', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
@@ -171,7 +171,7 @@ test('el permiso pendiente de un subagente se retira cuando ese subagente termin
   expect(s).toMatch(/0 pend\./)
 })
 
-test('el permiso pendiente de un subagente no se retira cuando termina otro subagente', async ($, on) => {
+test('el permiso pendiente de un subagente no se retira cuando termina otro subagente', { options: { layout: 'mapa' } }, async ($, on) => {
   const reloj = motor(on)
   await reloj.advance(1_000)
   await iniciar($)
