@@ -178,6 +178,8 @@ export type RegistroSesion = {
   /** El día local (AAAA-MM-DD) al que se refiere `base`. */
   dia: string
   actualizado: number
+  /** Cuándo terminó su último turno (ms epoch); lo usan las demás para saber si ya respondió. */
+  turnoFin?: number
 }
 
 export type Extra = {
