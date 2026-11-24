@@ -83,4 +83,4 @@ jobs:
 
       - name: Pruebas que aplican a Windows
         working-directory: pruebas
-        run: python -m unittest test_instalar.InstalarPs1 test_revisar_privacidad test_fusionar_settings test_memoria test_modelo test_mods -v
+        run: python -m unittest test_instalar.InstalarPs1 test_opencode.PasoOpenCodeWindows test_opencode.ArchivoOpenCodePs1 test_revisar_privacidad test_fusionar_settings test_memoria test_modelo test_mods -v
