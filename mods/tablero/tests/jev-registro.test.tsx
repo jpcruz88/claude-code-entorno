@@ -88,7 +88,7 @@ test('tarjeta lleva jev ↑ sonnet', { options: { layout: 'diagrama' } }, async 
   await ui.unmount()
 })
 
-test('el mapa dice el tope que rige ahora aunque no haya ningún tope registrado', async ($, on) => {
+test('el mapa dice el tope que rige ahora aunque no haya ningún tope registrado', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on, { texto: null })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true } as never)
   const ui = await $.ui.mount(pane(120) as never)

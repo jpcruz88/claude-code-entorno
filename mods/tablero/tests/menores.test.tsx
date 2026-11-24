@@ -62,7 +62,7 @@ const encontrar = async ($: { ui: { mount: (p: never) => Promise<{ find: (q: nev
   return hallado
 }
 
-test('un limites.json roto (a medio escribir) no borra el último válido', async ($, on) => {
+test('un limites.json roto (a medio escribir) no borra el último válido', { options: { layout: 'mapa' } }, async ($, on) => {
   const archivos: Record<string, string | null> = { 'limites.json': JSON.stringify({ actualizado: 0, five_hour: { usado: 80, reinicio: 10_000 } }) }
   const reloj = motor(on, archivos)
   await reloj.advance(1_000)

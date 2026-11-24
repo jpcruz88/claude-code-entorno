@@ -159,7 +159,7 @@ test('layout diagrama con 66 columnas usa diagrama', { options: { layout: 'diagr
   await ui.unmount()
 })
 
-test('auto en panel inline con 80 columnas usa diagrama (no el resumen)', async ($, on) => {
+test('diagrama en panel inline con 80 columnas usa el diagrama', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D0' })
   await lanzar($, 'revisar auth', 'd0')
@@ -168,7 +168,16 @@ test('auto en panel inline con 80 columnas usa diagrama (no el resumen)', async 
   await ui.unmount()
 })
 
-test('con 100 columnas o más se dibuja la rejilla de la propuesta: con REGISTRO y sin la línea antigua', async ($, on) => {
+test('auto en panel inline con 80 columnas usa el resumen, no el diagrama', async ($, on) => {
+  motor(on, null)
+  await $.turn.start({ text: 'go', turnId: 'D0' })
+  await lanzar($, 'revisar auth', 'd0')
+  const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } } as never)
+  expect(await ui.find({ text: /delegar a subagentes/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('con 100 columnas o más se dibuja la rejilla de la propuesta: con REGISTRO y sin la línea antigua', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D100' })
   await lanzar($, 'revisar auth', 'd100')
@@ -179,7 +188,7 @@ test('con 100 columnas o más se dibuja la rejilla de la propuesta: con REGISTRO
   await ui.unmount()
 })
 
-test('con 100 columnas y sin trabajo la franja grande dice EN ESPERA y el pie lleva versión y autor', async ($, on) => {
+test('con 100 columnas y sin trabajo la franja grande dice EN ESPERA y el pie lleva versión y autor', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on, null)
   const ui = await $.ui.mount(pane(100) as never)
   expect(await ui.find({ text: /E N   E S P E R A/ })).toBeDefined()
@@ -189,7 +198,7 @@ test('con 100 columnas y sin trabajo la franja grande dice EN ESPERA y el pie ll
   await ui.unmount()
 })
 
-test('con 100 columnas y un agente en curso la franja grande dice TRABAJANDO', async ($, on) => {
+test('con 100 columnas y un agente en curso la franja grande dice TRABAJANDO', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'F1' })
   await lanzar($, 'revisar auth', 'f1')
@@ -199,7 +208,7 @@ test('con 100 columnas y un agente en curso la franja grande dice TRABAJANDO', a
   await ui.unmount()
 })
 
-test('auto acoplado entre 40 y 99 columnas dibuja el mapa apilado al ancho del panel', async ($, on) => {
+test('auto acoplado entre 40 y 99 columnas dibuja el mapa apilado al ancho del panel', { options: { layout: 'mapa' } }, async ($, on) => {
   motor(on, null)
   await $.turn.start({ text: 'go', turnId: 'D4' })
   await lanzar($, 'revisar auth', 'd4')
@@ -426,7 +435,7 @@ const resultadoAlDia = JSON.stringify({
   pendientes: [],
 })
 
-test('con resultado.json reciente, el mapa de 100 columnas dibuja la caja AL DÍA', async ($, on) => {
+test('con resultado.json reciente, el mapa de 100 columnas dibuja la caja AL DÍA', { options: { layout: 'mapa' } }, async ($, on) => {
   // Con el reloj en su hora: sin esperar a fijarlo, el resultado quedaba en el futuro y la caja decía «ayer».
   await motor(on, null, null, BASE, resultadoAlDia)()
   await lanzar($, 'revisar auth', 'al1')

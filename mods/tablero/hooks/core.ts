@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '1.1.0'
+export const MOD_VERSION = '1.2.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -172,7 +172,7 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     maxCards: Math.min(6, Math.max(1, max)),
     // The body clamps its drawing at 40 columns, so a narrower dock would only clip it.
     paneColumns: Math.max(40, cols),
-    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
+    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' || layout === 'mapa' ? layout : 'auto',
     palette: (['theme', 'pastel', 'neon'] as const).find(p => p === str('palette', 'theme')) ?? 'theme',
     openOnStart: bool('openOnStart', true),
     animacion: bool('animacion', true),
