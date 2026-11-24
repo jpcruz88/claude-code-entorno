@@ -184,3 +184,142 @@ class ArchivoOpenCode(unittest.TestCase):
         salida = self.cargar("OPENROUTER_API_KEY")
         self.assertIn("cl-or DEFINIDA", salida)
         self.assertNotIn("cl-go DEFINIDA", salida)
+
+
+INIT_PS1 = RAIZ / "opencode" / "opencode.ps1"
+LINEA_PS1 = ('if (Test-Path "$HOME\\.config\\claude-code-entorno\\opencode.ps1") '
+             '{ . "$HOME\\.config\\claude-code-entorno\\opencode.ps1" }')
+
+
+class PasoOpenCodeWindows(unittest.TestCase):
+    """En Windows, cl-go y cl-or llegan por el perfil de PowerShell (no hay .zshrc)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.home = self.tmp / "home"
+        self.bin = self.tmp / "bin"
+        self.home.mkdir()
+        self.bin.mkdir()
+        claude = self.bin / "claude"
+        claude.write_text(CLAUDE_FALSO, encoding="utf-8")
+        claude.chmod(0o755)
+        self.perfiles = [self.home / "Documents" / "PowerShell" / "Microsoft.PowerShell_profile.ps1",
+                         self.home / "Documents" / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"]
+        self.env = {"HOME": str(self.home), "USERPROFILE": str(self.home),
+                    "TMPDIR": str(self.tmp), "PYTHONIOENCODING": "utf-8",
+                    "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+                    "PATH": os.pathsep.join([str(self.bin), "/usr/bin", "/bin"])}
+
+    def tearDown(self):
+        shutil.rmtree(str(self.tmp), ignore_errors=True)
+
+    def correr(self, *opciones):
+        args = [sys.executable, str(INSTALAR_COMUN), "--plataforma", "windows",
+                "--sin-codebase-memory", "--sin-skills", "--sin-herdr", "--sin-mods",
+                "--sin-terminal", "--sin-opencode-config", "--sin-nvim"]
+        for perfil in self.perfiles:
+            args += ["--perfil-ps", str(perfil)]
+        r = subprocess.run(args + list(opciones), stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                           env=self.env, timeout=120)
+        salida = r.stdout.decode("utf-8", "replace")
+        self.assertEqual(r.returncode, 0, salida)
+        return salida
+
+    @property
+    def init(self):
+        return self.home / ".config" / "claude-code-entorno" / "opencode.ps1"
+
+    def test_copia_el_init_y_lo_carga_en_cada_perfil(self):
+        self.perfiles[0].parent.mkdir(parents=True)
+        self.perfiles[0].write_text("Set-Alias previo Get-Date", encoding="utf-8")  # sin salto final
+        self.correr()
+        self.assertEqual(self.init.read_bytes(), INIT_PS1.read_bytes())
+        primero = self.perfiles[0].read_text(encoding="utf-8")
+        self.assertTrue(primero.startswith("Set-Alias previo Get-Date\n"), primero)
+        for perfil in self.perfiles:
+            with self.subTest(perfil.parent.name):
+                self.assertEqual(perfil.read_text(encoding="utf-8").count(LINEA_PS1), 1)
+        self.assertFalse((self.home / ".zshrc").exists())
+        self.assertFalse((self.home / ".bashrc").exists())
+
+    def test_segunda_corrida_no_repite_la_linea(self):
+        self.correr()
+        salida = self.correr()
+        for perfil in self.perfiles:
+            self.assertEqual(perfil.read_text(encoding="utf-8").count(LINEA_PS1), 1)
+        self.assertIn("al día: %s ya lo carga" % self.perfiles[0], salida)
+
+    def test_sin_opencode_no_toca_nada(self):
+        salida = self.correr("--sin-opencode")
+        self.assertFalse(self.init.exists())
+        for perfil in self.perfiles:
+            self.assertFalse(perfil.exists())
+        self.assertIn("Se omite (--sin-opencode).", salida)
+
+
+class ArchivoOpenCodePs1(unittest.TestCase):
+    """opencode/opencode.ps1: el formato que PowerShell 5.1 lee bien y, con pwsh, su efecto."""
+
+    PREGUNTA = ("foreach ($n in 'cl-go','cl-or') { if (Get-Command $n -ErrorAction SilentlyContinue)"
+                " { \"$n DEFINIDA\" } }")
+
+    def test_bom_y_crlf(self):
+        datos = INIT_PS1.read_bytes()
+        self.assertTrue(datos.startswith(b"\xef\xbb\xbf"), "opencode.ps1 sin BOM")
+        self.assertNotIn(b"\n", datos.replace(b"\r\n", b""), "opencode.ps1 con LF sueltos")
+
+    def test_no_trae_claves(self):
+        texto = INIT_PS1.read_text(encoding="utf-8-sig")
+        self.assertNotIn("oc_sk_", texto)
+        self.assertNotIn("sk-or-v1-", texto)
+        self.assertIn("$env:OPENCODE_API_KEY", texto)
+        self.assertIn("$env:OPENROUTER_API_KEY", texto)
+
+    def cargar(self, comando, **variables):
+        pwsh = shutil.which("pwsh") or shutil.which("powershell")
+        if not pwsh:
+            self.skipTest("sin PowerShell (corre en el CI de Windows)")
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            # claude falso: imprime la URL que recibió por entorno y sus argumentos
+            if os.name == "nt":
+                (tmp / "claude.cmd").write_text(
+                    "@echo URL=%ANTHROPIC_BASE_URL% ARGS=%*\r\n", encoding="utf-8")
+            else:
+                falso = tmp / "claude"
+                falso.write_text('#!/bin/sh\necho "URL=$ANTHROPIC_BASE_URL ARGS=$*"\n',
+                                 encoding="utf-8")
+                falso.chmod(0o755)
+            env = dict(os.environ, PATH=os.pathsep.join([str(tmp), os.environ.get("PATH", "")]))
+            for k in ("OPENCODE_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_BASE_URL"):
+                env.pop(k, None)
+            env.update(variables)
+            guion = '. "%s"; %s' % (INIT_PS1, comando)
+            r = subprocess.run([pwsh, "-NoProfile", "-NonInteractive", "-Command", guion],
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env,
+                               timeout=120)
+            return r.stdout.decode("utf-8", "replace")
+        finally:
+            shutil.rmtree(str(tmp), ignore_errors=True)
+
+    def test_sin_variables_no_define_nada(self):
+        self.assertNotIn("DEFINIDA", self.cargar(self.PREGUNTA))
+
+    def test_con_opencode_define_solo_cl_go(self):
+        salida = self.cargar(self.PREGUNTA, OPENCODE_API_KEY="<de-mentira>")
+        self.assertIn("cl-go DEFINIDA", salida)
+        self.assertNotIn("cl-or DEFINIDA", salida)
+
+    def test_con_openrouter_define_solo_cl_or(self):
+        salida = self.cargar(self.PREGUNTA, OPENROUTER_API_KEY="<de-mentira>")
+        self.assertIn("cl-or DEFINIDA", salida)
+        self.assertNotIn("cl-go DEFINIDA", salida)
+
+    def test_cl_or_lanza_claude_con_su_url_y_luego_la_quita(self):
+        salida = self.cargar('cl-or -p hola; "DESPUES=[$env:ANTHROPIC_BASE_URL]"',
+                             OPENROUTER_API_KEY="<de-mentira>")
+        self.assertIn("URL=https://openrouter.ai/api", salida)
+        self.assertIn("--dangerously-skip-permissions", salida)
+        self.assertIn("-p hola", salida)
+        self.assertIn("DESPUES=[]", salida)

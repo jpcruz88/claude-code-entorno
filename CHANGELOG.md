@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- `cl-go` y `cl-or` en Windows: `opencode/opencode.ps1` los define en PowerShell y `instalar.ps1` lo carga desde el perfil de PowerShell 7 y 5.1 (antes el paso de OpenCode solo corría en Mac y Linux, así que en Windows los comandos no existían). Opción `-SinOpencode` para omitirlo.
 - `tablero` 0.13.0: en reposo el panel se redibuja por minuto en vez de por segundo (en una sesión quieta, de ~1,1 s a ~0,38 s de CPU por minuto; con el panel cerrado son 0,30 s); con trabajo o con un permiso pendiente sigue igual.
 - `tablero` 0.12.0: el mapa respeta `panels` (`jev`, `agents` y `gate` además de `architect` y `aldia`) y los manejadores que el kit no puede disparar tienen pruebas sobre funciones puras.
 - `tablero` 0.11.0: revisión de seguridad, correctitud y rendimiento. El texto externo pierde los caracteres de control (un ESC tumbaba el panel), la redacción de secretos cubre más casos, las lecturas de disco tienen tope, una consulta al asesor interrumpida ya no queda abierta, el tope de tarjetas no quita agentes en curso y `decisiones.jsonl` no se reparsea sin cambios. Detalle en `mods/tablero/CHANGELOG.md`.

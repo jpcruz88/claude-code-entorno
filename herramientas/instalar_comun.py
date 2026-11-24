@@ -91,6 +91,10 @@ class Instalador:
         self.sin_opencode_config = a.sin_opencode_config
         self.sin_nvim = a.sin_nvim
         self.home = Path.home()
+        documentos = self.home / "Documents"
+        self.perfiles_ps = [Path(x) for x in a.perfil_ps] if a.perfil_ps else [
+            documentos / "PowerShell" / "Microsoft.PowerShell_profile.ps1",
+            documentos / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"]
         self.claude_dir = self.home / ".claude"
         self.fallos = []
         self.pendientes = []
@@ -628,8 +632,8 @@ class Instalador:
         define las aliases si su variable de entorno está, así que no instalar
         una clave no rompe nada.
         """
-        if self.plataforma != "unix":
-            return
+        if self.plataforma == "windows":
+            return self.opencode_windows()
         self.paso("OpenCode como respaldo (opencode/, en tu .zshrc o .bashrc)")
         if self.sin_opencode:
             self.info("Se omite (--sin-opencode).")
@@ -663,6 +667,43 @@ class Instalador:
             "cl-or necesita OPENROUTER_API_KEY; las defines tú en esta computadora, "
             "nunca en el repo. Sin ellas las aliases no se crean. La clave también la "
             "usa /go-modelos dentro de Claude Code.")
+
+    def opencode_windows(self):
+        """cl-go y cl-or en Windows: opencode.ps1, cargado desde el perfil de PowerShell.
+
+        PowerShell no lee .zshrc ni .bashrc, así que la versión bash no sirve ahí.
+        Se agrega a cada perfil recibido (PowerShell 7 y Windows PowerShell 5.1).
+        """
+        self.paso("OpenCode como respaldo (opencode/opencode.ps1, en tu perfil de PowerShell)")
+        if self.sin_opencode:
+            self.info("Se omite (--sin-opencode).")
+            return
+        origen = REPO / "opencode" / "opencode.ps1"
+        destino = self.home / ".config" / "claude-code-entorno" / "opencode.ps1"
+        self.instalar_archivo(origen.read_bytes(), destino, origen.relative_to(REPO))
+        linea = ('if (Test-Path "$HOME\\.config\\claude-code-entorno\\opencode.ps1") '
+                 '{ . "$HOME\\.config\\claude-code-entorno\\opencode.ps1" }')
+        agregado = False
+        for perfil in self.perfiles_ps:
+            texto = perfil.read_text(encoding="utf-8-sig") if perfil.exists() else ""
+            if linea in texto:
+                self.info("al día: %s ya lo carga" % perfil)
+            elif self.simular:
+                self.info("[simular] agregaría a %s: %s" % (perfil, linea))
+            else:
+                perfil.parent.mkdir(parents=True, exist_ok=True)
+                separador = "\n" if texto and not texto.endswith("\n") else ""
+                with perfil.open("a", encoding="utf-8") as f:
+                    f.write("%s\n# OpenCode como respaldo de Claude Code (ver README)\n%s\n"
+                            % (separador, linea))
+                self.info("agregado a %s" % perfil)
+                agregado = True
+        if agregado:
+            self.pendientes.append("Abre una terminal de PowerShell nueva para usar cl-go y cl-or.")
+        self.pendientes.append(
+            "cl-go necesita OPENCODE_API_KEY y cl-or necesita OPENROUTER_API_KEY: "
+            "defínelas como variables de usuario de Windows, nunca en el repo. "
+            "Sin ellas los comandos no se crean.")
 
     # ---------------------------------------- 11. config global de OpenCode
     def opencode_config(self):
@@ -840,6 +881,9 @@ def main(argv=None):
                    help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
     p.add_argument("--sin-opencode", action="store_true",
                    help="no instala opencode/ (las aliases cl-go y cl-or de respaldo)")
+    p.add_argument("--perfil-ps", action="append", default=None,
+                   help="(Windows) perfil de PowerShell donde cargar cl-go y cl-or; "
+                        "se puede repetir. Por omisión, los de Documents")
     p.add_argument("--sin-opencode-config", action="store_true",
                    help="no trae opencode-config a ~/.config/opencode (router de modelos y gomodel)")
     p.add_argument("--sin-nvim", action="store_true",
