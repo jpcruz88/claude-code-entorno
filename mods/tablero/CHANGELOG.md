@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.3.0 (tablero)
+
+Todo el estado de la sesión en un solo sitio, sin datos repetidos. Absorbe tres mods y la statusline.
+
+- **Absorbe `barra-plan`, `aduana-panel` y `caveman-badge`**, que salen del repo. La herramienta de planes pasa a llamarse `mcp__tablero__plan_progress` (mismo contrato) y sus reglas van en `prompt.compose` como sección `tablero:planes`. Aduana se lee cada 5 s, como antes. El modo caveman sale en la cabecera (`Caveman full`) en vez de en la línea de estado.
+- **La statusline calla con el tablero activo** (`claude/statusline.sh`). Sigue escribiendo `~/.claude/jev/limites.json` y además deja en `~/.claude/tablero/linea/<sesión>.json` lo que solo ella recibe: nombre de la sesión, thinking, cache del prompt y PR.
+- **Sin duplicados.** La cabecera deja el modelo a Sesión. Sesión ya no repite `bypassPermissions`, `agentes N/N` ni `permisos N`. La rama y la hora solo salen fuera de herdr (`HERDR_ENV`).
+- **Textos.** Mayúscula inicial en etiquetas y estados. Cada estado lleva símbolo y palabra (`⠹ En curso`, `◆ Te espera`, `✓ Hecho`, `✗ Falló`). Una pregunta pendiente va debajo con `↳`. Nunca un `?` como símbolo.
+- **Nuevo en Sesión:**
+  - **Cache:** caliente o fría, cuenta atrás hasta que caduca (ámbar en el último minuto), aciertos y tokens leídos.
+  - **Costo:** `$/h trabajando`.
+  - **Hoy:** gasto del día frente a `presupuestoDiario`.
+  - **Cupos:** «Al ritmo actual…».
+  - **Proyecto:** con el nombre de la sesión.
+  - **Git:** cambios, commits sin subir, PR y CI.
+  - **Config:** cuántos CLAUDE.md, reglas, hooks y servidores MCP carga la sesión.
+- **Cabecera:** el estado del servicio de Claude (`status.claude.com`).
+- **Secciones nuevas.** Planes, Aduana (solo mientras corre), Gasto (lo que más contexto consume, plegada, tecla `g`) y Sesiones (las demás sesiones de la máquina y cuál te espera, plegada, tecla `s`).
+- **Con el panel sin colocar**, el resumen de hasta 8 filas va sobre el prompt.
+- **Reglas que se relajan:** el tablero ahora lanza `git` y `gh`, consulta la página de estado y escribe su archivo de sesión. Todo con topes de tiempo y apagable con la opción `extras`. Un fallo oculta su fila y nunca el panel.
+- Opciones nuevas: `extras` y `presupuestoDiario`.
+
 ## 1.2.0 (tablero)
 
 La vista por defecto es una lista limpia: secciones con título, sin cajas ni conectores.

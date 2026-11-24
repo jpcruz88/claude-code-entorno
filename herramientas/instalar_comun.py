@@ -36,6 +36,9 @@ import fusionar_settings  # noqa: E402
 ES_WINDOWS = os.name == "nt"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
 # Este repo es su propio marketplace de mods (.claude-plugin/marketplace.json).
+# Mods que ya no existen porque otro los absorbió: se desinstalan al actualizar (tablero 1.3.0 absorbió los tres
+# primeros; barra-plan sustituyó antes a plan-progress).
+MODS_RETIRADOS = ["barra-plan", "aduana-panel", "caveman-badge", "plan-progress"]
 NOMBRE_MARKETPLACE_MODS = "claude-code-entorno"
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
 MARCADOR_HERDR = "{{RUTA_HERDR}}"
@@ -304,6 +307,28 @@ class Instalador:
                            .read_text(encoding="utf-8"))
         return [p["name"] for p in datos.get("plugins", [])]
 
+    def instalados_de_mods(self, claude):
+        """Los ids de plugin instalados (plugin list --json); vacío si no se puede leer."""
+        codigo, salida = self.correr([claude, "plugin", "list", "--json"], timeout=120)
+        lista = self._json_de(salida) if codigo == 0 else None
+        return {p.get("id") for p in (lista or []) if isinstance(p, dict)}
+
+    def retirar_mods(self, claude, instalados):
+        """Desinstala los mods que dejaron de existir porque otro los absorbió (MODS_RETIRADOS)."""
+        for nombre in MODS_RETIRADOS:
+            pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
+            if pid not in instalados:
+                continue
+            if self.simular:
+                self.info("[simular] haría: claude plugin uninstall %s --scope user (ya forma parte de tablero)" % pid)
+                continue
+            self.info("$ claude plugin uninstall %s --scope user" % pid)
+            codigo, salida = self.correr([claude, "plugin", "uninstall", pid, "--scope", "user"])
+            if codigo == 0:
+                self.info("retirado: %s (ya forma parte de tablero)" % pid)
+            else:
+                self.fallo("retirar %s: %s" % (pid, resumen_error(salida)))
+
     def mods(self):
         self.paso("Mods (mods/, marketplace de este repo)")
         if self.sin_mods:
@@ -314,6 +339,9 @@ class Instalador:
             for nombre in nombres:
                 self.info("[simular] haría: claude plugin install %s@%s --scope user"
                           % (nombre, NOMBRE_MARKETPLACE_MODS))
+            claude = self.claude()
+            if claude:
+                self.retirar_mods(claude, self.instalados_de_mods(claude))
             return
         claude = self.claude()
         if not claude:
@@ -334,9 +362,8 @@ class Instalador:
         if codigo != 0:
             self.fallo("marketplace de mods: %s" % resumen_error(salida))
             return
-        codigo, salida = self.correr([claude, "plugin", "list", "--json"], timeout=120)
-        lista = self._json_de(salida) if codigo == 0 else None
-        instalados = {p.get("id") for p in (lista or []) if isinstance(p, dict)}
+        instalados = self.instalados_de_mods(claude)
+        self.retirar_mods(claude, instalados)
         for nombre in nombres:
             pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
             if pid in instalados:

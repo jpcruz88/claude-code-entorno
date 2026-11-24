@@ -1,7 +1,7 @@
 {
   "name": "tablero",
-  "version": "1.2.0",
-  "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
+  "version": "1.3.0",
+  "description": "Tablero: panel en español junto al chat con todo el estado de la sesión, sin duplicados: costo, cupos, cache, git y CI, planes, subagentes, decisiones de Jev, Aduana, gasto y otras sesiones. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
     "url": "https://github.com/scasella"
@@ -113,6 +113,18 @@
       "description": "Anima el panel: spinner, paquetes que recorren las líneas y bordes que respiran. Apagarla evita redibujar a cada momento",
       "type": "boolean",
       "default": true
+    },
+    "extras": {
+      "title": "Fuentes extra",
+      "description": "Fuentes de 1.3.0 encendidas, separadas por comas: cache (fila Cache, de la statusline), git (lanza git cada 10 s), ci (lanza gh pr checks cada minuto si hay PR), servicio (consulta status.claude.com cada 5 min), presupuesto (fila Hoy), gasto (sección Gasto) y sesiones (escribe y lee ~/.claude/tablero/sesiones). Omite una para apagarla",
+      "type": "string",
+      "default": "cache,git,ci,servicio,presupuesto,gasto,sesiones"
+    },
+    "presupuestoDiario": {
+      "title": "Presupuesto diario",
+      "description": "Tope de gasto del día en USD entre todas las sesiones, para la fila Hoy; 0 la oculta",
+      "type": "number",
+      "default": 0
     }
   }
 }
