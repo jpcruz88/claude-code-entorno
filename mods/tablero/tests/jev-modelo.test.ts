@@ -84,9 +84,9 @@ test('resumenJev da las tres filas en orden, con el total de todas las decisione
   const r = resumenJev([decision(), decision({ tipo: 'esfuerzo', claude: 'medium', opcion: 'high', aplicada: true }), sinRespuesta({ tipo: 'reintento' })])
   expect(r.total).toBe(3)
   expect(r.filas.map(f => f.tipo)).toEqual(['modelo', 'esfuerzo', 'reintento'])
-  expect(r.filas.map(f => f.etiqueta)).toEqual(['qué modelo', 'qué esfuerzo', 'reintentar o parar'])
-  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'qué modelo', confianza: 0.91, sharp: true, estado: 'cambio' })
-  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'reintentar o parar', confianza: null, sharp: false, estado: 'claude' })
+  expect(r.filas.map(f => f.etiqueta)).toEqual(['Qué modelo', 'Qué esfuerzo', 'Reintentar o parar'])
+  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'Qué modelo', confianza: 0.91, sharp: true, estado: 'cambio' })
+  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'Reintentar o parar', confianza: null, sharp: false, estado: 'claude' })
 })
 
 test('resumenJev sin decisiones deja filas vacías con null', () => {

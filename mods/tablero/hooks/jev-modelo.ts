@@ -31,9 +31,9 @@ export type FilaJev = { tipo: string; etiqueta: string; confianza: number | null
 const TIPOS: TipoFila[] = ['modelo', 'esfuerzo', 'reintento']
 const TIPOS_VALIDOS: TipoDecision[] = [...TIPOS, 'tope']
 const ETIQUETAS: Record<TipoFila, string> = {
-  modelo: 'qué modelo',
-  esfuerzo: 'qué esfuerzo',
-  reintento: 'reintentar o parar',
+  modelo: 'Qué modelo',
+  esfuerzo: 'Qué esfuerzo',
+  reintento: 'Reintentar o parar',
 }
 /** Cuántas respuestas recientes de un mismo tipo entran en la media de confianza. */
 const MEDIA_MAX = 20
@@ -125,10 +125,10 @@ const estadoDe = (d: DecisionJev): EstadoJev => {
 
 /** Qué pasó, dicho en palabras: lo que muestra cada fila de la caja JEV. */
 export const ESTADO_TEXTO: Record<EstadoJev, string> = {
-  cambio: 'lo cambió Jev',
-  igual: 'igual a Claude',
-  eligio: 'lo eligió Jev',
-  claude: 'decide Claude',
+  cambio: 'Lo cambió Jev',
+  igual: 'Igual a Claude',
+  eligio: 'Lo eligió Jev',
+  claude: 'Decide Claude',
 }
 
 const pct = (confianza: number) => `${Math.round(confianza * 100)}%`

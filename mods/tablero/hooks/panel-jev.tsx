@@ -57,7 +57,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
     <Box flexDirection="column" paddingX={1} width={w}>
       <Box justifyContent="space-between">
         <Text color={colores.faint} weight="semibold" wrap="truncate">
-          JEV · elige modelo y esfuerzo
+          Jev · Elige modelo y esfuerzo
         </Text>
         <Box flexShrink={0}>
           <Text color={colores.faint} weight="semibold">
@@ -65,7 +65,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
           </Text>
         </Box>
       </Box>
-      {resumen.total === 0 ? <Text color={colores.faint}>sin decisiones aún</Text> : resumen.filas.map(f => <Box key={f.tipo}>{fila(f)}</Box>)}
+      {resumen.total === 0 ? <Text color={colores.faint}>Sin decisiones aún</Text> : resumen.filas.map(f => <Box key={f.tipo}>{fila(f)}</Box>)}
       {resumen.ritmo ? (
         <Text color={{ verde: colores.gate, ambar: colores.amber, rojo: colores.warn }[resumen.ritmo.nivel]} wrap="truncate">
           {resumen.ritmo.texto}

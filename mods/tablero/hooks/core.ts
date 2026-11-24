@@ -316,7 +316,7 @@ export const momentLabel = (m: string) =>
 
 /** El estado de una tarjeta de agente como se lee en pantalla; el valor guardado sigue siendo el interno. */
 export const statusLabel = (s: string) =>
-  ({ running: 'en curso', done: 'listo', failed: 'fallido', stopped: 'detenido' } as Record<string, string>)[s] ?? s
+  ({ running: 'En curso', done: 'Hecho', failed: 'Falló', stopped: 'Detenido' } as Record<string, string>)[s] ?? s
 
 export const fmtUsd = (n: number) => (n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`)
 

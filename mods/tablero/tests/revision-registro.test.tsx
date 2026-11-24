@@ -84,7 +84,7 @@ test('una tarea que falló sin dar ningún paso dice «fallido», no «iniciando
   await $.turn.complete({ answer: '', durationMs: 5, isAborted: false, turnId: 'F1', reason: 'error', agentId: 'f1' } as never)
   const ui = await $.ui.mount({ ...pane(100) })
   expect(await ui.find({ text: /iniciando/ })).toBeUndefined()
-  expect(await ui.find({ text: /fallido/ })).toBeDefined()
+  expect(await ui.find({ text: /Falló/ })).toBeDefined()
   await ui.unmount()
 })
 

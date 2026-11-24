@@ -47,8 +47,8 @@ test('un subagente terminado sigue en Tablero', { options: { layout: 'diagrama' 
 })
 
 test('los tipos de Claude Code se nombran en español; uno desconocido queda igual', () => {
-  expect(nombreDeTipo('general-purpose')).toBe('propósito general')
-  expect(nombreDeTipo('Explore')).toBe('explorar')
+  expect(nombreDeTipo('general-purpose')).toBe('Propósito general')
+  expect(nombreDeTipo('Explore')).toBe('Explorar')
   expect(nombreDeTipo('mi-agente')).toBe('mi-agente')
 })
 
