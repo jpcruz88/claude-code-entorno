@@ -15,7 +15,7 @@ import { URL_SERVICIO, leerServicio } from './servicio'
 import { contarConfig, contarHooks, servidoresMcp, soloImporta } from './config-cargada'
 import { consejoGasto, topGasto } from './gasto'
 import { abiertas, estadoSesion, leerSesiones } from './sesiones'
-import { anotar, destinoHerdr, envioDe, filasConversaciones, leerConversaciones, resumenConversaciones, type Envio, type Mensaje } from './conversaciones'
+import { anotar, destinoHerdr, envioDe, filasConversaciones, leerConversaciones, resumenConversaciones, type Envio, type Mensaje, type Turno } from './conversaciones'
 import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
@@ -156,16 +156,23 @@ const otras = atom({ plugin: 'tablero', key: 'otras' } as const, [] as RegistroS
 const gasto = atom({ plugin: 'tablero', key: 'gasto' } as const, { filas: [], consejo: null } as { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null })
 const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true, conversaciones: true })
 // Quién le habla a quién (conversaciones.ts): lo que envió esta sesión, lo de todas y su último fin de turno.
-const DEFAULT_CONV = { mias: [] as Mensaje[], todas: [] as Mensaje[], turnoFin: null as number | null }
+const DEFAULT_CONV = { todas: [] as Mensaje[], turnoFin: null as number | null, turnoInicio: null as number | null }
+// Lo que envió esta sesión vive en memoria del módulo y se anota en fila: cada evento lee su propia copia del
+// estado, así que dos envíos a la vez se pisarían si la lista saliera de ahí.
+let misMensajes: Mensaje[] = []
+let colaConversaciones: Promise<unknown> = Promise.resolve()
 const conv = atom({ plugin: 'tablero', key: 'conversaciones' } as const, DEFAULT_CONV)
 const carpetaConversaciones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/conversaciones`
 /** Anota (o cambia) un mensaje de esta sesión y reescribe su archivo para las demás. */
-const guardarMensaje = async ($: EngineInterface, m: Mensaje) => {
-  const ahora = await $.clock.now()
-  const c = normalize(DEFAULT_CONV, await read($, conv))
-  const mias = anotar(c.mias, m, ahora)
-  await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), mias }))
-  await $.fs.write(`${await carpetaConversaciones($)}/${m.de}.json`, JSON.stringify(mias)).catch(() => undefined)
+const guardarMensaje = ($: EngineInterface, m: Mensaje) => {
+  const paso = colaConversaciones.then(async () => {
+    const ahora = await $.clock.now()
+    misMensajes = anotar(misMensajes, m, ahora)
+    const mias = misMensajes
+    await $.fs.write(`${await carpetaConversaciones($)}/${m.de}.json`, JSON.stringify(mias)).catch(() => undefined)
+  })
+  colaConversaciones = paso.catch(() => undefined)
+  return paso
 }
 /** A qué sesión va un envío: herdr lo sabe por `agent get` (como mucho 2 s); SendMessage, por el registro de Sesiones. */
 const resolverDestino = async ($: EngineInterface, canal: 'herdr' | 'claude', destino: string): Promise<{ id: string | null; nombre: string }> => {
@@ -185,10 +192,12 @@ const anotarEnvio = async ($: EngineInterface, envio: Envio, id: string): Promis
   const destino = await resolverDestino($, envio.canal, envio.destino)
   if (destino.id === propia) return null
   if (envio.soloEspera) {
-    const previos = normalize(DEFAULT_CONV, await read($, conv)).mias.filter(m => (destino.id !== null && m.a === destino.id) || m.aNombre === destino.nombre || m.aNombre === envio.destino)
+    await colaConversaciones
+    const previos = misMensajes.filter(m => (destino.id !== null && m.a === destino.id) || m.aNombre === destino.nombre || m.aNombre === envio.destino)
     const ultimo = previos[previos.length - 1]
     if (!ultimo) return null
-    const m = { ...ultimo, espera: true, esperaFin: null }
+    // La espera cuenta desde ahora: una respuesta anterior no la cierra.
+    const m = { ...ultimo, espera: true, esperaFin: null, enviado: ahora }
     await guardarMensaje($, m)
     return m
   }
@@ -258,6 +267,7 @@ const escribirRegistro = async ($: EngineInterface) => {
     dia: x.dia,
     actualizado: ahora,
     ...(c.turnoFin !== null ? { turnoFin: c.turnoFin } : {}),
+    ...(c.turnoInicio !== null ? { turnoInicio: c.turnoInicio } : {}),
   }
   await $.fs.write(`${await carpetaSesiones($)}/${id}.json`, JSON.stringify(registro))
 }
@@ -791,6 +801,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return next(e)
     const [now, cost] = await Promise.all([$.clock.now(), costNow($)])
     await update($, turn, () => ({ ...DEFAULT_TURN, startedAt: now, costAtStart: cost }))
+    await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), turnoInicio: now }))
     await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: true }))
     // A background architect's report reaches the main loop as the text opening this turn. The
     // SubagentHandback tool call (in tool.call) normally carries it first; this is the fallback.
@@ -978,11 +989,16 @@ export const register: Register = (on, options) => {
       return ran
     }
     if (!anotado?.espera) return correr()
-    // Con --wait (o agent wait) la llamada dura lo que tarda la respuesta: al terminar, la espera se cierra.
+    // Con --wait (o agent wait) la llamada dura lo que tarda la respuesta: si acaba bien, la espera se cierra.
+    // Si falla (tiempo agotado, rechazo, error) no hay respuesta: deja de esperar en la llamada y cuenta el turno.
+    let bien = false
     try {
-      return await correr()
+      const r = await correr()
+      bien = r?.deny === undefined && r?.isError !== true
+      return r
     } finally {
-      await guardarMensaje($, { ...anotado, esperaFin: await $.clock.now() }).catch(() => undefined)
+      const fin = await $.clock.now()
+      await guardarMensaje($, bien ? { ...anotado, esperaFin: fin } : { ...anotado, espera: false }).catch(() => undefined)
     }
   })
 
@@ -1598,9 +1614,9 @@ export const register: Register = (on, options) => {
     }
 
     // Conversaciones: quién le habla a quién y quién espera respuesta (conversaciones.ts).
-    const turnosFin = new Map<string, number>(otrasNow.filter(o => o.turnoFin !== undefined).map(o => [o.id, o.turnoFin!]))
-    if (convNow.turnoFin !== null && idPropio) turnosFin.set(idPropio, convNow.turnoFin)
-    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnosFin.get(id), now, id => otrasNow.find(o => o.id === id)?.nombre ?? undefined) : []
+    const turnos = new Map<string, Turno>(otrasNow.map(o => [o.id, { inicio: o.turnoInicio, fin: o.turnoFin }]))
+    if (idPropio) turnos.set(idPropio, { inicio: convNow.turnoInicio ?? undefined, fin: convNow.turnoFin ?? undefined })
+    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnos.get(id), now, id => otrasNow.find(o => o.id === id)?.nombre ?? undefined) : []
     const conversacionesPanel = (w: number) => {
       if (filasConv.length === 0) return null
       const abierto = !plegadoNow.conversaciones

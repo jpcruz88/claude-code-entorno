@@ -21,7 +21,8 @@ const valido = (v: unknown): v is RegistroSesion => {
     (r.estado === 'trabajando' || r.estado === 'espera' || r.estado === 'inactiva') &&
     num('desde') && num('costo') && num('base') && num('actualizado') &&
     typeof r.dia === 'string' &&
-    (r.turnoFin === undefined || num('turnoFin'))
+    (r.turnoFin === undefined || num('turnoFin')) &&
+    (r.turnoInicio === undefined || num('turnoInicio'))
   )
 }
 

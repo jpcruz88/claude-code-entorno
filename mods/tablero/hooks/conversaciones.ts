@@ -1,5 +1,6 @@
 // Las conversaciones entre sesiones: qué envía esta sesión a otra (SendMessage o herdr) y quién espera respuesta.
 // Solo cálculo; el registro en disco y el dibujo están en register.tsx.
+import { redact } from './core'
 
 /** Un envío a otra sesión reconocido en una llamada a herramienta. */
 export type Envio = {
@@ -17,7 +18,7 @@ const MAX_RESUMEN = 60
 const OPERADORES = new Set(['&&', '||', ';', '|'])
 
 const resumir = (s: string): string => {
-  const linea = s.replace(/\s+/g, ' ').trim()
+  const linea = redact(s).replace(/\s+/g, ' ').trim()
   return [...linea].length > MAX_RESUMEN ? `${[...linea].slice(0, MAX_RESUMEN - 1).join('')}…` : linea
 }
 
@@ -59,13 +60,18 @@ const ordenes = (comando: string): string[][] => {
   return res.filter(o => o.length > 0)
 }
 
-/** Las palabras que no son flags: quita `--x` y su valor cuando es un número. */
+// Los flags de herdr que pueden ir en un envío: los demás `--algo` son texto del mensaje.
+const FLAGS_SIN_VALOR = new Set(['--wait', '--ansi'])
+const FLAGS_CON_VALOR = new Set(['--timeout', '--until', '--lines', '--source', '--format'])
+
+/** Las palabras que no son flags conocidos de herdr (ni sus valores). */
 const sinFlags = (palabras: readonly string[]): string[] => {
   const res: string[] = []
   for (let i = 0; i < palabras.length; i++) {
     const p = palabras[i]!
-    if (p.startsWith('--')) {
-      if (/^\d+$/.test(palabras[i + 1] ?? '')) i++
+    if (FLAGS_SIN_VALOR.has(p)) continue
+    if (FLAGS_CON_VALOR.has(p)) {
+      i++
       continue
     }
     res.push(p)
@@ -84,7 +90,8 @@ const envioHerdr = (orden: readonly string[]): Envio | null => {
     return { canal: 'herdr', destino, resumen: resumir(args.slice(1).join(' ')), espera: conWait, soloEspera: false }
   }
   if (grupo === 'agent' && accion === 'send-keys' && args.length >= 2) {
-    return { canal: 'herdr', destino, resumen: resumir(args.slice(1).join(' ')), espera: false, soloEspera: false }
+    // Lo tecleado puede ser una contraseña: no se guarda.
+    return { canal: 'herdr', destino, resumen: '', espera: false, soloEspera: false }
   }
   if (grupo === 'agent' && accion === 'wait') {
     return { canal: 'herdr', destino, resumen: '', espera: true, soloEspera: true }
@@ -133,6 +140,9 @@ export type Mensaje = {
 
 export type EstadoMensaje = 'espera' | 'respondio' | 'enviado'
 
+/** Cuándo empezó y terminó el último turno de una sesión (registro de Sesiones). */
+export type Turno = { inicio?: number; fin?: number }
+
 /** Una fila de la sección: nombres ya listos para leer («esta» es la sesión propia). */
 export type FilaConversacion = {
   de: string
@@ -178,12 +188,19 @@ export const anotar = (lista: readonly Mensaje[], m: Mensaje, ahoraMs: number): 
     .sort((x, y) => x.enviado - y.enviado)
     .slice(-MAX_MENSAJES)
 
-/** Se espera respuesta mientras el destino no termine un turno después del envío ni acabe la llamada que esperaba,
+/** El destino respondió si terminó un turno que empezó después del envío. Un turno que ya corría al enviar no
+ *  cuenta. Un registro viejo sin inicio de turno se juzga solo por el fin. */
+const respondio = (t: Turno | undefined, enviado: number): boolean => {
+  if (t?.fin === undefined || t.fin <= enviado) return false
+  return t.inicio === undefined || (t.inicio > enviado && t.fin >= t.inicio)
+}
+
+/** Se espera respuesta mientras el destino no responda (ver `respondio`) ni acabe bien la llamada que esperaba,
  *  y como mucho 30 min. Sin destino conocido no se dice nada de la respuesta. */
-export const estadoMensaje = (m: Mensaje, turnoFinDe: (id: string) => number | undefined, ahoraMs: number): EstadoMensaje => {
+export const estadoMensaje = (m: Mensaje, turnoDe: (id: string) => Turno | undefined, ahoraMs: number): EstadoMensaje => {
   if (m.a === null) return 'enviado'
   if (m.esperaFin !== null) return 'respondio'
-  if ((turnoFinDe(m.a) ?? -Infinity) > m.enviado) return 'respondio'
+  if (respondio(turnoDe(m.a), m.enviado)) return 'respondio'
   if (ahoraMs - m.enviado > VENTANA_MS) return 'enviado'
   return 'espera'
 }
@@ -192,13 +209,13 @@ export const estadoMensaje = (m: Mensaje, turnoFinDe: (id: string) => number | u
 export const filasConversaciones = (
   todos: readonly Mensaje[],
   propia: string,
-  turnoFinDe: (id: string) => number | undefined,
+  turnoDe: (id: string) => Turno | undefined,
   ahoraMs: number,
   /** El nombre actual de una sesión (registro de Sesiones), que gana al que tenía al enviar. */
   nombreDe: (id: string) => string | undefined = () => undefined,
 ): FilaConversacion[] =>
   todos
-    .map(m => ({ m, estado: estadoMensaje(m, turnoFinDe, ahoraMs) }))
+    .map(m => ({ m, estado: estadoMensaje(m, turnoDe, ahoraMs) }))
     .filter(({ m, estado }) => estado === 'espera' || ahoraMs - m.enviado <= VENTANA_MS)
     .map(({ m, estado }) => {
       const teToca = m.a === propia && estado === 'espera'

@@ -10,6 +10,8 @@ type Opciones = {
   herdrGet?: string
   /** Las demás sesiones en el registro de Sesiones. */
   sesiones?: Record<string, unknown>[]
+  /** La llamada a herramienta falla. */
+  llamadaFalla?: boolean
 }
 
 const getDe = (sesion: string, titulo: string) =>
@@ -55,8 +57,9 @@ const motor = (on: On, o: Opciones = {}) => {
   on('http.fetch', () => {
     throw new Error('sin red')
   })
-  on('tool.call', () => ({ result: {}, text: 'ok' }))
+  on('tool.call', () => (o.llamadaFalla ? { result: {}, text: 'timeout', isError: true } : { result: {}, text: 'ok' }))
   on('turn.complete', () => ({ text: '' }) as never)
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   return { reloj, escritos, llamadasHerdr }
 }
 
@@ -140,4 +143,41 @@ test('al terminar un turno del lead, el registro de Sesiones lleva turnoFin', as
   await reloj.advance(10_000)
   const registro = JSON.parse(escritos['/casa/.claude/tablero/sesiones/abc.json'] ?? '{}') as { turnoFin?: number }
   expect(registro.turnoFin).toBe(fin)
+})
+
+test('un --wait que falla no cuenta como respuesta', async ($, on) => {
+  const { escritos } = motor(on, { herdrGet: getDe('rev', 'Revisor'), llamadaFalla: true })
+  await iniciar($)
+  await $.tool.call({ tool: 'Bash', command: 'herdr agent prompt reviewer hola --wait', tool_use_id: 'b1' } as never)
+  expect(mensajes(escritos)[0]).toMatchObject({ a: 'rev', esperaFin: null, espera: false })
+})
+
+test('dos envíos a la vez quedan anotados los dos', async ($, on) => {
+  const { escritos } = motor(on, { herdrGet: getDe('rev', 'Revisor') })
+  await iniciar($)
+  await Promise.all([
+    $.tool.call({ tool: 'Bash', command: 'herdr agent prompt reviewer uno', tool_use_id: 'b1' } as never),
+    $.tool.call({ tool: 'Bash', command: 'herdr agent prompt reviewer dos', tool_use_id: 'b2' } as never),
+  ])
+  expect(mensajes(escritos).map(m => m.id).sort()).toEqual(['b1', 'b2'])
+})
+
+test('agent wait reabre la espera desde ahora, no desde el envío viejo', async ($, on) => {
+  const { reloj, escritos } = motor(on, { herdrGet: getDe('rev', 'Revisor') })
+  await iniciar($)
+  await $.tool.call({ tool: 'Bash', command: 'herdr agent prompt reviewer hola', tool_use_id: 'b1' } as never)
+  await reloj.advance(60_000)
+  const antes = reloj.now()
+  await $.tool.call({ tool: 'Bash', command: 'herdr agent wait reviewer', tool_use_id: 'b2' } as never)
+  expect(mensajes(escritos)[0]!.enviado as number).toBeGreaterThanOrEqual(antes)
+})
+
+test('al empezar un turno del lead, el registro de Sesiones lleva turnoInicio', async ($, on) => {
+  const { reloj, escritos } = motor(on)
+  await iniciar($)
+  await $.turn.start({ text: 'hola', turnId: 'T1' } as never)
+  const inicio = reloj.now()
+  await reloj.advance(10_000)
+  const registro = JSON.parse(escritos['/casa/.claude/tablero/sesiones/abc.json'] ?? '{}') as { turnoInicio?: number }
+  expect(registro.turnoInicio).toBe(inicio)
 })
