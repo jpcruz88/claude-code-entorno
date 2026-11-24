@@ -4,7 +4,8 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Plan, Receipt, Roster, Turn, Usage, View } from '../types'
 import { CAIDA_MS, aplicar, resumen as resumenPlan } from './planes'
 import { siguienteModo, type Modo } from './caveman'
-import type { EstadoAduana } from '../types'
+import { leerLinea } from './linea-sesion'
+import type { EstadoAduana, Extra } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -135,6 +136,24 @@ let relojAduana: { cancel: () => void } | null = null
 let aduanaAvisada = 0
 // El modo caveman (antes caveman-badge): lo cambian «/caveman lite|full|ultra», «stop caveman» y «modo normal».
 const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as Modo)
+// Lo que solo tiene la statusline, el tiempo de trabajo del lead, la cache leída y el arranque del día.
+const DEFAULT_EXTRA: Extra = { linea: null, trabajoMs: 0, cacheLeida: 0, dia: '', base: 0 }
+const extra = atom({ plugin: 'tablero', key: 'extra' } as const, DEFAULT_EXTRA)
+const diaLocal = (ms: number) => {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** Lee el archivo de la statusline de esta sesión y apunta el costo con que empezó el día. */
+const refrescarExtra = async ($: EngineInterface) => {
+  const [casa, id, ahora, costo] = await Promise.all([$.env.get('HOME'), $.session.id().catch(() => ''), $.clock.now(), costNow($)])
+  const texto = casa && id && /^[A-Za-z0-9_-]+$/.test(id) ? await $.fs.read(`${casa}/.claude/tablero/linea/${id}.json`).catch(() => null) : null
+  const linea = typeof texto === 'string' ? leerLinea(texto, ahora / 1000) : null
+  const hoy = diaLocal(ahora)
+  await update($, extra, x => {
+    const v = normalize(DEFAULT_EXTRA, x)
+    return { ...v, linea, ...(v.dia === hoy ? {} : { dia: hoy, base: costo ?? 0 }) }
+  })
+}
 
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
 const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
@@ -439,6 +458,7 @@ export const register: Register = (on, options) => {
     }).catch(() => undefined)
     if (relojAduana === null) {
       relojAduana = $.clock.every(5000, async () => {
+        await refrescarExtra($).catch(() => undefined)
         try {
           const casa = await $.env.get('HOME')
           const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
@@ -590,6 +610,8 @@ export const register: Register = (on, options) => {
       const result = await s.result
       const speed = result.usage ? stepSpeed(sentAt, firstAt) : null
       if (speed) await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), speed }))
+      const leidos = result.usage?.cache_read_input_tokens ?? 0
+      if (leidos > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), cacheLeida: normalize(DEFAULT_EXTRA, x).cacheLeida + leidos }))
       return result
     }
     const id = e.agentId
@@ -810,6 +832,7 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+      if (e.durationMs > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), trabajoMs: normalize(DEFAULT_EXTRA, x).trabajoMs + e.durationMs }))
       // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
       await update($, gate, g => retireAsks(normalizeGate(g), true))
       // Una consulta al asesor que sigue abierta al cerrar el turno del lead ya no tendrá respuesta. Si el turno

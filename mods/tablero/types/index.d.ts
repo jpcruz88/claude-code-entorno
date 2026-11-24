@@ -164,6 +164,40 @@ export type EstadoAduana = {
   actualizado: number
 }
 
+/** Lo que cada tablero deja en ~/.claude/tablero/sesiones/<id>.json para las demás sesiones y el presupuesto. */
+export type RegistroSesion = {
+  id: string
+  nombre: string | null
+  carpeta: string
+  estado: 'trabajando' | 'espera' | 'inactiva'
+  /** Desde cuándo está en ese estado (ms epoch). */
+  desde: number
+  costo: number
+  /** El costo que tenía la sesión al empezar el día `dia`. */
+  base: number
+  /** El día local (AAAA-MM-DD) al que se refiere `base`. */
+  dia: string
+  actualizado: number
+}
+
+export type Extra = {
+  linea: {
+    actualizado: number
+    session_id: string
+    session_name: string | null
+    thinking: boolean | null
+    prompt_cache: { warm: boolean; ttl: string | null; expires_at: number | null; hit_ratio: number | null } | null
+    pr: { number: number; url: string | null; review_state: string | null } | null
+  } | null
+  /** Milisegundos de turnos del lead terminados. */
+  trabajoMs: number
+  /** Tokens que las respuestas del lead leyeron de la cache. */
+  cacheLeida: number
+  /** El día local (AAAA-MM-DD) y el costo de la sesión al empezarlo, para el presupuesto. */
+  dia: string
+  base: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -188,6 +222,8 @@ declare module 'claude-code' {
       planes: Plan[]
       /** Las pruebas largas de Aduana en curso; null sin archivo o con uno ilegible. */
       aduana: EstadoAduana | null
+      /** Lo que deja la statusline para esta sesión (linea-sesion.ts), el trabajo del lead y la cache leída. */
+      extra: Extra
       /** El modo caveman que dicen los prompts de la sesión. */
       caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
