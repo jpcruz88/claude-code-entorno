@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero unificado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Colores medidos en tu captura del 24-11-2026 10:48: el tema real de tu terminal. */
+  :root {
+    --pagina: #15161b; --chat: #1e2027; --panel: #262626; --borde: #34343f;
+    --texto: #dcd7bb; --dim: #72716a; --faint: #55546d; --pista: #323237;
+    --main: #d17e99; --verde: #98bb6c; --ambar: #e6c384; --pista-ambar: #52473f;
+    --rojo: #ff5d61; --azul: #7eb4cb; --morado: #947fb8; --cian: #7fb4ca; --nota: #a9a79a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--pagina); color: var(--texto); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1680px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; font-weight: 600; }
+  h2 { font-size: 18px; margin: 40px 0 10px; font-weight: 600; }
+  p, li { color: var(--nota); max-width: 84ch; }
+  .sub { color: var(--dim); margin: 0 0 18px; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; color: var(--texto); }
+
+  .mandos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+  button {
+    font: 600 14px/1 system-ui, sans-serif; color: var(--texto); background: #23242c; border: 1px solid var(--borde);
+    border-radius: 6px; padding: 10px 14px; min-height: 40px; cursor: pointer;
+  }
+  button:hover { border-color: var(--dim); }
+  button:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: #2f3340; border-color: var(--azul); }
+  .reloj { font: 13px "JetBrains Mono", monospace; color: var(--dim); margin-left: 6px; }
+  .guion { font-size: 14px; color: var(--ambar); min-height: 22px; margin: 0 0 10px; }
+
+  /* La pantalla: chat a la izquierda y el tablero acoplado a la derecha (108 columnas, como en tu captura). */
+  .pantalla { border: 1px solid var(--borde); border-radius: 8px; overflow-x: auto; background: var(--chat); }
+  .marco { display: flex; min-width: max-content; }
+  .term { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 12.5px; line-height: 1.42; white-space: pre; padding: 10px 14px; }
+  .chat { background: var(--chat); width: 70ch; display: flex; flex-direction: column; justify-content: flex-end; min-height: 46em; }
+  .tablero { background: var(--panel); border-left: 1px solid #303038; }
+  .cerrado .chat { width: 112ch; }
+  .cerrado .tablero { display: none; }
+  .tarjeta { cursor: pointer; }
+  .t{color:var(--texto)} .d{color:var(--dim)} .f{color:var(--faint)} .m{color:var(--main)} .g{color:var(--verde)}
+  .a{color:var(--ambar)} .r{color:var(--rojo)} .b{color:var(--azul)} .p{color:var(--morado)} .k{color:var(--pista)}
+  .ka{color:var(--pista-ambar)} .n{font-weight:600} .nb{font-weight:600;color:var(--texto)}
+  @media (prefers-reduced-motion: reduce) { .guion { transition: none; } }
+
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  @media (max-width: 1000px) { .dos { grid-template-columns: 1fr; } }
+  ul { padding-left: 20px; margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; } td { color: var(--nota); } td:first-child { color: var(--texto); }
+  .tabla { overflow-x: auto; }
+  .muestra { font-family: "JetBrains Mono", monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tablero unificado · versión 3</h1>
+  <p class="sub">Simulación en vivo de una tarea real: Claude arregla un fallo, lanza 3 subagentes, Jev elige sus modelos, pide un permiso y al final te hace una pregunta.
+  Anchos, caracteres, formatos y ritmos de animación copiados del código del tablero; colores medidos en tu captura.</p>
+
+  <div class="mandos">
+    <button id="bPlay" aria-pressed="true">⏸ Pausa</button>
+    <button id="bReset">↺ Reiniciar</button>
+    <button id="bAbierto" aria-pressed="true">Panel abierto</button>
+    <button id="bCerrado" aria-pressed="false">Panel cerrado</button>
+    <span class="reloj" id="t"></span>
+  </div>
+  <div class="guion" id="guion" aria-live="polite"></div>
+
+  <div class="pantalla" id="pantalla">
+    <div class="marco">
+      <div class="term chat"><div id="chat"></div></div>
+      <div class="term tablero" id="tablero"></div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--dim)">Haz clic en una tarjeta de agente (o pulsa 1, 2 o 3) para abrirla y ver sus llamadas, como en el tablero de hoy. Pulsa <b>g</b> para abrir o plegar «Gasto» y <b>s</b> para «Sesiones».</p>
+
+  <div class="dos">
+    <div>
+      <h2>Nuevo en la versión 3 (ideas de GitHub)</h2>
+      <ul>
+        <li><b>Cache</b>: caliente o fría, cuenta atrás hasta que caduca (en ámbar en el último minuto), porcentaje de aciertos y cuánto ahorró. <i>ccstatusline, claude-dashboard, token-dashboard (MIT).</i></li>
+        <li><b>Costo por hora trabajando</b>: solo cuenta el tiempo en que Claude trabaja. <i>ccstatusline.</i></li>
+        <li><b>Presupuesto del día</b>: barra con el gasto de hoy frente a un tope que fijas tú. <i>claude-dashboard.</i></li>
+        <li><b>Al ritmo actual…</b>: si el cupo se agota antes del reinicio y a qué hora. <i>ccstatusline, claude-dashboard.</i></li>
+        <li><b>Git</b>: archivos y líneas cambiadas, commits sin subir, PR y estado del CI. <i>claude-pace, ccstatusline.</i></li>
+        <li><b>Config</b>: cuántos CLAUDE.md, reglas, hooks y MCP carga la sesión (números reales de hoy). <i>claude-dashboard.</i></li>
+        <li><b>Servicio de Claude</b> en la cabecera: ✓ o ◆ si hay una incidencia. <i>ccstatusline.</i></li>
+        <li><b>Gasto</b> (plegada): lo que más contexto consume, con un consejo. <i>token-dashboard.</i></li>
+        <li><b>Sesiones</b> (plegada): tus otras sesiones de esta Mac y cuál te espera. <i>recon, agentwatch.</i></li>
+      </ul>
+      <p><b>Lo que cambia en las reglas del tablero.</b> Hoy no usa red, no lanza procesos y no escribe archivos. Para Git y CI lanzaría <code>git</code> y <code>gh</code>. Para el servicio de Claude consultaría la página de estado. Para el presupuesto guardaría el gasto del día en un archivo propio. Para Sesiones leería las transcripciones de las demás sesiones. Todo esto iría en segundo plano, con caché y un tope de tiempo, y cada parte se podría apagar en la config.</p>
+      <p style="font-size:13px">Los nombres de Sesiones salen de la barra lateral de herdr de tu captura. Los números de Gasto, Git y presupuesto son del guion.</p>
+    </div>
+    <div>
+      <h2>Qué cambió respecto a la versión 1</h2>
+      <ul>
+        <li><b>Subagentes en marcha</b>: sección «Agentes» con una tarjeta por agente. Cada una lleva el tipo, el modelo, lo que hizo Jev, el contexto, la salida, los pasos, la barra de trabajo y el reloj.</li>
+        <li><b>Mayúscula inicial</b> en todo: Modelo, Contexto, Costo, Cupo 5 h, Trabajando, En curso…</li>
+        <li><b>Sin «?» sueltos</b>: cada estado lleva su palabra al lado del símbolo: <span class="muestra"><span class="m">⠹ En curso</span> · <span class="a">◆ Te espera</span> · <span class="g">✓ Hecho</span> · <span class="r">✗ Falló</span></span>.</li>
+        <li><b>Animaciones</b>: las que ya tiene el tablero, más dos nuevas (abajo).</li>
+      </ul>
+      <h2>Animaciones</h2>
+      <ul>
+        <li><b>Giro braille</b> <span class="muestra m">⠋⠙⠹⠸⠼⠴⠦⠧</span>: un cuadro cada 250 ms en lo que está en marcha. Cada agente va desfasado para que no giren al unísono. <i>Ya existe.</i></li>
+        <li><b>Barra que va y viene</b>: un bloque de 3 celdas que recorre la tarjeta mientras el agente trabaja. <i>Ya existe.</i></li>
+        <li><b>Relojes</b> que cuentan cada segundo (<code>m:ss</code>). <i>Ya existe.</i></li>
+        <li><b>Redibujo</b> cada 120 ms con trabajo y cada 1 s en reposo; en reposo no se mueve nada. <i>Ya existe.</i></li>
+        <li><b>Barra de plan que avanza</b> paso a paso y <b>tira de permisos que crece</b> con cada revisión. <i>Nuevo.</i></li>
+        <li>Sin parpadeos ni colores que laten: el movimiento solo indica que algo trabaja.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Qué se quita (nada repetido)</h2>
+      <div class="tabla"><table>
+        <tr><th>Hoy</th><th>Pasa a</th></tr>
+        <tr><td>Franja de <code>barra-plan</code> sobre el prompt</td><td>Sección Planes</td></tr>
+        <tr><td>Franja de <code>aduana-panel</code></td><td>Sección Aduana (solo mientras corren pruebas)</td></tr>
+        <tr><td>Línea <code>▲ caveman-badge: caveman: full</code></td><td>Cabecera: <code>Caveman full</code></td></tr>
+        <tr><td>Statusline de 2 filas (modelo, rama, ctx, costo, cupos, hora)</td><td>Sesión. La statusline sigue funcionando para Jev, pero no muestra nada.</td></tr>
+        <tr><td>Modelo en la cabecera y en Sesión</td><td>Solo en Sesión</td></tr>
+        <tr><td><code>agentes 0/0 · permisos 6</code> en Sesión</td><td>Solo en sus secciones</td></tr>
+        <tr><td><code>bypassPermissions</code> en Sesión</td><td>Solo en la línea de Claude Code (no es nuestra)</td></tr>
+        <tr><td>Rama y hora (3 veces)</td><td>Solo arriba en herdr; fuera de herdr, en la cabecera</td></tr>
+      </table></div>
+      <h2>Por verificar al implementar</h2>
+      <ul>
+        <li>Si el mod puede leer thinking, el nombre de la sesión y el porcentaje de cache (hoy solo los recibe la statusline). Si no puede, esos datos no salen.</li>
+        <li>Que una statusline que no imprime nada deje la fila limpia.</li>
+        <li><code>mcp__barra-plan__plan_progress</code> pasa a llamarse <code>mcp__tablero__plan_progress</code>, y hay que cambiar la regla que la nombra.</li>
+      </ul>
+      <p style="font-size:13px">Aduana sale con datos de ejemplo porque ahora no corre ninguna prueba. El formato es el de <code>aduana-panel/hooks/resumen.ts</code>.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  const W = 108, CICLO = 40
+  const GIRO = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧']
+  const PASO = 250
+
+  // ---------- utilidades de texto (una celda = un carácter)
+  const largo = segs => segs.reduce((n, s) => n + s[0].length, 0)
+  const pad = (s, n) => { s = String(s); return s.length >= n ? s.slice(0, n - 1) + '…' : s + ' '.repeat(n - s.length) }
+  const padL = (s, n) => { s = String(s); return ' '.repeat(Math.max(0, n - s.length)) + s }
+  const fila = (izq, der = [], w = W) => [...izq, [' '.repeat(Math.max(1, w - largo(izq) - largo(der))), ''], ...der]
+  const barra = (frac, n, cls, pista = 'k') => { const f = Math.round(Math.max(0, Math.min(1, frac)) * n); return [['█'.repeat(f), cls], ['░'.repeat(n - f), pista]] }
+  const giro = (ahora, desfase = 0) => GIRO[(Math.floor(ahora / PASO) + desfase) % GIRO.length]
+  const ida = (ahora, n) => { const b = 3, r = n - b, c = 2 * r, t = Math.floor(ahora / PASO) % c, p = t <= r ? t : c - t; return '░'.repeat(p) + '█'.repeat(b) + '░'.repeat(n - b - p) }
+  const reloj = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  const k = n => n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(Math.round(n))
+  const tinta = pct => pct >= 85 ? 'r' : pct >= 65 ? 'a' : 'm'
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  const html = lineas => lineas.map(l => l.map(([t, c]) => c ? `<span class="${c}">${esc(t)}</span>` : esc(t)).join('')).join('\n')
+  const entre = (x, a, b) => Math.max(0, Math.min(1, (x - a) / (b - a)))
+
+  // ---------- el guion (segundos dentro del ciclo de 40 s)
+  const AGENTES = [
+    { n: 1, titulo: 'Explorar el módulo de login', tipo: 'Explorar', modelo: 'Haiku 4.5', jev: 'Jev ↓ haiku', ini: 3, fin: 13, estado: 'hecho', ctx: 18400, sal: 2100, pasos: 9,
+      llamadas: ['Grep "login" en src/', 'Read src/auth/login.ts', 'Read src/auth/sesion.ts', 'Glob tests/auth/**', 'Read tests/auth/login.test.ts'] },
+    { n: 2, titulo: 'Escribir la prueba que falla', tipo: 'Propósito general', modelo: 'Sonnet 5.5', jev: 'Jev = sonnet', ini: 4, fin: 25, estado: 'hecho', ctx: 31200, sal: 5400, pasos: 14,
+      llamadas: ['Read tests/auth/login.test.ts', 'Edit tests/auth/login.test.ts', 'Bash npm test -- login', 'Edit src/auth/login.ts', 'Bash npm test'] },
+    { n: 3, titulo: 'Revisar riesgo de seguridad', tipo: 'Propósito general', modelo: 'Opus 5.5', jev: 'Jev ↑ opus', ini: 5, fin: 20, estado: 'falló', ctx: 52000, sal: 8800, pasos: 11,
+      llamadas: ['Read src/auth/login.ts', 'Grep "bcrypt"', 'Read src/auth/hash.ts', '✗ Bash npm audit: sin red'] },
+  ]
+  const PERMISOS = [ [1, 'ok'], [3.5, 'ok'], [6, 'ok'], [8, 'ok'], [10, 'ok'], [12, 'pend', 15], [17, 'ok'], [19.5, 'den'], [22, 'ok'], [24, 'ok'] ]
+  const PASOS_PLAN = [['Reproducir', 0], ['Escribir prueba', 6], ['Corregir', 14], ['Verificar', 25]]
+  const GUION = [
+    [0, 'Claude empieza a trabajar: crea el plan «Arreglar login».'],
+    [3, 'Lanza 3 subagentes. Jev elige el modelo de cada uno (↓ baja, ↑ sube, = igual que Claude).'],
+    [12, 'Un comando pide permiso: se marca en ámbar hasta que lo apruebas.'],
+    [13, 'El agente 1 termina: queda fijo con ✓ y su reloj se para.'],
+    [14, 'Empiezan los cambios: Git cuenta archivos y líneas; el CI del PR corre.'],
+    [16, 'Incidencia en el servicio de Claude: la cabecera lo marca en ámbar mientras dura.'],
+    [20, 'El agente 3 falla: ✗ en rojo y se ve la llamada que falló al abrir su tarjeta.'],
+    [25, 'El agente 2 termina; el plan pasa a «Verificar».'],
+    [29, 'Claude te pregunta: el plan se pone en ámbar con la pregunta debajo.'],
+    [28, 'El CI pasa: ✓ en verde junto al PR.'],
+    [35, 'Plan hecho. En reposo nada gira; solo baja la cuenta atrás de la cache.'],
+    [38, 'Queda menos de 1 min de cache: se pone en ámbar para que decidas si seguir ahora.'],
+  ]
+
+  let t0 = performance.now(), pausa = null, abierta = null, abierto = true
+  const plegada = { g: true, s: true }
+
+  function estado(T, ahora) {
+    const ag = AGENTES.map((a, i) => {
+      const vivo = T >= a.ini, corre = vivo && T < a.fin
+      const f = entre(T, a.ini, a.fin)
+      const n = Math.ceil(f * a.llamadas.length)
+      return { ...a, i, vivo, corre, f, seg: vivo ? Math.min(T, a.fin) - a.ini : 0,
+        llamadasHechas: a.llamadas.slice(0, Math.max(corre ? 1 : 0, n)), ctxN: a.ctx * (0.25 + 0.75 * f), salN: a.sal * f, pasosN: Math.max(1, Math.round(a.pasos * f)) }
+    }).filter(a => a.vivo)
+    const trabajando = T < 35
+    let paso = 0; PASOS_PLAN.forEach(([_, d], i) => { if (T >= d) paso = i })
+    const plan = T >= 35 ? { st: 'hecho', hechos: 4 } : T >= 29 ? { st: 'espera', hechos: 3, paso: 'Verificar' } : { st: 'curso', hechos: paso, paso: PASOS_PLAN[paso][0] }
+    const perm = { ok: 0, tu: 0, den: 0, pend: 0, tira: [] }
+    PERMISOS.forEach(([d, v, fin]) => {
+      if (T < d) return
+      if (v === 'pend') { if (T < fin) { perm.pend++; perm.tira.push(['■', 'a']) } else { perm.tu++; perm.tira.push(['■', 'b']) } }
+      else if (v === 'den') { perm.den++; perm.tira.push(['✗', 'r']) }
+      else { perm.ok++; perm.tira.push(['■', 'g']) }
+    })
+    const jev = 1382 + ag.length * 2
+    // La cache dura 5 min desde la última respuesta; en el guion se responde cada 3 s mientras se trabaja.
+    const ultima = trabajando ? Math.floor(T / 3) * 3 : 35
+    const queda = Math.max(0, 300 - (T - ultima) - (trabajando ? 0 : 240))
+    const f = entre(T, 0, 35)
+    return { T, ahora, ag, trabajando, plan, perm, jev,
+      cache: { caliente: queda > 0, queda }, ahorro: 0.31 + 0.4 * f, porHora: 2.1 + 0.3 * f, hoy: 5.8 + 0.81 * f,
+      git: { archivos: T < 14 ? 0 : T < 25 ? 2 : 3, mas: T < 14 ? 0 : Math.round(24 * entre(T, 14, 25)), menos: T < 14 ? 0 : Math.round(7 * entre(T, 14, 25)) },
+      servicio: T >= 16 && T < 22,
+      ctx: 8 + 6 * entre(T, 0, 35), costo: 0.63 + 0.81 * entre(T, 0, 35), resp: 8 + Math.floor(T / 3),
+      c5: 40 + 3 * entre(T, 0, 35), c7: 17 + 1 * entre(T, 0, 35), sesion: 270 + T,
+      aduana: { hechas: 16 + Math.floor(T / 6), en: [['A', 'lectura-pdf', 125 + T], ['B', 'resumen-largo', 100 + T], ['A', 'tabla-cruzada', 48 + T]] } }
+  }
+
+  // ---------- el tablero acoplado
+  function panel(s) {
+    const L = [], e = (...x) => L.push(x.length === 1 && Array.isArray(x[0][0]) ? x[0] : x)
+    const ETQ = 12, AN = 20
+    const est = s.trabajando ? [[giro(s.ahora) + ' Trabajando', 'm']] : [['○ En espera', 'd']]
+    const serv = s.servicio ? [['◆ Claude con incidencias', 'a']] : [['✓ Claude sin incidencias', 'g']]
+    L.push(fila([['TABLERO', 'nb'], [' · ', 'd'], ...est, [' · ', 'd'], ['Caveman full', 'a']], [...serv, [`   v1.3.0 · ${reloj(s.sesion)}`, 'd']]))
+    L.push([['─'.repeat(W), 'f']]); L.push([])
+
+    // Sesión
+    L.push([['Sesión', 'nb']])
+    const etq = x => ['  ' + pad(x, ETQ - 1), 'd']
+    const filaB = (e, pct, extra, cls) => [etq(e), ...barra(pct / 100, AN, cls ?? tinta(pct)), [padL(Math.round(pct), 5) + ' %', ''], ...extra]
+    L.push([etq('Modelo'), ['Opus 5.5', ''], [' · medium · thinking on · 1er token 5.5s', 'd']])
+    L.push(filaB('Contexto', s.ctx, [[`  ${k(s.ctx * 10000)}/1.0M`, 'd']]))
+    const cc = s.cache
+    L.push([etq('Cache'), cc.caliente ? ['● Caliente', 'g'] : ['○ Fría', 'a'], [cc.caliente ? `  Caduca en ${reloj(cc.queda)}` : '  La próxima respuesta paga la cache entera', cc.caliente && cc.queda < 60 ? 'a' : 'd'], [`  · 91 % aciertos · Ahorro $${s.ahorro.toFixed(2)}`, 'd']])
+    L.push([etq('Costo'), [`$${s.costo.toFixed(2)}`, ''], [`  · ${s.resp} respuestas · $${s.porHora.toFixed(2)}/h trabajando`, 'd']])
+    L.push(filaB('Hoy', s.hoy / 20 * 100, [[`  $${s.hoy.toFixed(2)} de $20.00 de presupuesto`, 'd']], s.hoy / 20 >= 0.85 ? 'r' : s.hoy / 20 >= 0.65 ? 'a' : 'g'))
+    L.push(filaB('Cupo 5 h', s.c5, [['  ↓53%', 'g'], ['  ↻ hoy 11:10 · Al ritmo actual no se agota', 'd']]))
+    L.push(filaB('Cupo 7 d', s.c7, [['  ↓43%', 'g'], ['  ↻ vie 06:00 · Al ritmo actual no se agota', 'd']]))
+    L.push([etq('Proyecto'), ['claude-code-entorno', ''], [' · «Nuevo mod de prueba»', 'd']])
+    const ci = s.T < 28 ? [[`${giro(s.ahora, 6)} CI corriendo`, 'm']] : [['✓ CI pasa', 'g']]
+    const cambios = s.git.archivos === 0 ? [['Sin cambios', 'd']] : [[`${s.git.archivos} archivos `, ''], [`+${s.git.mas}`, 'g'], [' ', ''], [`−${s.git.menos}`, 'r']]
+    L.push([etq('Git'), ...cambios, ['  · ↑1 sin subir · PR #41 · ', 'd'], ...ci])
+    L.push([etq('Config'), ['2 CLAUDE.md · 10 reglas · 33 hooks · 9 MCP', 'd']])
+    L.push([])
+
+    // Planes
+    const abiertos = s.plan.st === 'hecho' ? 0 : 1
+    L.push(fila([['Planes', 'nb']], [[abiertos ? '1 abierto' : 'ninguno abierto', 'd']]))
+    const tit = pad('Arreglar login', 18)
+    if (s.plan.st === 'hecho') {
+      L.push([['  ✓ Hecho      ', 'g'], [tit, ''], ['4/4 · 0:35', 'd']])
+    } else {
+      const esp = s.plan.st === 'espera'
+      const glifo = esp ? '◆ Te espera  ' : `${giro(s.ahora, 3)} En curso   `
+      L.push([['  ' + glifo, esp ? 'a' : 'm'], [tit, ''], ...barra(s.plan.hechos / 4, AN, esp ? 'a' : 'm', esp ? 'ka' : 'k'), [`  ${s.plan.hechos}/4`, ''], [`  Paso: ${pad(s.plan.paso, 16)}`, 'd'], [reloj(s.T), 'd']])
+      if (esp) L.push([['    ↳ ¿Subo la versión del mod a 1.3.0? Contesta en el chat.', 'a']])
+    }
+    L.push([])
+
+    // Agentes
+    const vivos = s.ag.filter(a => a.corre).length
+    L.push(fila([['Agentes', 'nb'], [s.ag.length ? `  ${vivos} activos · ${s.ag.length} en total` : '', 'd']], s.ag.length ? [[`1-${s.ag.length} abrir`, 'f']] : []))
+    if (!s.ag.length) L.push([['  Aún sin subagentes', 'f']])
+    else {
+      const cw = Math.floor((W - 2 * 2) / 3), col = []
+      s.ag.forEach(a => {
+        const c = a.corre ? 'b' : a.estado === 'hecho' ? 'g' : 'r'
+        const g = a.corre ? `${giro(s.ahora, a.i * 3)} En curso` : a.estado === 'hecho' ? '✓ Hecho' : '✗ Falló'
+        const sel = abierta === a.n
+        col.push([
+          [[pad(`${sel ? '▶' : a.n} ${a.titulo}`, cw), sel ? 'nb' : '']],
+          [[pad(`${a.tipo} · ${a.modelo}`, cw), 'd']],
+          [[pad(a.jev, cw), 'p']],
+          [[pad(`Ctx ${k(a.ctxN)} · Sal ${k(a.salN)} · ${a.pasosN} pasos`, cw), 'd']],
+          a.corre ? [[pad(ida(s.ahora + a.i * 400, cw - 2), cw), 'b']] : [[pad('', cw), '']],
+          [[g, c], [padL(reloj(a.seg), cw - g.length), 'd']],
+        ])
+      })
+      for (let r = 0; r < 6; r++) {
+        const l = [['  ', '']]
+        col.forEach((cc, j) => { l.push(...cc[r]); if (j < col.length - 1) l.push(['  ', '']) })
+        L.push(l)
+      }
+      const ab = s.ag.find(a => a.n === abierta)
+      if (ab) {
+        L.push([])
+        L.push([['  ▶ ', 'b'], [ab.titulo, 'nb'], [`  ${ab.tipo} · ${ab.modelo} · ${ab.pasosN} pasos`, 'd']])
+        ab.llamadasHechas.forEach(x => L.push(x.startsWith('✗') ? [['    ' + x, 'r']] : [['    · ', 'd'], [x, '']]))
+      }
+    }
+    L.push([])
+
+    // Jev
+    L.push(fila([['Jev', 'nb'], ['  Elige modelo y esfuerzo', 'd']], [[s.jev.toLocaleString('en-US'), 'd']]))
+    L.push([['  ' + pad('Qué modelo', 18), 'd'], ['███████▌', 'p'], ['  93%', 'n'], ['  Lo cambió Jev', 'd']])
+    L.push([['  ' + pad('Qué esfuerzo', 18), 'd'], ['██████▌░', 'p'], ['  81%', 'n'], ['  Igual a Claude', 'd']])
+    L.push([['  Semana 17% · ritmo 30% · −13 · xhigh ok', 'g']])
+    L.push([])
+
+    // Aduana (ejemplo)
+    const ad = s.aduana
+    L.push(fila([['Aduana', 'nb'], ['  Pruebas largas', 'd']], [['ejemplo', 'f']]))
+    L.push([[`  ${giro(s.ahora, 5)} En curso   `, 'm'], [pad('Regresión modelos 1/2', 22), ''], ...barra(ad.hechas / 40, AN, 'm'), [`  ${ad.hechas}/40`, ''], ['  · 1.84 USD · 1 inválida', 'd']])
+    L.push([['    3 en curso: ' + ad.en.map(([l, n, sg]) => `${l} ${n} ${reloj(sg)}`).join(' · '), 'd']])
+    L.push([])
+
+    // Gasto: lo que más contexto consume. Plegada por omisión; «g» la abre.
+    const GASTO = [['Read src/auth/login.ts', 'leído 4 veces', 18], ['Bash npm test', 'salida de 900 líneas', 12], ['Grep "login" en src/', '3 veces el mismo patrón', 6], ['Read tests/auth/login.test.ts', 'leído 2 veces', 5]]
+    if (!plegada.g) {
+      L.push(fila([['Gasto', 'nb'], ['  Lo que más contexto consume', 'd']], [['g plegar', 'f']]))
+      GASTO.forEach(([q, por, n]) => L.push([['  ', ''], [pad(q, 32), ''], [pad(por, 26), 'd'], ...barra(n / 18, 12, 'm'), [padL(n + 'k', 5), '']]))
+      L.push([['  Consejo: login.ts se leyó 4 veces; pide sus líneas exactas en vez del archivo entero.', 'd']])
+    } else {
+      L.push(fila([['Gasto', 'nb'], ['  Lo que más gasta: Read src/auth/login.ts, leído 4 veces · 18k', 'd']], [['g abrir', 'f']]))
+    }
+    L.push([])
+
+    // Sesiones: las demás sesiones de esta Mac. Plegada por omisión; «s» la abre.
+    const SES = [['◆ Te espera ', 'a', 'Mazda · Personal', 'hace 2m'], [`${giro(s.ahora, 2)} Trabajando`, 'm', 'informes · Trabajo', '0:42'], ['○ Inactiva  ', 'd', 'Tickets · Trabajo', '15m'], ['○ Inactiva  ', 'd', 'Colabora · Personales', '1h05m']]
+    if (!plegada.s) {
+      L.push(fila([['Sesiones', 'nb'], ['  Otras sesiones de esta Mac', 'd']], [['s plegar', 'f']]))
+      SES.forEach(([g, c, n, t]) => L.push([['  ' + g + '  ', c], [pad(n, 30), ''], [t, 'd']]))
+    } else {
+      L.push(fila([['Sesiones', 'nb'], [`  ${SES.length} más abiertas · `, 'd'], ['◆ Mazda te espera', 'a'], [' · 1 trabajando', 'd']], [['s abrir', 'f']]))
+    }
+    L.push([])
+
+    // Permisos
+    const tot = s.perm.ok + s.perm.tu + s.perm.den + s.perm.pend
+    L.push(fila([['Permisos', 'nb']], [[`${tot} ${tot === 1 ? 'revisión' : 'revisiones'}`, 'd']]))
+    L.push([['  ', ''], ...s.perm.tira.map(([c, cl]) => [c, cl])])
+    L.push([['  ■', 'g'], [` ${s.perm.ok} permitidos  `, 'd'], ['■', 'b'], [` ${s.perm.tu} por ti  `, 'd'], ['✗', 'r'], [` ${s.perm.den} denegado${s.perm.den === 1 ? '' : 's'}`, 'd'],
+      ...(s.perm.pend ? [['   ◆ 1 permiso pendiente: Bash npm audit', 'a']] : [])])
+    return L
+  }
+
+  // ---------- el chat, con el resumen sobre el prompt cuando el panel está cerrado
+  function chat(s) {
+    const w = abierto ? 62 : 108, L = []
+    L.push([['❯ ', 'd'], ['arregla el login que falla con contraseñas largas', 't']])
+    L.push([])
+    L.push([['● ', 't'], ['Voy a reproducirlo con una prueba y lanzar agentes en paralelo.', '']])
+    L.push([])
+    if (s.trabajando) L.push([[`${giro(s.ahora)} Trabajando… (${Math.floor(s.T)}s)`, 'm']])
+    else L.push([['* Worked for 35s · done', 'd']])
+    L.push([])
+    if (!abierto) {
+      // Resumen de hasta 8 filas.
+      const est = s.trabajando ? [[giro(s.ahora) + ' Trabajando', 'm']] : [['○ En espera', 'd']]
+      L.push([['Opus 5.5 ', 'nb'], ...est, [' · Contexto ', 'd'], ...barra(s.ctx / 100, 6, tinta(s.ctx)), [` ${Math.round(s.ctx)}%`, ''], [` · $${s.costo.toFixed(2)} · Cupo 5 h `, 'd'], [`${Math.round(s.c5)}%`, ''], [' · 7 d ', 'd'], [`${Math.round(s.c7)}%`, ''], [' · ', 'd'], ['Caveman full', 'a']])
+      const tot = s.perm.ok + s.perm.tu + s.perm.den
+      L.push([['Permisos ', 'd'], ...s.perm.tira.slice(-12), [` ${s.perm.ok} permitidos · ${s.perm.tu} por ti · ${s.perm.den} denegado${s.perm.den === 1 ? '' : 's'}`, 'd'], ...(s.perm.pend ? [[' · ◆ 1 pendiente', 'a']] : [])])
+      if (s.plan.st === 'hecho') L.push([['✓ Hecho      ', 'g'], ['Arreglar login  ', ''], ['4/4 · 0:35', 'd']])
+      else {
+        const esp = s.plan.st === 'espera'
+        L.push([[esp ? '◆ Te espera  ' : `${giro(s.ahora, 3)} En curso   `, esp ? 'a' : 'm'], ['Arreglar login  ', ''], ...barra(s.plan.hechos / 4, 20, esp ? 'a' : 'm', esp ? 'ka' : 'k'), [`  ${s.plan.hechos}/4  Paso: ${s.plan.paso}  ${reloj(s.T)}`, 'd']])
+        if (esp) L.push([['  ↳ ¿Subo la versión del mod a 1.3.0? Contesta en el chat.', 'a']])
+      }
+      s.ag.slice(0, 3).forEach(a => {
+        const g = a.corre ? `${giro(s.ahora, a.i * 3)} En curso` : a.estado === 'hecho' ? '✓ Hecho   ' : '✗ Falló   '
+        L.push([[pad(g, 11), a.corre ? 'b' : a.estado === 'hecho' ? 'g' : 'r'], [pad(a.titulo, 32), ''], [pad(`${a.modelo} · ${a.jev}`, 26), 'd'], [`Ctx ${k(a.ctxN)}  ${reloj(a.seg)}`, 'd']])
+      })
+      L.push([['Cache ', 'd'], s.cache.caliente ? ['● Caliente ' + reloj(s.cache.queda), 'g'] : ['○ Fría', 'a'], [' · ', 'd'], ['◆ Mazda te espera', 'a'], [' · Jev 1,388 · Aduana 18/40 · ctrl+t abre el panel', 'f']])
+      L.push([])
+    }
+    L.push([['─'.repeat(w), 'f']])
+    L.push([['❯ ', 'm'], ['▌', 'd']])
+    L.push([['─'.repeat(w), 'f']])
+    L.push([['⏵⏵ bypass permissions on', 'r'], [' (shift+tab to cycle)', 'd']])
+    return L
+  }
+
+  const $ = id => document.getElementById(id)
+  function cuadro() {
+    const ahora = pausa ?? performance.now()
+    const T = ((ahora - t0) / 1000) % CICLO
+    const s = estado(T, ahora)
+    $('tablero').innerHTML = html(panel(s))
+    $('chat').innerHTML = html(chat(s))
+    $('t').textContent = `${reloj(T)} / ${reloj(CICLO)}`
+    let g = ''; GUION.forEach(([d, x]) => { if (T >= d) g = x }); $('guion').textContent = g
+  }
+  // El tablero redibuja cada 120 ms con trabajo; aquí igual.
+  setInterval(() => { if (pausa === null) cuadro() }, 120)
+
+  const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (quieto) { pausa = t0 + 26000 }
+
+  $('bPlay').onclick = () => {
+    if (pausa === null) { pausa = performance.now(); $('bPlay').textContent = '▶ Reproducir'; $('bPlay').setAttribute('aria-pressed', 'false') }
+    else { t0 += performance.now() - pausa; pausa = null; $('bPlay').textContent = '⏸ Pausa'; $('bPlay').setAttribute('aria-pressed', 'true') }
+    cuadro()
+  }
+  $('bReset').onclick = () => { t0 = performance.now(); if (pausa !== null) pausa = t0; abierta = null; cuadro() }
+  const modo = a => { abierto = a; $('pantalla').classList.toggle('cerrado', !a); $('bAbierto').setAttribute('aria-pressed', a); $('bCerrado').setAttribute('aria-pressed', !a); cuadro() }
+  $('bAbierto').onclick = () => modo(true)
+  $('bCerrado').onclick = () => modo(false)
+  // Abrir una tarjeta: clic en su fila o teclas 1-3, como los atajos del tablero.
+  $('tablero').addEventListener('click', ev => {
+    const filas = $('tablero').textContent.split('\n')
+    const y = Math.floor((ev.clientY - $('tablero').getBoundingClientRect().top - 10) / (12.5 * 1.42))
+    const x = Math.floor((ev.clientX - $('tablero').getBoundingClientRect().left - 14) / ($('tablero').scrollWidth / (W + 4)))
+    const ini = filas.findIndex(l => l.startsWith('Agentes'))
+    if (ini < 0 || y <= ini || y > ini + 6) { return }
+    const cw = Math.floor((W - 4) / 3), n = Math.min(3, Math.floor((x - 2) / (cw + 2)) + 1)
+    abierta = abierta === n ? null : n; cuadro()
+  })
+  addEventListener('keydown', ev => { if (ev.key === 'g' || ev.key === 's') { plegada[ev.key] = !plegada[ev.key]; cuadro(); return } if (['1', '2', '3'].includes(ev.key)) { const n = +ev.key; abierta = abierta === n ? null : n; cuadro() } })
+  cuadro()
+})()
+</script>
+</body>
+</html>

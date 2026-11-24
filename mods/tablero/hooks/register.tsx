@@ -1,7 +1,21 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Receipt, Roster, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Plan, Receipt, Roster, Turn, Usage, View } from '../types'
+import { CAIDA_MS, aplicar, filaPlan, resumen as resumenPlan, visibles as planesVisibles } from './planes'
+import { etiquetaCaveman } from './caveman'
+import { filasAduana, vigente as aduanaVigente } from './aduana'
+import { textoCache } from './cache'
+import { gastoDelDia, porHora } from './gasto-dia'
+import { siguienteModo, type Modo } from './caveman'
+import { leerLinea } from './linea-sesion'
+import type { EstadoAduana, Extra, Fuentes } from '../types'
+import { estadoCi, parseShortstat, parseSinSubir } from './git-ci'
+import { URL_SERVICIO, leerServicio } from './servicio'
+import { contarConfig, contarHooks, servidoresMcp } from './config-cargada'
+import { consejoGasto, topGasto } from './gasto'
+import { estadoSesion, leerSesiones } from './sesiones'
+import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -84,7 +98,7 @@ import {
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
-import { celdasUso, ritmoCupo, tonoUso } from './uso'
+import { celdasUso, pronosticoCupo, ritmoCupo, tonoUso } from './uso'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo, enReposo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
@@ -120,6 +134,138 @@ const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
+// Los planes de trabajo: la herramienta plan_progress (antes el mod barra-plan) los crea y los mueve.
+const PLAN_TOOL = 'mcp__tablero__plan_progress'
+const planes = atom({ plugin: 'tablero', key: 'planes' } as const, [] as Plan[])
+const REGLAS_PLANES = `# Barras de progreso
+Las tareas de más de unos 3 pasos llevan una barra: créala una vez con ${PLAN_TOOL} (id, title y stages: 2 a 7 etapas con steps {title}; o steps como lista plana). Los títulos de 4 palabras como mucho, en el idioma del usuario; el primer paso abierto queda activo. Avanza con {id, next:true} cuando termina el paso activo, o con {id, done:[...], active:"..."}. Si un paso falla: {id, failed:"...", note}. Antes de pedir una decisión al usuario: {id, state:"needs_input", note}. No describas las barras al usuario.`
+// Aduana (antes aduana-panel): su escritor deja este archivo cada pocos segundos mientras corren pruebas largas.
+const ARCHIVO_ADUANA = '.cache/detector-humo/en-curso.json'
+const aduana = atom({ plugin: 'tablero', key: 'aduana' } as const, null as EstadoAduana | null)
+let relojAduana: { cancel: () => void } | null = null
+let aduanaAvisada = 0
+// El modo caveman (antes caveman-badge): lo cambian «/caveman lite|full|ultra», «stop caveman» y «modo normal».
+const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as Modo)
+// Las fuentes externas: git cada 10 s, el CI del PR cada 60 s y la página de estado y la config cada 5 min.
+const DEFAULT_FUENTES: Fuentes = { git: null, ci: null, servicio: null, config: null }
+const fuentes = atom({ plugin: 'tablero', key: 'fuentes' } as const, DEFAULT_FUENTES)
+let relojFuentes: { cancel: () => void } | null = null
+// Las demás sesiones, lo que más gasta y lo plegado del panel.
+const otras = atom({ plugin: 'tablero', key: 'otras' } as const, [] as RegistroSesion[])
+const gasto = atom({ plugin: 'tablero', key: 'gasto' } as const, { filas: [], consejo: null } as { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null })
+const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true })
+// Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
+let estadoPropio: { estado: RegistroSesion['estado']; desde: number } | null = null
+const carpetaSesiones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/sesiones`
+/** Escribe el registro de esta sesión para las demás y para el presupuesto. Sin rename en la API: quien lee
+ *  ignora un archivo a medio escribir. */
+const escribirRegistro = async ($: EngineInterface) => {
+  const [id, ahora, m, g, ps, ex, costo, cwd] = await Promise.all([
+    $.session.id().catch(() => ''),
+    $.clock.now(),
+    getMain($),
+    read($, gate),
+    read($, planes),
+    read($, extra),
+    costNow($),
+    $.session.cwd().catch(() => ''),
+  ])
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return
+  const x = normalize(DEFAULT_EXTRA, ex)
+  const estado = estadoSesion({
+    trabajando: m.isRunning,
+    permisosPendientes: gateSummary(normalizeGate(g)).ask,
+    planEspera: listOf<Plan>(ps).some(p => p.estado === 'needs_input'),
+  })
+  if (estadoPropio?.estado !== estado) estadoPropio = { estado, desde: ahora }
+  const registro: RegistroSesion = {
+    id,
+    nombre: x.linea?.session_name ?? null,
+    carpeta: cwd.split('/').filter(Boolean).pop() ?? cwd,
+    estado,
+    desde: estadoPropio.desde,
+    costo: costo ?? 0,
+    base: x.base,
+    dia: x.dia,
+    actualizado: ahora,
+  }
+  await $.fs.write(`${await carpetaSesiones($)}/${id}.json`, JSON.stringify(registro))
+}
+const leerOtras = async ($: EngineInterface) => {
+  const [carpeta, id, ahora] = await Promise.all([carpetaSesiones($), $.session.id().catch(() => ''), $.clock.now()])
+  const lista = await $.fs.list(carpeta).catch(() => [])
+  const textos = await Promise.all(
+    lista
+      .filter(f => f.kind === 'file' && f.name.endsWith('.json'))
+      .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
+  )
+  await update($, otras, () => leerSesiones(textos, id, ahora))
+}
+let vueltaFuentes = 0
+// El último intento de leer el CI: con qué PR y cuándo (ms), para no lanzar gh más de una vez por minuto.
+let ciIntento: { pr: number | null; en: number } = { pr: null, en: 0 }
+/** Lo que tarde más que `ms` se da por perdido: el panel no espera a una red lenta. */
+const conTope = <T,>($: EngineInterface, ms: number, p: Promise<T>): Promise<T | null> =>
+  Promise.race([p.catch(() => null), $.clock.sleep(ms).then(() => null)])
+const ponerFuente = ($: EngineInterface, parte: Partial<Fuentes>) => update($, fuentes, f => ({ ...normalize(DEFAULT_FUENTES, f), ...parte }))
+const leerGit = async ($: EngineInterface) => {
+  const cwd = await $.session.cwd().catch(() => '')
+  const stat = await conTope($, 5000, $.process.run(['git', 'diff', '--shortstat', 'HEAD'], { cwd, timeoutMs: 5000 }))
+  if (!stat || stat.exitCode !== 0) return ponerFuente($, { git: null })
+  const sub = await conTope($, 5000, $.process.run(['git', 'rev-list', '--count', '@{u}..HEAD'], { cwd, timeoutMs: 5000 }))
+  return ponerFuente($, { git: { ...parseShortstat(stat.stdout), sinSubir: sub && sub.exitCode === 0 ? parseSinSubir(sub.stdout) : null } })
+}
+const leerCi = async ($: EngineInterface) => {
+  const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr
+  if (!pr) return ponerFuente($, { ci: null })
+  const cwd = await $.session.cwd().catch(() => '')
+  const r = await conTope($, 10_000, $.process.run(['gh', 'pr', 'checks', String(pr.number), '--json', 'bucket'], { cwd, timeoutMs: 10_000 }))
+  // gh sale con 8 mientras hay comprobaciones pendientes: su JSON sigue valiendo.
+  return ponerFuente($, { ci: r && r.stdout ? estadoCi(r.stdout) : null })
+}
+const leerServicioClaude = async ($: EngineInterface) => {
+  const r = await conTope($, 5000, $.http.fetch(URL_SERVICIO))
+  return ponerFuente($, { servicio: r ? leerServicio(r.status, r.text) : null })
+}
+const leerConfig = async ($: EngineInterface) => {
+  const [casa, raiz, ajustes, herramientas] = await Promise.all([
+    $.env.get('HOME'),
+    $.session.root().catch(() => ''),
+    $.settings.read().catch(() => ({}) as Record<string, unknown>),
+    $.tool.list().catch(() => []),
+  ])
+  const existe = (ruta: string) => $.fs.stat(ruta).then(() => 1).catch(() => 0)
+  const mds = (carpeta: string) => $.fs.list(carpeta).then(l => l.filter(x => x.name.endsWith('.md')).length).catch(() => 0)
+  const cuentas = await Promise.all([
+    ...[`${casa}/.claude/CLAUDE.md`, `${raiz}/CLAUDE.md`, `${raiz}/AGENTS.md`, `${raiz}/.claude/CLAUDE.md`].map(existe),
+    mds(`${casa}/.claude/rules`),
+    mds(`${raiz}/.claude/rules`),
+  ])
+  const claudeMd = cuentas.slice(0, 4).reduce((a, b) => a + b, 0)
+  const reglas = (cuentas[4] ?? 0) + (cuentas[5] ?? 0)
+  const hooks = contarHooks((ajustes as { hooks?: unknown }).hooks)
+  const mcp = servidoresMcp(herramientas.map(h => h.name))
+  return ponerFuente($, { config: contarConfig({ claudeMd, reglas, hooks, mcp }) })
+}
+// Lo que solo tiene la statusline, el tiempo de trabajo del lead, la cache leída y el arranque del día.
+const DEFAULT_EXTRA: Extra = { linea: null, trabajoMs: 0, cacheLeida: 0, dia: '', base: 0 }
+const extra = atom({ plugin: 'tablero', key: 'extra' } as const, DEFAULT_EXTRA)
+const diaLocal = (ms: number) => {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** Lee el archivo de la statusline de esta sesión y apunta el costo con que empezó el día. */
+const refrescarExtra = async ($: EngineInterface) => {
+  const [casa, id, ahora, costo] = await Promise.all([$.env.get('HOME'), $.session.id().catch(() => ''), $.clock.now(), costNow($)])
+  const texto = casa && id && /^[A-Za-z0-9_-]+$/.test(id) ? await $.fs.read(`${casa}/.claude/tablero/linea/${id}.json`).catch(() => null) : null
+  const linea = typeof texto === 'string' ? leerLinea(texto, ahora / 1000) : null
+  const hoy = diaLocal(ahora)
+  await update($, extra, x => {
+    const v = normalize(DEFAULT_EXTRA, x)
+    return { ...v, linea, ...(v.dia === hoy ? {} : { dia: hoy, base: costo ?? 0 }) }
+  })
+}
+
 const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
 const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
 const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
@@ -262,9 +408,14 @@ async function isArchitectType($: EngineInterface, cfg: Config, type: string) {
   return cfg.architect.test(type) || (await getRoster($)).architectTypes.includes(type)
 }
 
+// Si el panel está a la vista: sin él, el resumen va sobre el prompt (ver el hook de AbovePrompt).
+let panelColocado = false
+
 async function openPane($: EngineInterface, cfg: Config) {
   // columns apply when docked beside the transcript, rows when seated inline above the prompt.
-  return $.ui.open({ id: PANE, title: TITLE, columns: cfg.paneColumns, rows: 8 })
+  const r = await $.ui.open({ id: PANE, title: TITLE, columns: cfg.paneColumns, rows: 8 })
+  panelColocado = r?.isPlaced === true
+  return r
 }
 
 async function resetAll($: EngineInterface) {
@@ -399,6 +550,68 @@ export const register: Register = (on, options) => {
       argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama|mapa]',
     })
     await migrate($)
+    // Un host sin herramientas de plugin (o que la rechaza) no impide que el panel arranque.
+    await $.tool.register({
+      name: 'plan_progress',
+      description: 'Plan con barra de progreso en el tablero, uno por id. Créalo con title y stages; avanza con next, done, active, failed o state.',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          kind: { enum: ['plan', 'todo'] },
+          stages: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, steps: { type: 'array' } } } },
+          steps: { type: 'array' },
+          next: { type: 'boolean' },
+          done: { type: 'array', items: { type: 'string' } },
+          active: { type: 'string' },
+          failed: { type: 'string' },
+          note: { type: 'string' },
+          state: { enum: ['running', 'needs_input', 'error', 'done'] },
+        },
+      },
+    }).catch(() => undefined)
+    if (relojFuentes === null) {
+      vueltaFuentes = 0
+      // Una vuelta nunca lanza: una fuente que falla deja su dato como estaba y el resto sigue.
+      const vuelta = () => vueltaSegura().catch(() => undefined)
+      const vueltaSegura = async () => {
+        const n = vueltaFuentes++
+        const tareas: Promise<unknown>[] = []
+        if (cfg.extras.has('git')) tareas.push(leerGit($))
+        // El CI se mira en cuanto aparece un PR nuevo y después como mucho una vez por minuto, aunque gh falle.
+        const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr?.number ?? null
+        const ahoraCi = await $.clock.now()
+        if (cfg.extras.has('ci') && pr !== null && (pr !== ciIntento.pr || ahoraCi - ciIntento.en >= 60_000)) {
+          ciIntento = { pr, en: ahoraCi }
+          tareas.push(leerCi($))
+        }
+        if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
+        if (n % 30 === 0) tareas.push(leerConfig($))
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) tareas.push(leerOtras($))
+        await Promise.all(tareas.map(t => t.catch(() => undefined)))
+      }
+      void vuelta()
+      relojFuentes = $.clock.every(10_000, vuelta)
+    }
+    if (relojAduana === null) {
+      relojAduana = $.clock.every(5000, async () => {
+        await refrescarExtra($).catch(() => undefined)
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) await escribirRegistro($).catch(() => undefined)
+        try {
+          const casa = await $.env.get('HOME')
+          const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
+          await update($, aduana, () => leido)
+          if (leido.terminado && leido.actualizado !== aduanaAvisada) {
+            aduanaAvisada = leido.actualizado
+            $.ui.toast(`Aduana: pruebas terminadas, ${leido.hechas}/${leido.total}`)
+          }
+        } catch {
+          await update($, aduana, () => null)
+        }
+      })
+    }
     // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
     // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
     const inicio = await $.clock.now()
@@ -443,6 +656,10 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     detenerReloj()
+    relojAduana?.cancel()
+    relojAduana = null
+    relojFuentes?.cancel()
+    relojFuentes = null
     if (e.reason === 'clear') {
       await resetAll($)
     }
@@ -475,6 +692,7 @@ export const register: Register = (on, options) => {
   // prompt de la sesión sí cuenta como pedido de la persona y se coloca a cualquier ancho.
   let openedOnPrompt = false
   on('prompt.submit', async ($, e, next) => {
+    await update($, caveman, m => siguienteModo(m === 'lite' || m === 'ultra' || m === 'normal' ? m : 'full', e.text))
     // A branch switched since the last prompt shows now; a failed read leaves the last one.
     void refrescarRama($).catch(() => undefined)
     if (cfg.openOnStart && !openedOnPrompt) {
@@ -534,6 +752,8 @@ export const register: Register = (on, options) => {
       const result = await s.result
       const speed = result.usage ? stepSpeed(sentAt, firstAt) : null
       if (speed) await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), speed }))
+      const leidos = result.usage?.cache_read_input_tokens ?? 0
+      if (leidos > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), cacheLeida: normalize(DEFAULT_EXTRA, x).cacheLeida + leidos }))
       return result
     }
     const id = e.agentId
@@ -611,6 +831,24 @@ export const register: Register = (on, options) => {
       else await update($, gate, g => recordCheck(normalizeGate(g), check))
     }
     return verdict
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    return { sections: [...result.sections, { id: 'tablero:planes', text: REGLAS_PLANES, scope: 'session' as const }] }
+  })
+
+  on('tool.call', { tool: PLAN_TOOL }, async ($, e) => {
+    const raw = e as unknown as Record<string, unknown>
+    const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+    if (!id) return { result: `${PLAN_TOOL}: el id es obligatorio, por ejemplo "arreglar-login".` }
+    const ahora = await $.clock.now()
+    const hecho = aplicar((await read($, planes)).find(p => p.id === id), raw, ahora)
+    if (typeof hecho === 'string') return { result: hecho }
+    await update($, planes, lista =>
+      [...listOf<Plan>(lista).filter(p => p.id !== id && (p.estado !== 'done' || ahora - (p.endedAt ?? ahora) < CAIDA_MS)), hecho],
+    )
+    return { result: resumenPlan(hecho) }
   })
 
   on('tool.call', async ($, e, next) => {
@@ -736,6 +974,14 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+      if (cfg.extras.has('gasto')) {
+        const mensajes = await $.session.messages({ last: 400 }).catch(() => null)
+        if (Array.isArray(mensajes)) {
+          const filas = topGasto(mensajes)
+          await update($, gasto, () => ({ filas, consejo: consejoGasto(filas) }))
+        }
+      }
+      if (e.durationMs > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), trabajoMs: normalize(DEFAULT_EXTRA, x).trabajoMs + e.durationMs }))
       // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
       await update($, gate, g => retireAsks(normalizeGate(g), true))
       // Una consulta al asesor que sigue abierta al cerrar el turno del lead ya no tendrá respuesta. Si el turno
@@ -772,6 +1018,7 @@ export const register: Register = (on, options) => {
     if (e.id === PANE) {
       detenerReloj()
       mapaVisible = false
+      panelColocado = false
     }
     return r
   })
@@ -787,7 +1034,24 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  // Un solo hook dibuja el panel (Pane) y, con el panel sin colocar, su resumen sobre el prompt (AbovePrompt):
+  // el motor no deja pasar `$` a una función interna, así que el dibujo es una clausura de este hook.
+  on('ui.render', async ($, entrada, next) => {
+    const esPanel = entrada.component === 'Pane' && entrada.requestId === PANE
+    if (!esPanel && entrada.component !== 'AbovePrompt') return next(entrada)
+    const debajo = esPanel ? null : await next(entrada)
+    if (!esPanel && (panelColocado || entrada.props.isCollapsed || entrada.props.hasSurvey)) return debajo
+    // Sobre el prompt se dibuja lo mismo que en un Pane colocado ahí (inline): el resumen de hasta 8 filas.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = esPanel
+      ? entrada
+      : {
+          ...entrada,
+          component: 'Pane',
+          requestId: PANE,
+          props: { title: TITLE, isFocused: false, bodyColumns: entrada.props.bodyColumns, placement: 'inline', scroll: entrada.props.scroll, view: {} },
+        }
+    const pintar = async () => {
     const generacion = generacionReloj
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
@@ -809,6 +1073,17 @@ export const register: Register = (on, options) => {
       getJev($),
       read($, gitBranch),
       read($, usos).then(x => normalize(DEFAULT_USOS, x)),
+    ])
+    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr] = await Promise.all([
+      read($, planes).then(x => listOf<Plan>(x)),
+      read($, aduana),
+      read($, caveman),
+      read($, extra).then(x => normalize(DEFAULT_EXTRA, x)),
+      read($, fuentes).then(x => normalize(DEFAULT_FUENTES, x)),
+      read($, otras).then(x => listOf<RegistroSesion>(x)),
+      read($, gasto),
+      read($, plegado).then(x => normalize({ gasto: true, sesiones: true }, x)),
+      $.env.get('HERDR_ENV').then(x => x === '1').catch(() => false),
     ])
     const rit = ritmoSemana(jevs.limites, now / 1000)
     const filaRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)
@@ -916,29 +1191,62 @@ export const register: Register = (on, options) => {
         </Text>
       )
     }
-    const nombreCupo = (kind: string) => (/five/i.test(kind) ? 'cupo 5 h' : /seven/i.test(kind) ? 'cupo 7 d' : `cupo ${limitLabel(kind)}`)
+    const nombreCupo = (kind: string) => (/five/i.test(kind) ? 'Cupo 5 h' : /seven/i.test(kind) ? 'Cupo 7 d' : `Cupo ${limitLabel(kind)}`)
+    // Lo que solo dice la statusline (cache, thinking, nombre, PR), lo que leen las fuentes y el dinero del día.
+    const lineaNow = extraNow.linea
+    const cacheNow = cfg.extras.has('cache') ? textoCache(lineaNow?.prompt_cache ?? null, now / 1000) : null
+    const trabajoMs = extraNow.trabajoMs + (m.isRunning && t.startedAt > 0 ? Math.max(0, now - t.startedAt) : 0)
+    const porHoraNow = u.costUsd !== null ? porHora(u.costUsd, trabajoMs) : null
+    const hoyNow = cfg.extras.has('presupuesto') && cfg.presupuestoDiario > 0 && u.costUsd !== null && extraNow.dia
+      ? gastoDelDia({ id: lineaNow?.session_id ?? '', costo: u.costUsd, base: extraNow.base, dia: extraNow.dia }, otrasNow, extraNow.dia)
+      : null
+    const REVISION: Record<string, string> = { approved: 'aprobado', pending: 'en revisión', changes_requested: 'con cambios pedidos', draft: 'borrador' }
+    const etq = (x: string) => <Text dimColor>{x.padEnd(ETIQUETA)}</Text>
+    // Una fila en trozos: entran por orden mientras caben en `room`; lo opcional va al final y es lo primero que cae.
+    type Trozo = { t: string; c?: string; dim?: boolean }
+    const caben = (xs: (Trozo | null | false)[], room: number): Trozo[] => {
+      const out: Trozo[] = []
+      let n = 0
+      for (const x of xs) {
+        if (!x) continue
+        if (n + [...x.t].length > room) break
+        out.push(x)
+        n += [...x.t].length
+      }
+      return out
+    }
+    const trozos = (xs: Trozo[]) => xs.map((x, k) => (
+      <Text key={`t${k}`} color={x.c} dimColor={x.dim}>
+        {x.t}
+      </Text>
+    ))
     const sesionPanel = (w: number) => {
       const ancho = Math.max(6, Math.min(20, w - ETIQUETA - 26))
-      const detalle = [
-        carpeta,
-        branchNow ? `⎇ ${branchNow}` : '',
-        `agentes ${running.length}/${cards.length}`,
-        `permisos ${s.total}`,
-      ].filter(Boolean)
+      const room = w - 2 - ETIQUETA
+      const pr = lineaNow?.pr ?? null
+      const git = fuentesNow.git
       return (
         <Box flexDirection="column" width={w}>
           <Text weight="semibold">Sesión</Text>
           <Box flexDirection="column" paddingLeft={2}>
             <Text wrap="truncate">
-              <Text dimColor>{'modelo'.padEnd(ETIQUETA)}</Text>
-              <Text>{modelName}</Text>
-              {m.effort ? <Text dimColor>{` · ${m.effort}`}</Text> : null}
-              {m.mode ? <Text dimColor>{` · ${m.mode}`}</Text> : null}
+              {etq('Modelo')}
+              {trozos(
+                caben(
+                  [
+                    { t: modelName },
+                    !!m.effort && { t: ` · ${m.effort}`, dim: true },
+                    lineaNow?.thinking != null && { t: ` · thinking ${lineaNow.thinking ? 'on' : 'off'}`, dim: true },
+                    !!m.speed && { t: ` · ${fmtSpeed(m.speed!)}`, dim: true },
+                  ],
+                  room,
+                ),
+              )}
             </Text>
             {ctxFill.pct !== null
               ? filaBarra(
                   'ctx',
-                  'contexto',
+                  'Contexto',
                   ctxFill.pct,
                   ancho,
                   u.compactions > 0 ? `⟲${u.compactions}` : '',
@@ -946,33 +1254,256 @@ export const register: Register = (on, options) => {
                   u.tokens !== null ? `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}` : '',
                 )
               : null}
-            {u.costUsd !== null ? (
+            {cacheNow && lineaNow?.prompt_cache ? (
               <Text wrap="truncate">
-                <Text dimColor>{'costo'.padEnd(ETIQUETA)}</Text>
-                <Text tabular>{fmtUsd(u.costUsd)}</Text>
-                <Text dimColor>{`  · ${plural(m.steps, 'respuesta', 'respuestas')}`}</Text>
+                {etq('Cache')}
+                {trozos(
+                  caben(
+                    [
+                      { t: cacheNow.caliente ? '● Caliente' : '○ Fría', c: cacheNow.caliente ? C.gate : C.amber },
+                      !!cacheNow.queda && { t: `  Caduca en ${cacheNow.queda}`, c: cacheNow.aviso ? C.amber : undefined, dim: !cacheNow.aviso },
+                      cacheNow.aciertos !== null && { t: `  · ${cacheNow.aciertos} % aciertos`, dim: true },
+                      extraNow.cacheLeida > 0 && { t: `  · ${kTokens(extraNow.cacheLeida)} leídos`, dim: true },
+                    ],
+                    room,
+                  ),
+                )}
               </Text>
             ) : null}
+            {u.costUsd !== null ? (
+              <Text wrap="truncate">
+                {etq('Costo')}
+                {trozos(
+                  caben(
+                    [
+                      { t: fmtUsd(u.costUsd) },
+                      { t: `  · ${plural(m.steps, 'respuesta', 'respuestas')}`, dim: true },
+                      porHoraNow !== null && { t: ` · ${fmtUsd(porHoraNow)}/h trabajando`, dim: true },
+                    ],
+                    room,
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {hoyNow !== null
+              ? filaBarra('hoy', 'Hoy', (hoyNow / cfg.presupuestoDiario) * 100, ancho, '', undefined, `${fmtUsd(hoyNow)} de ${fmtUsd(cfg.presupuestoDiario)}`)
+              : null}
             {u.limits.slice(0, 2).map(l => {
               const ventana = /five/i.test(l.kind) ? 5 * 3_600_000 : 7 * 86_400_000
               const fraccion = l.resetsAt == null ? null : Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / ventana))
               const ritmo = ritmoCupo(l.pct, fraccion)
               const reinicio = w >= 56 ? fmtReinicio(l.resetsAt, now) : ''
-              return filaBarra(`cupo-${l.kind}`, nombreCupo(l.kind), l.pct, ancho, ritmo, ritmo.startsWith('⇡') ? C.amber : C.gate, reinicio ? `↻ ${reinicio}` : '')
+              const pronostico = w >= 90 ? pronosticoCupo(l.pct, fraccion, l.resetsAt ?? null, now) : ''
+              const cola = [reinicio ? `↻ ${reinicio}` : '', pronostico].filter(Boolean).join(' · ')
+              return filaBarra(`cupo-${l.kind}`, nombreCupo(l.kind), l.pct, ancho, ritmo, ritmo.startsWith('⇡') ? C.amber : C.gate, cola)
             })}
-            <Text dimColor wrap="truncate">
-              {detalle.join(' · ')}
+            <Text wrap="truncate">
+              {etq('Proyecto')}
+              <Text>{carpeta || '—'}</Text>
+              {lineaNow?.session_name && room - (carpeta || '—').length - 5 >= 6 ? (
+                <Text dimColor>{` · «${shorten(lineaNow.session_name, room - (carpeta || '—').length - 5)}»`}</Text>
+              ) : null}
             </Text>
-            {s.ask > 0 || s.deny > 0 ? (
+            {cfg.extras.has('git') && (git || pr) ? (
               <Text wrap="truncate">
-                {s.ask > 0 ? <Text color={C.amber}>{`? ${s.ask} permiso${s.ask === 1 ? '' : 's'} pendiente${s.ask === 1 ? '' : 's'}`}</Text> : null}
-                {s.ask > 0 && s.deny > 0 ? <Text dimColor>{'  '}</Text> : null}
-                {s.deny > 0 ? <Text color={C.warn}>{`✗ ${s.deny} denegado${s.deny === 1 ? '' : 's'}`}</Text> : null}
+                {etq('Git')}
+                {trozos(
+                  caben(
+                    [
+                      ...(git && git.archivos > 0
+                        ? [{ t: `${plural(git.archivos, 'archivo', 'archivos')} ` }, { t: `+${git.mas}`, c: C.gate }, { t: ` −${git.menos}`, c: C.warn }]
+                        : git
+                          ? [{ t: 'Sin cambios', dim: true }]
+                          : []),
+                      !!git?.sinSubir && { t: `  · ↑${git!.sinSubir} sin subir`, dim: true },
+                      !!pr && { t: `  · PR #${pr!.number}${pr!.review_state && REVISION[pr!.review_state] ? ` ${REVISION[pr!.review_state]}` : ''}`, dim: true },
+                      fuentesNow.ci === 'corriendo' && { t: ` · ${emojiDeEstado(now, 'running', 6, cfg.animacion)} CI corriendo`, c: C.main },
+                      fuentesNow.ci === 'pasa' && { t: ' · ✓ CI pasa', c: C.gate },
+                      fuentesNow.ci === 'falla' && { t: ' · ✗ CI falla', c: C.warn },
+                    ],
+                    room,
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {fuentesNow.config ? (
+              <Text wrap="truncate">
+                {etq('Config')}
+                <Text dimColor>{shorten(fuentesNow.config, room)}</Text>
               </Text>
             ) : null}
             {resumenUsos(usosNow) ? <Text dimColor wrap="truncate">{resumenUsos(usosNow)}</Text> : null}
-            {m.speed ? <Text dimColor wrap="truncate">{`última respuesta  ${fmtSpeed(m.speed)}`}</Text> : null}
           </Box>
+        </Box>
+      )
+    }
+
+    // ---- Planes: los de plan_progress, con símbolo y palabra de su estado; la pregunta va debajo con ↳.
+    const planesAhora = planesVisibles(planesNow, now)
+    const planesPanel = (w: number) => {
+      const abiertos = planesAhora.filter(p => p.estado !== 'done').length
+      const filas = planesAhora.slice(0, 3).map(p => filaPlan(p, now))
+      const tw = Math.min(26, Math.max(8, ...filas.map(f => f.titulo.length)))
+      const ancho = Math.max(6, Math.min(20, w - tw - 40))
+      const tinta = (f: { palabra: string }) => (f.palabra === 'Te espera' ? C.amber : f.palabra === 'Falló' ? C.warn : f.palabra === 'Hecho' ? C.gate : C.main)
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text weight="semibold">Planes</Text>
+            <Text dimColor>{abiertos === 0 ? 'ninguno abierto' : plural(abiertos, 'abierto', 'abiertos')}</Text>
+          </Box>
+          <Box flexDirection="column" paddingLeft={2}>
+            {filas.map((f, i) => {
+              const glifo = f.palabra === 'En curso' ? emojiDeEstado(now, 'running', 3 + i, cfg.animacion) : f.glifo
+              const llenas = celdasUso(f.total > 0 ? (f.hechos / f.total) * 100 : 0, ancho)
+              return (
+                <Box key={`plan-${i}`} flexDirection="column">
+                  <Text wrap="truncate">
+                    {trozos(
+                      caben(
+                        [
+                          { t: `${glifo} ${f.palabra.padEnd(10)}`, c: tinta(f) },
+                          { t: `${shorten(f.titulo, Math.min(tw, w - 16)).padEnd(Math.min(tw, w - 16))} ` },
+                          f.palabra !== 'Hecho' && w >= 60 && { t: '█'.repeat(llenas), c: tinta(f) },
+                          f.palabra !== 'Hecho' && w >= 60 && { t: '░'.repeat(ancho - llenas), c: C.faint },
+                          { t: `  ${f.hechos}/${f.total}` },
+                          !!f.paso && f.palabra !== 'Hecho' && { t: `  Paso: ${f.paso}`, dim: true },
+                          { t: `  ${f.tiempo}`, dim: true },
+                        ],
+                        w - 2,
+                      ),
+                    )}
+                  </Text>
+                  {f.nota ? <Text color={f.palabra === 'Falló' ? C.warn : C.amber} wrap="truncate">{`  ${shorten(`↳ ${f.nota}`, w - 4)}`}</Text> : null}
+                </Box>
+              )
+            })}
+            {planesAhora.length > 3 ? <Text dimColor>{`+${planesAhora.length - 3} más`}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
+    // ---- Aduana: solo mientras corren las pruebas largas (o 10 min tras terminar).
+    const aduanaAhora = aduanaNow && aduanaVigente(aduanaNow, now) ? filasAduana(aduanaNow) : null
+    const aduanaPanel = (w: number) => {
+      if (!aduanaAhora) return null
+      const ancho = Math.max(6, Math.min(20, w - 50))
+      const llenas = celdasUso(aduanaAhora.total > 0 ? (aduanaAhora.hechas / aduanaAhora.total) * 100 : 0, ancho)
+      const estado = aduanaAhora.terminado ? '✓ Hecho    ' : `${emojiDeEstado(now, 'running', 5, cfg.animacion)} En curso   `
+      return (
+        <Box flexDirection="column" width={w}>
+          <Text>
+            <Text weight="semibold">Aduana</Text>
+            <Text dimColor>  Pruebas largas</Text>
+          </Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            <Text wrap="truncate">
+              <Text color={aduanaAhora.terminado ? C.gate : C.main}>{estado}</Text>
+              <Text>{`${aduanaAhora.titulo} `}</Text>
+              <Text color={C.main}>{'█'.repeat(llenas)}</Text>
+              <Text color={C.faint}>{'░'.repeat(ancho - llenas)}</Text>
+              <Text tabular>{`  ${aduanaAhora.hechas}/${aduanaAhora.total}`}</Text>
+              <Text dimColor>{`  · ${aduanaAhora.costo}${aduanaAhora.invalidas > 0 ? ` · ${plural(aduanaAhora.invalidas, 'inválida', 'inválidas')}` : ''}`}</Text>
+            </Text>
+            {aduanaAhora.enCurso ? <Text dimColor wrap="truncate">{`  ${aduanaAhora.enCurso}`}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
+    // ---- Gasto y Sesiones: plegadas en una línea; g y s las abren.
+    const plegar = (k: 'gasto' | 'sesiones') => () => update($, plegado, x => {
+      const v = normalize({ gasto: true, sesiones: true }, x)
+      return { ...v, [k]: !v[k] }
+    })
+    const gastoFilas = cfg.extras.has('gasto') ? (gastoNow?.filas ?? []) : []
+    const gastoPanel = (w: number) => {
+      if (gastoFilas.length === 0) return null
+      const abierto = !plegadoNow.gasto
+      const primera = gastoFilas[0]!
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Gasto</Text>
+              <Text dimColor>
+                {`  ${shorten(abierto ? 'Lo que más contexto consume' : `Lo que más gasta: ${primera.llamada}, ${primera.motivo} · ${kTokens(primera.tokens)}`, w - 16)}`}
+              </Text>
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="gasto-plegar" plain hotkey="g" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('gasto')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {gastoFilas.map((f, i) => {
+                // Ancho completo desde 80 columnas; por debajo, la llamada y los tokens.
+                const ancho = w >= 80
+                const llamadaW = ancho ? 32 : Math.max(8, w - 10)
+                const llenas = celdasUso((f.tokens / Math.max(1, primera.tokens)) * 100, 12)
+                return (
+                  <Text key={`gasto-${i}`} wrap="truncate">
+                    <Text>{`${shorten(f.llamada, llamadaW).padEnd(llamadaW)} `}</Text>
+                    {ancho ? <Text dimColor>{`${f.motivo.padEnd(24)} `}</Text> : null}
+                    {ancho ? <Text color={C.main}>{'█'.repeat(llenas)}</Text> : null}
+                    {ancho ? <Text color={C.faint}>{'░'.repeat(12 - llenas)}</Text> : null}
+                    <Text tabular>{`${ancho ? '  ' : ''}${kTokens(f.tokens)}`}</Text>
+                  </Text>
+                )
+              })}
+              {gastoNow?.consejo ? <Text dimColor wrap="truncate">{shorten(gastoNow.consejo, w - 2)}</Text> : null}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+    const otrasVivas = cfg.extras.has('sesiones') ? otrasNow : []
+    const sesionesPanel = (w: number) => {
+      if (otrasVivas.length === 0) return null
+      const abierto = !plegadoNow.sesiones
+      const esperan = otrasVivas.filter(o => o.estado === 'espera')
+      const trabajan = otrasVivas.filter(o => o.estado === 'trabajando').length
+      const nombre = (o: RegistroSesion) => o.nombre ?? o.carpeta
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Sesiones</Text>
+              {abierto ? (
+                <Text dimColor>{`  ${shorten('Otras sesiones de esta máquina', Math.max(4, w - 21))}`}</Text>
+              ) : (
+                <Text>
+                  {trozos(
+                    caben(
+                      [
+                        { t: `  ${plural(otrasVivas.length, 'más abierta', 'más abiertas')}`, dim: true },
+                        !!esperan[0] && { t: ` · ◆ ${nombre(esperan[0]!)} te espera`, c: C.amber },
+                        trabajan > 0 && { t: ` · ${trabajan} trabajando`, dim: true },
+                      ],
+                      w - 17,
+                    ),
+                  )}
+                </Text>
+              )}
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="sesiones-plegar" plain hotkey="v" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('sesiones')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {otrasVivas.slice(0, 6).map((o, i) => (
+                <Text key={`ses-${o.id}`} wrap="truncate">
+                  <Text color={o.estado === 'espera' ? C.amber : o.estado === 'trabajando' ? C.main : C.dim}>
+                    {o.estado === 'espera' ? '◆ Te espera  ' : o.estado === 'trabajando' ? `${emojiDeEstado(now, 'running', i, cfg.animacion)} Trabajando ` : '○ Inactiva   '}
+                  </Text>
+                  <Text>{`${shorten(`${nombre(o)}${o.nombre ? ` · ${o.carpeta}` : ''}`, Math.min(34, w - 24)).padEnd(Math.min(34, w - 24))} `}</Text>
+                  <Text dimColor>{fmtDuration(Math.max(0, now - o.desde))}</Text>
+                </Text>
+              ))}
+            </Box>
+          ) : null}
         </Box>
       )
     }
@@ -1154,11 +1685,15 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column" paddingX={1} width={w}>
           <Box justifyContent="space-between">
-            <Text color={C.faint} weight="semibold" wrap="truncate">
-              {cfg.gateLabel} · revisión
-            </Text>
+            {esLista ? (
+              <Text weight="semibold">Permisos</Text>
+            ) : (
+              <Text color={C.faint} weight="semibold" wrap="truncate">
+                {cfg.gateLabel} · revisión
+              </Text>
+            )}
             <Box flexShrink={0}>
-              <Text dimColor>{`${s.total} revisiones`}</Text>
+              <Text dimColor>{plural(s.total, 'revisión', 'revisiones')}</Text>
             </Box>
           </Box>
           {strip.length === 0 ? <Text color={C.faint}>sin revisiones aún</Text> : markRow(strip.map(checkMark))}
@@ -1230,9 +1765,12 @@ export const register: Register = (on, options) => {
       const isNarrow = w < 40
       const header = (
         <Box justifyContent="space-between" width={w}>
-          <Text weight="semibold" wrap="truncate">
-            {isNarrow ? `agentes · ${running.length}/${cards.length}` : `agentes · ${running.length} activos · ${cards.length} total`}
-          </Text>
+          <Box columnGap={2} flexShrink={1} overflow="hidden">
+            <Text weight="semibold">Agentes</Text>
+            <Text dimColor wrap="truncate">
+              {isNarrow ? `${running.length}/${cards.length}` : `${plural(running.length, 'activo', 'activos')} · ${cards.length} en total`}
+            </Text>
+          </Box>
           {cards.length > 0 ? (
             <Box flexShrink={0}>
               <Text color={C.faint}>{`1-${Math.min(cards.length, useLanes ? CARRILES_VISIBLES : fit)}${isNarrow ? '' : ' abrir'}`}</Text>
@@ -1244,7 +1782,7 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" width={w}>
             {header}
-            <Text color={C.faint}>aún sin subagentes</Text>
+            <Text color={C.faint}>Aún sin subagentes</Text>
           </Box>
         )
       }
@@ -1478,6 +2016,8 @@ export const register: Register = (on, options) => {
 
     // Inline above the prompt (the terminal's main screen), the pane is a summary of at most 8 rows.
     // Con `auto` y 66 columnas o más, el diagrama también va inline; el resumen queda para lo más estrecho.
+    const esperaOtra = otrasVivas.find(o => o.estado === 'espera')
+    const cavMini = etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full')
     const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline' && !enDiagrama && !enMapa)
     if (isMini) {
       const live = cfg.panels.includes('agents') ? [...cards.filter(c => c.status === 'running'), ...cards.filter(c => c.status !== 'running').reverse()].slice(0, 3) : []
@@ -1508,6 +2048,8 @@ export const register: Register = (on, options) => {
                   ? { spans: [{ text: `⟲${u.compactions}`, color: C.amber }] }
                   : null,
               u.costUsd !== null ? { spans: [{ text: `· ${fmtUsd(u.costUsd)}`, dim: true }] } : null,
+              ...u.limits.slice(0, 2).map((l): Piece => ({ spans: [{ text: `· ${nombreCupo(l.kind)} `, dim: true }, { text: `${Math.round(l.pct)}%`, color: tinta(l.pct) }] })),
+              cavMini ? { spans: [{ text: `· ${cavMini}`, color: C.amber }] } : null,
               jevN > 0 ? { spans: [{ text: `· jev [${jevN} decisiones]`, color: C.agent }] } : null,
               showArchitect && cfg.panels.includes('architect') ? { spans: [{ text: `· ${cfg.architectLabel.toLowerCase()} ${advising ? 'asesorando' : a.consults.length}`, color: C.arch }] } : null,
             ],
@@ -1522,6 +2064,28 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ) : null}
+          {cacheNow && lineaNow?.prompt_cache ? (
+            <Text wrap="truncate">
+              <Text dimColor>Cache </Text>
+              <Text color={cacheNow.caliente ? C.gate : C.amber}>{cacheNow.caliente ? `● Caliente ${cacheNow.queda ?? ''}` : '○ Fría'}</Text>
+              {esperaOtra ? <Text color={C.amber}>{` · ◆ ${esperaOtra.nombre ?? esperaOtra.carpeta} te espera`}</Text> : null}
+            </Text>
+          ) : null}
+          {planesAhora.slice(0, 2).map((p, i) => {
+            const f = filaPlan(p, now)
+            const glifo = f.palabra === 'En curso' ? emojiDeEstado(now, 'running', 3 + i, cfg.animacion) : f.glifo
+            const color = f.palabra === 'Te espera' ? C.amber : f.palabra === 'Falló' ? C.warn : f.palabra === 'Hecho' ? C.gate : C.main
+            return (
+              <Box key={`mini-plan-${p.id}`} flexDirection="column">
+                <Text wrap="truncate">
+                  <Text color={color}>{`${glifo} ${f.palabra} `}</Text>
+                  <Text>{`${f.titulo} `}</Text>
+                  <Text dimColor>{`${f.hechos}/${f.total}${f.paso && f.palabra !== 'Hecho' ? `  Paso: ${f.paso}` : ''}  ${f.tiempo}`}</Text>
+                </Text>
+                {f.nota ? <Text color={color} wrap="truncate">{`  ↳ ${f.nota}`}</Text> : null}
+              </Box>
+            )
+          })}
           {live.map((c, i) => (
             <Box key={c.id} columnGap={1}>
               <Text color={statusColor(c)}>{glyph(c, i)}</Text>
@@ -1613,7 +2177,30 @@ export const register: Register = (on, options) => {
     })
     if (enMapa) return vistaMapa(els, C, mapaDatos, W, now, cfg.animacion)
 
-    const body = enDiagrama ? diagramaBody : isWide ? (
+    // La lista (1.3.0): Sesión, Planes, Agentes, Jev, Asesor, Aduana, Gasto, Sesiones, bucles, Permisos y turno.
+    const listaBody = (
+      <Box flexDirection="column" width={W} gap={1}>
+        {[
+          draw('main', W),
+          planesAhora.length > 0 ? planesPanel(W) : null,
+          !isEmpty.agents && cfg.panels.includes('agents') ? (
+            <Box key="agentes" flexDirection="column">
+              {agentsPanel(W)}
+              {expandedPanel(W)}
+            </Box>
+          ) : null,
+          !isEmpty.jev && cfg.panels.includes('jev') ? jevPanel(W) : null,
+          !isEmpty.architect && cfg.panels.includes('architect') ? architectPanel(W) : null,
+          aduanaPanel(W),
+          gastoPanel(W),
+          sesionesPanel(W),
+          !isEmpty.loops && cfg.panels.includes('loops') ? loopsPanel(W) : null,
+          !isEmpty.gate && cfg.panels.includes('gate') ? gatePanel(W) : null,
+          !isEmpty.receipt && cfg.panels.includes('receipt') ? receiptPanel(W) : null,
+        ].filter(Boolean)}
+      </Box>
+    )
+    const body = esLista ? listaBody : enDiagrama ? diagramaBody : isWide ? (
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}
@@ -1627,18 +2214,31 @@ export const register: Register = (on, options) => {
     // La lista lleva una cabecera sobria: nombre, modelo y estado a la izquierda; versión, tiempo y hora a la derecha,
     // atenuados; debajo, una línea fina. Sin emoji ni leyenda de colores.
     if (esLista) {
-      const dcha = [W >= 48 ? `v${MOD_VERSION}` : '', W >= 40 && u.startedAt ? fmtDuration(now - u.startedAt) : '', fmtClock(now).slice(0, 5)].filter(Boolean).join('  ')
+      const servicio = cfg.extras.has('servicio') && W >= 80 ? fuentesNow.servicio : null
+      const dcha = [
+        W >= 48 ? `v${MOD_VERSION}` : '',
+        W >= 40 && u.startedAt ? fmtDuration(now - u.startedAt) : '',
+        // herdr ya muestra la rama y la hora arriba: fuera de herdr las da la cabecera.
+        !herdr && branchNow && W >= 70 ? `⎇ ${branchNow}` : '',
+        !herdr ? fmtClock(now).slice(0, 5) : '',
+      ].filter(Boolean).join(' · ')
+      const cav = etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full')
       return (
         <Box flexDirection="column" width={W}>
           <Box justifyContent="space-between">
             <Text wrap="truncate">
               <Text weight="semibold">TABLERO</Text>
-              <Text dimColor>{` · ${modelName} · `}</Text>
-              <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? '● trabajando' : '○ en espera'}</Text>
-              {showArchitect ? <Text color={C.arch}>{advising ? ' · asesorando' : ''}</Text> : null}
+              <Text dimColor>{' · '}</Text>
+              <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? `${emojiDeEstado(now, 'running', 0, cfg.animacion)} Trabajando` : '○ En espera'}</Text>
+              {cav ? <Text dimColor>{' · '}</Text> : null}
+              {cav ? <Text color={C.amber}>{cav}</Text> : null}
+              {showArchitect && advising ? <Text color={C.arch}>{' · Asesorando'}</Text> : null}
             </Text>
             <Box flexShrink={0}>
-              <Text dimColor tabular>{dcha}</Text>
+              <Text>
+                {servicio ? <Text color={servicio.ok ? C.gate : C.amber}>{`${servicio.ok ? '✓' : '◆'} ${servicio.texto}   `}</Text> : null}
+                <Text dimColor tabular>{dcha}</Text>
+              </Text>
             </Box>
           </Box>
           <Text color={C.faint}>{'─'.repeat(W)}</Text>
@@ -1686,7 +2286,19 @@ export const register: Register = (on, options) => {
         {svgLanes}
       </Box>
     )
+    }
+    const arbol = await pintar()
+    if (esPanel || !debajo) return arbol
+    const { Box } = $.ui.resolve(entrada)
+    return (
+      <Box flexDirection="column">
+        {arbol}
+        {debajo}
+      </Box>
+    )
   }).catch(($, e, next) => {
+    // Sobre el prompt, un fallo no deja una caja de error: la fila simplemente no sale.
+    if (e.component === 'AbovePrompt') return null
     // Without this a failed draw leaves the engine's empty pane.
     const { Box, Text } = $.ui.resolve(e)
     return (
