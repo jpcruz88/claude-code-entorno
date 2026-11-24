@@ -269,6 +269,13 @@ export const fmtDuration = (ms: number) => {
   return m < 60 ? `${m}m${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
 }
 
+/** Minutos para el reloj del mapa en reposo: `<1m` bajo un minuto, `12m`, y `1h05m` pasada la hora. */
+export const fmtMinutos = (ms: number) => {
+  const m = Math.floor(Math.max(0, ms) / 60_000)
+  if (m === 0 && ms < 60_000) return '<1m'
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
+}
+
 /** A running clock as the live cards draw it: m:ss, or XhYY past an hour. */
 export const fmtTimer = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000))

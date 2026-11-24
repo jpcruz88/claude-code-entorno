@@ -283,8 +283,8 @@ const franja = (g: Celda[][], d: DatosMapa, t: number, W: number, vivo: boolean,
   const bg: Tinta | undefined = encendido ? b.tinta : undefined
   const fg: Tinta = encendido ? 'osc' : b.tinta
   for (let y = 1; y <= 3; y++) for (let x = 0; x < W; x++) g[y][x] = bg ? { c: ' ', k: fg, bg } : { c: ' ', k: fg }
-  // El latido late una vez por segundo: en reposo el panel se redibuja como mucho cada segundo.
-  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? (Math.floor(t) % 2 === 0 ? '○' : '●') : b.glifo
+  // El latido queda ○ fijo: solo aparece en reposo, y en reposo el panel se redibuja por minuto (ver clave-redibujo.ts).
+  const gl = b.glifo === 'spin' ? sp : b.glifo === 'latido' ? '○' : b.glifo
   // Con poco ancho, el rótulo va sin espaciar; el detalle se recorta al ancho.
   const largo = `${gl}   ${espaciado(b.rotulo)}`
   const titulo = Array.from(largo).length <= W - 4 ? largo : `${gl} ${b.rotulo}`

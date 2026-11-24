@@ -19,7 +19,7 @@ export const situacionDe = (e: EntradaSituacion): Situacion => {
   return e.trabajando ? 'trabajando' : 'inactivo'
 }
 
-/** Cómo se anima el glifo: el spinner gira, el latido alterna ○/●, el resto es fijo. */
+/** Cómo se anima el glifo: el spinner gira; el latido va ○ fijo (solo aparece en reposo); el resto es fijo. */
 export type GlifoBanner = 'spin' | 'latido' | '▲' | '■'
 
 export type Banner = { rotulo: string; glifo: GlifoBanner; tinta: 'lead' | 'amb' | 'warn' | 'mut'; detalle: string }
