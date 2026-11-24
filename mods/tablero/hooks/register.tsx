@@ -217,6 +217,8 @@ const leerTodasConversaciones = async ($: EngineInterface) => {
       .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
   )
   const todas = leerConversaciones(textos, ahora)
+  // Sin cambios no se toca el estado: cada escritura pide un redibujo.
+  if (JSON.stringify(todas) === JSON.stringify(normalize(DEFAULT_CONV, await read($, conv)).todas)) return
   await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), todas }))
 }
 // Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
