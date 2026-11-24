@@ -293,5 +293,70 @@ class Statusline(unittest.TestCase):
             self.assertIn("falta jq", salida)
 
 
+@unittest.skipUnless(BASH and shutil.which("jq"), "hace falta bash y jq")
+class LineaParaTablero(unittest.TestCase):
+    """Escribe ~/.claude/tablero/linea/<session_id>.json y calla si el tablero está activo."""
+
+    ENTRADA = {
+        "session_id": "abc",
+        "session_name": "Prueba",
+        "model": {"display_name": "Opus 5.5"},
+        "thinking": {"enabled": True},
+        "prompt_cache": {"warm": True, "ttl": "5m", "expires_at": 1900000000, "hit_ratio": 0.91},
+        "pr": {"number": 41, "url": "u", "review_state": "pending"},
+    }
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        self.linea = self.home / ".claude" / "tablero" / "linea"
+
+    def con_tablero(self, activo):
+        ajustes = self.home / ".claude" / "settings.json"
+        ajustes.parent.mkdir(parents=True, exist_ok=True)
+        planes = {"tablero@claude-code-entorno": True} if activo else {}
+        ajustes.write_text(json.dumps({"enabledPlugins": planes}), encoding="utf-8")
+
+    def test_escribe_linea_por_sesion(self):
+        antes = int(time.time())
+        codigo, _ = correr(self.ENTRADA, home=self.home)
+        self.assertEqual(codigo, 0)
+        datos = json.loads((self.linea / "abc.json").read_text(encoding="utf-8"))
+        self.assertEqual(datos["session_id"], "abc")
+        self.assertEqual(datos["session_name"], "Prueba")
+        self.assertIs(datos["thinking"], True)
+        self.assertEqual(datos["prompt_cache"]["expires_at"], 1900000000)
+        self.assertEqual(datos["prompt_cache"]["ttl"], "5m")
+        self.assertEqual(datos["pr"]["number"], 41)
+        self.assertGreaterEqual(datos["actualizado"], antes)
+        self.assertEqual(oct(self.linea.stat().st_mode & 0o777), "0o700")
+
+    def test_silencio_con_tablero(self):
+        self.con_tablero(True)
+        datos = dict(self.ENTRADA, rate_limits={"five_hour": {"used_percentage": 10, "resets_at": 1900000000}})
+        codigo, salida = correr(datos, home=self.home)
+        self.assertEqual(codigo, 0)
+        self.assertEqual(salida, "")
+        self.assertTrue((self.home / ".claude" / "jev" / "limites.json").exists())
+        self.assertTrue((self.linea / "abc.json").exists())
+
+    def test_imprime_sin_tablero(self):
+        self.con_tablero(False)
+        codigo, salida = correr(self.ENTRADA, home=self.home)
+        self.assertEqual(codigo, 0)
+        self.assertIn("Opus 5.5", salida)
+
+    def test_sin_session_id_no_escribe(self):
+        datos = {k: v for k, v in self.ENTRADA.items() if k != "session_id"}
+        correr(datos, home=self.home)
+        self.assertFalse(self.linea.exists() and any(self.linea.iterdir()))
+
+    def test_session_id_con_barra_no_escapa_de_la_carpeta(self):
+        correr(dict(self.ENTRADA, session_id="../x"), home=self.home)
+        self.assertFalse((self.home / ".claude" / "tablero" / "x.json").exists())
+        self.assertFalse(self.linea.exists() and any(self.linea.iterdir()))
+
+
 if __name__ == "__main__":
     unittest.main()
