@@ -234,6 +234,12 @@ declare module 'claude-code' {
       extra: Extra
       /** Git, CI, servicio de Claude y config cargada (ver Fuentes). */
       fuentes: Fuentes
+      /** Las demás sesiones de la máquina (sesiones.ts). */
+      otras: RegistroSesion[]
+      /** Lo que más contexto consume y su consejo (gasto.ts), calculado al final de cada turno del lead. */
+      gasto: { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null }
+      /** Secciones plegadas del panel: Gasto (g) y Sesiones (s). */
+      plegado: { gasto: boolean; sesiones: boolean }
       /** El modo caveman que dicen los prompts de la sesión. */
       caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */

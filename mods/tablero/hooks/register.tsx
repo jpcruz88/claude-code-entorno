@@ -9,6 +9,9 @@ import type { EstadoAduana, Extra, Fuentes } from '../types'
 import { estadoCi, parseShortstat, parseSinSubir } from './git-ci'
 import { URL_SERVICIO, leerServicio } from './servicio'
 import { contarConfig, contarHooks, servidoresMcp } from './config-cargada'
+import { consejoGasto, topGasto } from './gasto'
+import { estadoSesion, leerSesiones } from './sesiones'
+import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -143,6 +146,57 @@ const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as M
 const DEFAULT_FUENTES: Fuentes = { git: null, ci: null, servicio: null, config: null }
 const fuentes = atom({ plugin: 'tablero', key: 'fuentes' } as const, DEFAULT_FUENTES)
 let relojFuentes: { cancel: () => void } | null = null
+// Las demás sesiones, lo que más gasta y lo plegado del panel.
+const otras = atom({ plugin: 'tablero', key: 'otras' } as const, [] as RegistroSesion[])
+const gasto = atom({ plugin: 'tablero', key: 'gasto' } as const, { filas: [], consejo: null } as { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null })
+const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true })
+// Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
+let estadoPropio: { estado: RegistroSesion['estado']; desde: number } | null = null
+const carpetaSesiones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/sesiones`
+/** Escribe el registro de esta sesión para las demás y para el presupuesto. Sin rename en la API: quien lee
+ *  ignora un archivo a medio escribir. */
+const escribirRegistro = async ($: EngineInterface) => {
+  const [id, ahora, m, g, ps, ex, costo, cwd] = await Promise.all([
+    $.session.id().catch(() => ''),
+    $.clock.now(),
+    getMain($),
+    read($, gate),
+    read($, planes),
+    read($, extra),
+    costNow($),
+    $.session.cwd().catch(() => ''),
+  ])
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return
+  const x = normalize(DEFAULT_EXTRA, ex)
+  const estado = estadoSesion({
+    trabajando: m.isRunning,
+    permisosPendientes: gateSummary(normalizeGate(g)).ask,
+    planEspera: listOf<Plan>(ps).some(p => p.estado === 'needs_input'),
+  })
+  if (estadoPropio?.estado !== estado) estadoPropio = { estado, desde: ahora }
+  const registro: RegistroSesion = {
+    id,
+    nombre: x.linea?.session_name ?? null,
+    carpeta: cwd.split('/').filter(Boolean).pop() ?? cwd,
+    estado,
+    desde: estadoPropio.desde,
+    costo: costo ?? 0,
+    base: x.base,
+    dia: x.dia,
+    actualizado: ahora,
+  }
+  await $.fs.write(`${await carpetaSesiones($)}/${id}.json`, JSON.stringify(registro))
+}
+const leerOtras = async ($: EngineInterface) => {
+  const [carpeta, id, ahora] = await Promise.all([carpetaSesiones($), $.session.id().catch(() => ''), $.clock.now()])
+  const lista = await $.fs.list(carpeta).catch(() => [])
+  const textos = await Promise.all(
+    lista
+      .filter(f => f.kind === 'file' && f.name.endsWith('.json'))
+      .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
+  )
+  await update($, otras, () => leerSesiones(textos, id, ahora))
+}
 let vueltaFuentes = 0
 /** Lo que tarde más que `ms` se da por perdido: el panel no espera a una red lenta. */
 const conTope = <T,>($: EngineInterface, ms: number, p: Promise<T>): Promise<T | null> =>
@@ -516,6 +570,7 @@ export const register: Register = (on, options) => {
         if (cfg.extras.has('ci') && n % 6 === 0) tareas.push(leerCi($))
         if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
         if (n % 30 === 0) tareas.push(leerConfig($))
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) tareas.push(leerOtras($))
         await Promise.all(tareas.map(t => t.catch(() => undefined)))
       }
       void vuelta()
@@ -524,6 +579,7 @@ export const register: Register = (on, options) => {
     if (relojAduana === null) {
       relojAduana = $.clock.every(5000, async () => {
         await refrescarExtra($).catch(() => undefined)
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) await escribirRegistro($).catch(() => undefined)
         try {
           const casa = await $.env.get('HOME')
           const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
@@ -899,6 +955,13 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+      if (cfg.extras.has('gasto')) {
+        const mensajes = await $.session.messages({ last: 400 }).catch(() => null)
+        if (Array.isArray(mensajes)) {
+          const filas = topGasto(mensajes)
+          await update($, gasto, () => ({ filas, consejo: consejoGasto(filas) }))
+        }
+      }
       if (e.durationMs > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), trabajoMs: normalize(DEFAULT_EXTRA, x).trabajoMs + e.durationMs }))
       // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
       await update($, gate, g => retireAsks(normalizeGate(g), true))

@@ -1,0 +1,36 @@
+import { expect, test } from 'claude-code/testing'
+import { estadoSesion, leerSesiones } from '../hooks/sesiones'
+
+const AHORA = Date.parse('2026-11-24T12:00:00Z')
+const reg = (id: string, estado: string, actualizado = AHORA - 1000) =>
+  JSON.stringify({ id, nombre: id, carpeta: '/x', estado, desde: AHORA - 60_000, costo: 1, base: 0, dia: '2026-11-24', actualizado })
+
+test('esperar a la persona gana a estar trabajando', () => {
+  expect(estadoSesion({ trabajando: true, permisosPendientes: 1, planEspera: false })).toBe('espera')
+  expect(estadoSesion({ trabajando: false, permisosPendientes: 0, planEspera: true })).toBe('espera')
+  expect(estadoSesion({ trabajando: true, permisosPendientes: 0, planEspera: false })).toBe('trabajando')
+  expect(estadoSesion({ trabajando: false, permisosPendientes: 0, planEspera: false })).toBe('inactiva')
+})
+
+test('un archivo cortado o de hace más de 24 h no aparece', () => {
+  expect(leerSesiones([{ nombre: 'a.json', texto: '{"id":' }, { nombre: 'b.json', texto: reg('b', 'inactiva', AHORA - 25 * 3_600_000) }], 'yo', AHORA)).toEqual([])
+})
+
+test('la propia no sale y el orden es te espera, trabajando, inactiva', () => {
+  const r = leerSesiones(
+    [
+      { nombre: 'c.json', texto: reg('c', 'inactiva') },
+      { nombre: 'yo.json', texto: reg('yo', 'espera') },
+      { nombre: 'a.json', texto: reg('a', 'trabajando') },
+      { nombre: 'b.json', texto: reg('b', 'espera') },
+    ],
+    'yo',
+    AHORA,
+  )
+  expect(r.map(s => s.id)).toEqual(['b', 'a', 'c'])
+})
+
+test('un estado desconocido o campos con otro tipo invalidan el registro', () => {
+  expect(leerSesiones([{ nombre: 'a.json', texto: reg('a', 'bailando') }], 'yo', AHORA)).toEqual([])
+  expect(leerSesiones([{ nombre: 'a.json', texto: JSON.stringify({ id: 'a', estado: 'espera', costo: 'mucho', actualizado: AHORA }) }], 'yo', AHORA)).toEqual([])
+})
