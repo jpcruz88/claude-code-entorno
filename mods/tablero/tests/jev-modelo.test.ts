@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, recientesJev, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
 import type { DecisionJev } from '../hooks/jev-modelo'
 
 const SESION = 'sesion-a'
@@ -406,4 +406,24 @@ test('un decisiones.jsonl mayor que el tope se trata como sin dato', () => {
 test('un limites.json mayor que el tope da null', () => {
   const grande = JSON.stringify({ actualizado: 1, relleno: 'a'.repeat(2_000_000) })
   expect(leerLimites(grande) === null).toBe(true)
+})
+
+test('leerDecisiones con el mismo texto y la misma sesión devuelve lo ya leído, sin parsear de nuevo', () => {
+  const texto = [linea({ opcion: 'sonnet' }), linea({ opcion: 'opus' })].join('\n')
+  expect(leerDecisiones(texto, SESION)).toBe(leerDecisiones(texto, SESION))
+  // Otra sesión o un texto distinto sí se lee de nuevo.
+  expect(leerDecisiones(texto, 'otra')).not.toBe(leerDecisiones(texto, SESION))
+  expect(leerDecisiones(texto + '\n' + linea({ opcion: 'haiku' }), SESION).length).toBe(3)
+})
+
+test('recientesJev solo mira el final del registro: no lee las decisiones viejas', () => {
+  const ds: DecisionJev[] = Array.from({ length: 5000 }, () => decision())
+  for (let i = 0; i < ds.length - 10; i++) {
+    Object.defineProperty(ds, i, {
+      get: () => {
+        throw new Error('leyó una decisión vieja')
+      },
+    })
+  }
+  expect(recientesJev(ds).length).toBe(3)
 })

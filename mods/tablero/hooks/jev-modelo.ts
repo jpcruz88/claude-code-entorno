@@ -87,14 +87,20 @@ const aDecision = (linea: string, sessionId: string): DecisionJev | null => {
   }
 }
 
+// La última lectura: el archivo cambia poco entre un turno y otro, así que releer el mismo texto de la misma sesión
+// devuelve la misma lista, sin parsear de nuevo. La sesión va en la clave: una sesión nueva siempre se lee.
+let ultimaLectura: { sesion: string; texto: string; ds: DecisionJev[] } | null = null
+
 /** Las decisiones de una sesión, en el orden del archivo; las líneas rotas o ajenas se ignoran. */
 export const leerDecisiones = (texto: string, sessionId: string): DecisionJev[] => {
   if (texto.length > TOPE_LECTURA) return []
+  if (ultimaLectura?.sesion === sessionId && ultimaLectura.texto === texto) return ultimaLectura.ds
   const ds: DecisionJev[] = []
   for (const linea of texto.split('\n')) {
     const d = aDecision(linea, sessionId)
     if (d) ds.push(d)
   }
+  ultimaLectura = { sesion: sessionId, texto, ds }
   return ds
 }
 
@@ -216,12 +222,15 @@ const queDecidio = (d: DecisionJev): string => {
 }
 
 /** Las tres últimas decisiones con confianza (sin topes), la más nueva primero, como filas de la caja JEV del mapa. */
-export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] =>
-  ds
-    .filter((d): d is DecisionJev & { confianza: number } => d.tipo !== 'tope' && d.confianza !== null)
-    .slice(-3)
-    .reverse()
-    .map(d => ({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza }))
+export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] => {
+  // Desde el final, hasta tener tres: el registro entero no hace falta.
+  const out: { hora: string; txt: string; conf: number }[] = []
+  for (let i = ds.length - 1; i >= 0 && out.length < 3; i--) {
+    const d = ds[i]
+    if (d && d.tipo !== 'tope' && d.confianza !== null) out.push({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza })
+  }
+  return out
+}
 
 /** La línea del REGISTRO del mapa para una decisión: `{ hora: '21:52', rol: 'jev', txt: 'modelo → sonnet (0.91)' }`. */
 export const lineaRegistroJev = (d: DecisionJev): { hora: string; rol: 'jev'; txt: string } => ({
