@@ -164,6 +164,9 @@ async function getRoster($: EngineInterface): Promise<Roster> {
   return { architectTypes: listOf(r.architectTypes) }
 }
 
+// Lo último que releerJev dejó en el estado: si la nueva lectura da lo mismo, no hay nada que comparar ni escribir.
+let ultimoJev: JevEstado | null = null
+
 /**
  * Relee las decisiones de Jev de esta sesión y las guarda en su estado. Sin id de sesión, sin carpeta
  * personal o sin archivo, no hay ninguna: el tablero no muestra nada de Jev.
@@ -184,7 +187,10 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
   // Escribir el estado redibuja el panel: solo se escribe si algo cambió.
   const nuevo: JevEstado = { decisiones: ds, limites, alDia }
+  // `ds` es el mismo objeto cuando el archivo no cambió (ver leerDecisiones): sin cambios, no se compara.
+  if (ultimoJev && ultimoJev.decisiones === ds && ultimoJev.alDia === alDia && JSON.stringify(ultimoJev.limites) === JSON.stringify(limites)) return ds
   if (JSON.stringify(await getJev($)) !== JSON.stringify(normalizeJev(nuevo))) await update($, jev, () => nuevo)
+  ultimoJev = nuevo
   return ds
 }
 
@@ -308,6 +314,8 @@ let ultimaClave = ''
 // `session.end`), rápido con trabajo en curso y lento en reposo.
 let reloj: { cancel: () => void } | null = null
 let modoActual: ModoReloj = 'lento'
+// Sube cada vez que el reloj se para: un dibujo que empezó antes de parar no lo vuelve a arrancar al terminar.
+let generacionReloj = 0
 const redondeo = (n: number) => Math.round(n * 10) / 10
 
 async function entradaDe($: EngineInterface): Promise<BandaEntrada> {
@@ -352,6 +360,7 @@ async function cuadroDeReloj($: EngineInterface, cfg: Config) {
 }
 
 function detenerReloj() {
+  generacionReloj += 1
   reloj?.cancel()
   reloj = null
 }
@@ -787,6 +796,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const generacion = generacionReloj
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
     const hasClient = 'Client' in els
@@ -829,7 +839,8 @@ export const register: Register = (on, options) => {
     const running = cards.filter(c => c.status === 'running')
     // El panel se está dibujando: si el reloj no corre (recién abierto o reabierto), arranca al ritmo que toca.
     mapaVisible = enMapa
-    if (!reloj) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
+    // Si el reloj se paró mientras este dibujo esperaba datos (cierre o fin de sesión), no lo arranca.
+    if (!reloj && generacion === generacionReloj) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
