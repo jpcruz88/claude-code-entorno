@@ -35,7 +35,7 @@ const ConectorV: ClientModule<Props, State> = (props, surface) => {
   return (
     <Box flexDirection="column" width={1}>
       {filas.map((f, i) => (
-        <Text key={i} color={f === '│' ? props.dim : props.color} bold={f !== '│'} mono>
+        <Text key={i} color={f === '│' ? props.dim : props.color} weight={f !== '│' ? 'semibold' : 'regular'} mono>
           {f}
         </Text>
       ))}

@@ -333,7 +333,7 @@ test('pastel keeps the fixed dark-terminal colours', { options: { layout: 'diagr
   await ui.unmount()
 })
 
-test('neon draws the box lines in saturated fixed colours', { options: { layout: 'diagrama', palette: 'neon' } }, async ($, on) => {
+test('neon colours the principal title in saturated fixed colour', { options: { layout: 'diagrama', palette: 'neon' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')

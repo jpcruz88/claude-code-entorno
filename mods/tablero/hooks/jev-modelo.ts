@@ -423,3 +423,10 @@ export const filaRitmo = (r: RitmoSemana | null, cinco?: VentanaLimite, ahora = 
   const margen = t.modelo === 'fable' ? ' · fable ok' : t.esfuerzo === 'xhigh' ? ' · xhigh ok' : ''
   return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel: nivelDeTope(t) }
 }
+
+/** La línea de ritmo del mapa: `rojo ⇡61%` si se gasta más rápido que el ritmo, `verde ⇣12%` si hay margen. */
+export const textoRitmoMapa = (exceso: number, nivel: NivelRitmo): string => {
+  const r = Math.round(exceso)
+  const palabra = nivel === 'verde' ? 'verde' : nivel === 'ambar' ? 'ámbar' : 'rojo'
+  return `${palabra} ${exceso < 0 ? '⇣' : '⇡'}${Math.abs(r)}%`
+}
