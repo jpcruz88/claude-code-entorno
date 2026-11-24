@@ -110,3 +110,112 @@ export const envioDe = (tool: string, input: unknown): Envio | null => {
   }
   return null
 }
+
+/** Un mensaje anotado en ~/.claude/tablero/conversaciones/<de>.json. */
+export type Mensaje = {
+  /** El id de la llamada a herramienta que lo envió. */
+  id: string
+  /** Id de la sesión que envía y su nombre visible. */
+  de: string
+  deNombre: string
+  /** Id de la sesión destino, o null si no se pudo saber. */
+  a: string | null
+  aNombre: string
+  canal: 'herdr' | 'claude'
+  resumen: string
+  /** Cuándo se envió (ms epoch). */
+  enviado: number
+  /** Cuándo terminó la llamada que esperaba la respuesta (`--wait` o `agent wait`); null si sigue o no esperó. */
+  esperaFin: number | null
+  /** La llamada esperaba la respuesta. */
+  espera: boolean
+}
+
+export type EstadoMensaje = 'espera' | 'respondio' | 'enviado'
+
+/** Una fila de la sección: nombres ya listos para leer («esta» es la sesión propia). */
+export type FilaConversacion = {
+  de: string
+  a: string
+  estado: EstadoMensaje
+  /** Alguien espera la respuesta de esta sesión. */
+  teToca: boolean
+  desde: number
+  resumen: string
+}
+
+const MAX_EDAD_MS = 24 * 3_600_000
+const VENTANA_MS = 30 * 60_000
+const MAX_MENSAJES = 20
+
+const esMensaje = (v: unknown): v is Mensaje => {
+  if (!v || typeof v !== 'object') return false
+  const r = v as Record<string, unknown>
+  const texto = (k: string) => typeof r[k] === 'string'
+  const num = (k: string) => typeof r[k] === 'number' && Number.isFinite(r[k] as number)
+  return (
+    texto('id') && texto('de') && texto('deNombre') && (r.a === null || texto('a')) && texto('aNombre') &&
+    (r.canal === 'herdr' || r.canal === 'claude') && texto('resumen') && num('enviado') &&
+    (r.esperaFin === null || num('esperaFin')) && typeof r.espera === 'boolean'
+  )
+}
+
+/** Los mensajes de todos los archivos: sin los rotos ni los de más de 24 h. */
+export const leerConversaciones = (textos: readonly { nombre: string; texto: string }[], ahoraMs: number): Mensaje[] =>
+  textos.flatMap(({ texto }) => {
+    try {
+      const v = JSON.parse(texto) as unknown
+      return Array.isArray(v) ? v.filter(esMensaje).filter(m => ahoraMs - m.enviado <= MAX_EDAD_MS) : []
+    } catch {
+      return []
+    }
+  })
+
+/** Añade o reemplaza un mensaje (por id) y deja los 20 más nuevos de menos de 24 h. */
+export const anotar = (lista: readonly Mensaje[], m: Mensaje, ahoraMs: number): Mensaje[] =>
+  [...lista.filter(x => x.id !== m.id), m]
+    .filter(x => ahoraMs - x.enviado <= MAX_EDAD_MS)
+    .sort((x, y) => x.enviado - y.enviado)
+    .slice(-MAX_MENSAJES)
+
+/** Se espera respuesta mientras el destino no termine un turno después del envío ni acabe la llamada que esperaba,
+ *  y como mucho 30 min. Sin destino conocido no se dice nada de la respuesta. */
+export const estadoMensaje = (m: Mensaje, turnoFinDe: (id: string) => number | undefined, ahoraMs: number): EstadoMensaje => {
+  if (m.a === null) return 'enviado'
+  if (m.esperaFin !== null) return 'respondio'
+  if ((turnoFinDe(m.a) ?? -Infinity) > m.enviado) return 'respondio'
+  if (ahoraMs - m.enviado > VENTANA_MS) return 'enviado'
+  return 'espera'
+}
+
+/** Las filas de la sección: lo que espera a esta sesión, luego lo que envió ella y luego lo demás; lo nuevo primero. */
+export const filasConversaciones = (todos: readonly Mensaje[], propia: string, turnoFinDe: (id: string) => number | undefined, ahoraMs: number): FilaConversacion[] =>
+  todos
+    .map(m => ({ m, estado: estadoMensaje(m, turnoFinDe, ahoraMs) }))
+    .filter(({ m, estado }) => estado === 'espera' || ahoraMs - m.enviado <= VENTANA_MS)
+    .map(({ m, estado }) => {
+      const teToca = m.a === propia && estado === 'espera'
+      const orden = teToca ? 0 : m.de === propia ? 1 : 2
+      const fila: FilaConversacion = {
+        de: m.de === propia ? 'esta' : m.deNombre,
+        a: m.a === propia ? 'esta' : m.aNombre,
+        estado,
+        teToca,
+        desde: m.enviado,
+        resumen: m.resumen,
+      }
+      return { fila, orden }
+    })
+    .sort((x, y) => x.orden - y.orden || y.fila.desde - x.fila.desde)
+    .map(x => x.fila)
+
+/** La línea plegada: «1 espera respuesta · 1 te pidió algo», o «2 recientes» si nadie espera. */
+export const resumenConversaciones = (filas: readonly FilaConversacion[]): string => {
+  const esperan = filas.filter(f => f.estado === 'espera' && !f.teToca).length
+  const piden = filas.filter(f => f.teToca).length
+  const partes = [
+    esperan > 0 ? `${esperan} ${esperan === 1 ? 'espera' : 'esperan'} respuesta` : '',
+    piden > 0 ? `${piden} te ${piden === 1 ? 'pidió' : 'pidieron'} algo` : '',
+  ].filter(Boolean)
+  return partes.length > 0 ? partes.join(' · ') : `${filas.length} ${filas.length === 1 ? 'reciente' : 'recientes'}`
+}

@@ -55,3 +55,13 @@ test('abiertas son solo las que escribieron en los últimos 30 s: una cerrada no
   expect(r).toHaveLength(2)
   expect(abiertas(r, AHORA).map(s => s.id)).toEqual(['viva'])
 })
+
+test('turnoFin es opcional: con número se conserva, sin él vale, con otro tipo invalida', () => {
+  const con = JSON.stringify({ ...JSON.parse(reg('a', 'inactiva')), turnoFin: AHORA - 1000 })
+  const malo = JSON.stringify({ ...JSON.parse(reg('b', 'inactiva')), turnoFin: 'x' })
+  const r = leerSesiones([{ nombre: 'a.json', texto: con }, { nombre: 'b.json', texto: malo }, { nombre: 'c.json', texto: reg('c', 'inactiva') }], 'yo', AHORA)
+  expect(r.map(s => [s.id, s.turnoFin])).toEqual([
+    ['a', AHORA - 1000],
+    ['c', undefined],
+  ])
+})
