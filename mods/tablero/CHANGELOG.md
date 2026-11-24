@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.0 (tablero)
+
+Rediseño visual: menos marcos, colores del tema y símbolos en lugar de emoji. Mismo contenido.
+
+- Paleta por defecto `theme`, que sigue el tema de Claude Code. `neon` y `pastel` siguen en `/config`.
+- Los estados son símbolos, no emoji: `✓` listo, `○` en cola o detenido, `✗` falló, y un giro de un carácter mientras un agente trabaja (un `●` quieto con la animación apagada). Los emoji ocupan dos columnas y desalineaban la lista de agentes y el mapa.
+- Cupos y contexto: aviso desde 65 % (ámbar) y alerta desde 85 % (rojo). El cupo de 5 h y el de 7 d muestran su ritmo: `⇡N%` si se gasta más rápido que el tiempo de la ventana, `⇣N%` si hay margen. Con menos de 72 columnas el ritmo se oculta antes que partir la línea.
+- Las tarjetas de subagentes no llevan marco; la tarjeta vista se distingue por el peso del título.
+- La instantánea del mapa (`tests/instantaneas-mapa.ts`) se regeneró tras el cambio de glifos. Antes era la de 2281d5e.
+
+Pendiente, no bloquea 1.0:
+- Los marcos del resto de cajas (principal, asesor, permisos, JEV, bucles y mapa) siguen igual; se quitarán en una versión siguiente.
+- El estado del dibujo sigue en variables de módulo; pasará a `$.state` con contrato en `types/`.
+- El mapa en terminal sigue con un `Text` por tramo; `Raster` con `$.ui.blit` queda para más adelante.
+- `bold` restante (pasa a `weight`) y `tabular` en cronómetros.
+
 ## 0.13.0 (tablero)
 
 En reposo el panel deja de redibujarse cada segundo.
