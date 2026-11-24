@@ -38,6 +38,8 @@ param(
   [switch]$SinSkills,
   # No instala los mods de mods/ (por omisión sí; ver README).
   [switch]$SinMods,
+  # No instala cl-go y cl-or (OpenCode de respaldo) en tu perfil de PowerShell.
+  [switch]$SinOpencode,
   # Agrega skipDangerousModePermissionPrompt: quita un aviso de seguridad (ver README).
   [switch]$SaltarAvisoPermisos
 )
@@ -341,7 +343,14 @@ if ($SinCodebaseMemory) { $argumentos += '--sin-codebase-memory' }
 if ($suponerCbm) { $argumentos += '--suponer-codebase-memory' }
 if ($SinSkills) { $argumentos += '--sin-skills' }
 if ($SinMods) { $argumentos += '--sin-mods' }
+if ($SinOpencode) { $argumentos += '--sin-opencode' }
 if ($SaltarAvisoPermisos) { $argumentos += '--saltar-aviso-permisos' }
 if ($gitBash) { $argumentos += @('--git-bash', $gitBash) }
+# cl-go y cl-or (OpenCode de respaldo) se cargan desde el perfil de PowerShell 7 y
+# del 5.1. MyDocuments sigue a OneDrive si la carpeta Documentos está ahí.
+$documentos = [Environment]::GetFolderPath('MyDocuments')
+foreach ($carpeta in 'PowerShell', 'WindowsPowerShell') {
+  $argumentos += @('--perfil-ps', (Join-Path (Join-Path $documentos $carpeta) 'Microsoft.PowerShell_profile.ps1'))
+}
 & $python.Exe @argumentos
 exit $LASTEXITCODE
