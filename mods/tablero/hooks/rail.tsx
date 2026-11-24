@@ -74,7 +74,7 @@ const Rail: ClientModule<Props, State> = (props, surface) => {
   })
   return line(
     runs.map(r => (
-      <Text color={r.isLit ? props.color : props.dim} bold={r.isLit} mono>
+      <Text color={r.isLit ? props.color : props.dim} weight={r.isLit ? 'semibold' : 'regular'} mono>
         {r.text}
       </Text>
     )),

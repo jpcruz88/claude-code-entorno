@@ -35,7 +35,7 @@ const ConectorH: ClientModule<Props, State> = (props, surface) => {
   return (
     <Box flexDirection="row" width={props.ancho}>
       {linea.map((ch, i) => (
-        <Text key={i} color={ch === '─' ? props.dim : props.color} bold={ch !== '─'} mono>
+        <Text key={i} color={ch === '─' ? props.dim : props.color} weight={ch !== '─' ? 'semibold' : 'regular'} mono>
           {ch}
         </Text>
       ))}
