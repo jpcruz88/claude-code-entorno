@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0 (tablero)
+
+En reposo el panel deja de redibujarse cada segundo.
+
+- Con nada trabajando y sin permisos pendientes, el tiempo de sesión de la cabecera y el «hace» del asesor van en minutos (`t 12m`, `hace 3m`) y la franja EN ESPERA queda quieta: el panel se redibuja como mucho una vez por minuto. Con trabajo en curso o con un permiso esperando, todo sigue por segundo. Medido en una sesión real: el panel abierto en reposo gastaba ~1,1 s de CPU por minuto; ahora ~0,38 s, frente a 0,30 s con el panel cerrado.
+- Pruebas de conexión con el motor para `agent.offer` y `SubagentHandback`. `ui.fault` no tiene prueba de conexión porque el kit no expone ese evento; su lógica sí está probada.
+
 ## 0.12.0 (tablero)
 
 El mapa respeta `panels` y lo que faltaba probar tiene prueba.
