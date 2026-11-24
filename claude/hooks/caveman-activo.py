@@ -27,7 +27,7 @@ APAGADO = "off"
 POR_OMISION = "full"
 DIAS_DE_ESTADO = 30
 
-# Los mismos patrones que el mod caveman-badge, para que el badge y el hook coincidan.
+# Los mismos patrones que mods/tablero/hooks/caveman.ts, para que la cabecera del tablero y el hook coincidan.
 NIVEL = re.compile(r"^\s*/caveman(?:\s+(lite|full|ultra))?\s*$", re.IGNORECASE)
 # Se admite puntuación alrededor («stop caveman.», «¡modo normal!»), pero no más palabras.
 APAGAR = re.compile(r"^[\W_]*(stop\s+caveman|modo\s+normal|normal\s+mode)[\W_]*$",

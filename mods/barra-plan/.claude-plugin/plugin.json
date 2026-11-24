@@ -1,6 +1,0 @@
-{
-  "name": "barra-plan",
-  "version": "0.1.0",
-  "description": "Barra de progreso del plan sobre el prompt: una línea por plan abierto, con su avance, paso activo y tiempo. Sustituye a plan-progress",
-  "types": "./types/index.d.ts"
-}
