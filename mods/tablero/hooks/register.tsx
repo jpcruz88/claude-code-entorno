@@ -84,6 +84,7 @@ import {
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
+import { celdasUso, ritmoCupo, tonoUso } from './uso'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
 import { PERIODO_RELOJ_MS, claveDeRedibujo, enReposo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
@@ -960,6 +961,12 @@ export const register: Register = (on, options) => {
                 u.costUsd !== null ? { spans: [{ text: 'costo ', dim: true }, { text: fmtUsd(u.costUsd), color: C.text }] } : null,
                 ...u.limits.slice(0, 2).map((l, i): Piece => {
                   const lg = gauge(l.pct, 5)
+                  // El color marca el umbral (aviso 65 %, alerta 85 %); el ritmo compara el uso con el tiempo de la ventana.
+                  const tono = tonoUso(l.pct)
+                  const ventana = l.kind.includes('five_hour') ? 5 * 3_600_000 : 7 * 86_400_000
+                  const fraccion = l.resetsAt == null ? null : Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / ventana))
+                  // Con menos de 72 columnas no cabe junto al reinicio: se oculta antes que partir la línea.
+                  const ritmo = w >= 72 ? ritmoCupo(l.pct, fraccion) : ''
                   // The time to each reset where the line has room for it: both windows fit from 56 columns,
                   // so a wide pane's half column (59 at 120) has them; a window that doesn't fit is left out.
                   // The hour the window resets (`↻ vie 06:00`): two windows share this line, so only the hour fits.
@@ -969,9 +976,11 @@ export const register: Register = (on, options) => {
                     lead: i > 0 ? 1 : u.costUsd !== null ? 2 : 0,
                     spans: [
                       { text: `${limitLabel(l.kind)} `, dim: true },
-                      { text: lg.on, color: l.pct >= 80 ? C.warn : C.main },
+                      { text: lg.on, color: tono === 'alerta' ? C.warn : tono === 'aviso' ? C.amber : C.main },
                       { text: lg.off, color: C.faint },
-                      { text: ` ${Math.round(l.pct)}%${reset}`, dim: true },
+                      { text: ` ${Math.round(l.pct)}%`, dim: true },
+                      ...(ritmo ? [{ text: `  ${ritmo}`, color: ritmo.startsWith('⇡') ? C.amber : C.gate }] : []),
+                      { text: reset, dim: true },
                     ],
                   }
                 }),
@@ -1114,7 +1123,7 @@ export const register: Register = (on, options) => {
 
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
-    // El emoji de estado: una luna que gira mientras el agente trabaja (cada uno en su fase) y ✅, ❌ o 🛑 al acabar.
+    // El símbolo de estado: un giro mientras el agente trabaja (cada uno en su fase) y ✓, ✗ o ○ al acabar.
     const glyph = (c: AgentCard, i: number) => emojiDeEstado(now, c.status, i, cfg.animacion)
     // La pista del agente: la barra en su color. El emoji va al principio de la fila, no en la pista.
     const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }) => {
@@ -1200,17 +1209,9 @@ export const register: Register = (on, options) => {
               const isViewed = viewed === c.id
               const sameModel = !c.model || prettyModel(c.model) === modelName
               return (
-                <Box
-                  key={c.id}
-                  flexDirection="column"
-                  borderStyle={isViewed ? 'double' : 'round'}
-                  borderColor={c.lastStop === 'max_tokens' ? C.warn : C.agent}
-                  borderDimColor={c.status !== 'running' && !isViewed}
-                  width={cardW}
-                  paddingX={1}
-                >
+                <Box key={c.id} flexDirection="column" width={cardW} paddingX={1}>
                   <Button key={`card-${c.id}`} plain hotkey={String(i + 1)} label={titleLines(cardTitle(c), cardW - 7, cardW - 4)[0]} onPress={expandOnPress(c.id)} />
-                  <Text bold wrap="truncate">
+                  <Text weight={isViewed ? 'semibold' : 'regular'} wrap="truncate">
                     {titleLines(cardTitle(c), cardW - 7, cardW - 4)[1]}
                   </Text>
                   <Text color={C.dim} wrap="truncate">

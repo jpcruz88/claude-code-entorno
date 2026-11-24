@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "0.13.0",
+  "version": "1.0.0",
   "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
@@ -99,7 +99,7 @@
         "pastel",
         "neon"
       ],
-      "default": "neon"
+      "default": "theme"
     },
     "openOnStart": {
       "title": "Abrir al iniciar",

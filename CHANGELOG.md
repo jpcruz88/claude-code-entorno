@@ -6,6 +6,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 ## Sin publicar
 
 - Mod `barra-plan` 0.1.0 sustituye a `plan-progress`, que sale del repo. Una línea por plan abierto sobre el prompt, con su avance, paso activo y tiempo; sin sonidos, sin red y sin leer archivos. **El nombre de la herramienta cambia**: ahora es `mcp__barra-plan__plan_progress` (antes `mcp__plan-progress__plan_progress`), porque el nombre sale del `name` del plugin. Las instrucciones globales que nombran la herramienta vieja deben cambiarse a la nueva. El código viejo queda en el historial de git.
+- `tablero` 1.0.0: rediseño visual. Paleta por defecto `theme`; estados con símbolos (`✓ ○ ✗` y un giro) en lugar de emoji; cupos con aviso desde 65 % y alerta desde 85 %, y su ritmo `⇡/⇣`; las tarjetas de subagentes sin marco. Lo pendiente está en `mods/tablero/CHANGELOG.md`.
 - `cl-go` y `cl-or` en Windows: `opencode/opencode.ps1` los define en PowerShell y `instalar.ps1` lo carga desde el perfil de PowerShell 7 y 5.1 (antes el paso de OpenCode solo corría en Mac y Linux, así que en Windows los comandos no existían). Opción `-SinOpencode` para omitirlo.
 - `tablero` 0.13.0: en reposo el panel se redibuja por minuto en vez de por segundo (en una sesión quieta, de ~1,1 s a ~0,38 s de CPU por minuto; con el panel cerrado son 0,30 s); con trabajo o con un permiso pendiente sigue igual.
 - `tablero` 0.12.0: el mapa respeta `panels` (`jev`, `agents` y `gate` además de `architect` y `aldia`) y los manejadores que el kit no puede disparar tienen pruebas sobre funciones puras.

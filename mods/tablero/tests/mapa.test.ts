@@ -256,3 +256,12 @@ test('filasDeMapa junta celdas del mismo color y fondo, y deja fuera la mitad de
   const franja = filas[2].filter(t => t.bg === 'lead')
   expect(franja.map(t => t.c).join('')).toContain('T R A B A J A N D O')
 })
+
+// Sin emoji en el mapa: ocupan dos celdas y desalinean la columna de tareas. Estados: ✓ listo, ○ en cola, ✗ falló, giro en curso.
+test('el mapa pinta el estado de cada tarea con símbolos, nunca con emoji', () => {
+  const emoji = /[✅❌⏳⛔\u{1F311}-\u{1F318}]/u // ✅ ❌ ⏳ ⛔ y las lunas
+  for (const n of [1, 3, 6]) {
+    const texto = componerMapa(datos(n), 0.4).map(r => r.map(c => c.c).join('')).join('\n')
+    expect(texto).not.toMatch(emoji)
+  }
+})
