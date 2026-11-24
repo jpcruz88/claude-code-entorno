@@ -59,7 +59,7 @@ test('la descripción de un subagente sale sin controles ni secretos', { options
   expect(await visible($, /hunter2/)).toBeUndefined()
 })
 
-test('una revisión «Al día» mayor que el tope no se muestra; una normal sí', async ($, on) => {
+test('una revisión «Al día» mayor que el tope no se muestra; una normal sí', { options: { layout: 'mapa' } }, async ($, on) => {
   const archivos: Record<string, string | null> = {}
   motor(on, archivos)
   const ahora = Date.now()
