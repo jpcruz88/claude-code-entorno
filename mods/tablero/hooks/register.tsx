@@ -12,9 +12,9 @@ import { leerLinea } from './linea-sesion'
 import type { EstadoAduana, Extra, Fuentes } from '../types'
 import { estadoCi, parseShortstat, parseSinSubir } from './git-ci'
 import { URL_SERVICIO, leerServicio } from './servicio'
-import { contarConfig, contarHooks, servidoresMcp } from './config-cargada'
+import { contarConfig, contarHooks, servidoresMcp, soloImporta } from './config-cargada'
 import { consejoGasto, topGasto } from './gasto'
-import { estadoSesion, leerSesiones } from './sesiones'
+import { abiertas, estadoSesion, leerSesiones } from './sesiones'
 import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
@@ -241,7 +241,9 @@ const leerConfig = async ($: EngineInterface) => {
     mds(`${casa}/.claude/rules`),
     mds(`${raiz}/.claude/rules`),
   ])
-  const claudeMd = cuentas.slice(0, 4).reduce((a, b) => a + b, 0)
+  // El CLAUDE.md del proyecto que solo hace `@AGENTS.md` es el mismo archivo de instrucciones: cuenta uno.
+  const soloAgents = cuentas[1] && cuentas[2] ? await $.fs.read(`${raiz}/CLAUDE.md`).then(t => soloImporta(String(t))).catch(() => false) : false
+  const claudeMd = cuentas.slice(0, 4).reduce((a, b) => a + b, 0) - (soloAgents ? 1 : 0)
   const reglas = (cuentas[4] ?? 0) + (cuentas[5] ?? 0)
   const hooks = contarHooks((ajustes as { hooks?: unknown }).hooks)
   const mcp = servidoresMcp(herramientas.map(h => h.name))
@@ -1458,7 +1460,7 @@ export const register: Register = (on, options) => {
         </Box>
       )
     }
-    const otrasVivas = cfg.extras.has('sesiones') ? otrasNow : []
+    const otrasVivas = cfg.extras.has('sesiones') ? abiertas(otrasNow, now) : []
     const sesionesPanel = (w: number) => {
       if (otrasVivas.length === 0) return null
       const abierto = !plegadoNow.sesiones
@@ -2222,7 +2224,8 @@ export const register: Register = (on, options) => {
         !herdr && branchNow && W >= 70 ? `⎇ ${branchNow}` : '',
         !herdr ? fmtClock(now).slice(0, 5) : '',
       ].filter(Boolean).join(' · ')
-      const cav = etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full')
+      // En un panel muy angosto la etiqueta del modo no cabe junto al estado: se omite.
+      const cav = W >= 44 ? etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full') : null
       return (
         <Box flexDirection="column" width={W}>
           <Box justifyContent="space-between">

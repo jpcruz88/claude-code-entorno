@@ -24,6 +24,11 @@ const valido = (v: unknown): v is RegistroSesion => {
   )
 }
 
+/** Las sesiones que siguen abiertas: escribieron su registro hace 30 s o menos. Las cerradas siguen en el
+ *  registro (cuentan para el gasto del día), pero no están abiertas. */
+export const abiertas = (otras: readonly RegistroSesion[], ahoraMs: number): RegistroSesion[] =>
+  otras.filter(r => ahoraMs - r.actualizado <= VIVA_MS)
+
 /** Los registros de las demás sesiones: sin la propia, sin los rotos ni los de más de 24 h, los que esperan primero.
  *  Una sesión que lleva más de 30 s sin escribir cuenta como inactiva desde su última escritura. */
 export const leerSesiones = (textos: readonly { nombre: string; texto: string }[], propia: string, ahoraMs: number): RegistroSesion[] =>

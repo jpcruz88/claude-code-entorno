@@ -12,7 +12,10 @@ export function siguienteModo(actual: Modo, texto: string): Modo {
   return actual
 }
 
-/** Lo que dice la cabecera del tablero: «Caveman full»; apagado, nada. */
+// Lo que dice la cabecera en palabras llanas: cuánto acorta Claude sus respuestas (el modo caveman).
+const ETIQUETA: Record<Exclude<Modo, 'normal'>, string> = { lite: 'Respuestas breves', full: 'Respuestas cortas', ultra: 'Respuestas mínimas' }
+
+/** Lo que dice la cabecera del tablero: «Respuestas cortas»; apagado, nada. */
 export function etiquetaCaveman(m: Modo): string | null {
-  return m === 'normal' ? null : `Caveman ${m}`
+  return m === 'normal' ? null : ETIQUETA[m]
 }

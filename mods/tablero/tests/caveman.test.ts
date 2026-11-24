@@ -42,9 +42,9 @@ test('«modo normal» dentro de una frase más larga no apaga el badge', () => {
 
 
 test('la cabecera dice Caveman con el nivel en mayúscula inicial', () => {
-  expect(etiquetaCaveman('full')).toBe('Caveman full')
-  expect(etiquetaCaveman('lite')).toBe('Caveman lite')
-  expect(etiquetaCaveman('ultra')).toBe('Caveman ultra')
+  expect(etiquetaCaveman('full')).toBe('Respuestas cortas')
+  expect(etiquetaCaveman('lite')).toBe('Respuestas breves')
+  expect(etiquetaCaveman('ultra')).toBe('Respuestas mínimas')
 })
 
 test('apagado no se muestra en la cabecera', () => {
