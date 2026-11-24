@@ -189,7 +189,14 @@ export const estadoMensaje = (m: Mensaje, turnoFinDe: (id: string) => number | u
 }
 
 /** Las filas de la sección: lo que espera a esta sesión, luego lo que envió ella y luego lo demás; lo nuevo primero. */
-export const filasConversaciones = (todos: readonly Mensaje[], propia: string, turnoFinDe: (id: string) => number | undefined, ahoraMs: number): FilaConversacion[] =>
+export const filasConversaciones = (
+  todos: readonly Mensaje[],
+  propia: string,
+  turnoFinDe: (id: string) => number | undefined,
+  ahoraMs: number,
+  /** El nombre actual de una sesión (registro de Sesiones), que gana al que tenía al enviar. */
+  nombreDe: (id: string) => string | undefined = () => undefined,
+): FilaConversacion[] =>
   todos
     .map(m => ({ m, estado: estadoMensaje(m, turnoFinDe, ahoraMs) }))
     .filter(({ m, estado }) => estado === 'espera' || ahoraMs - m.enviado <= VENTANA_MS)
@@ -197,8 +204,8 @@ export const filasConversaciones = (todos: readonly Mensaje[], propia: string, t
       const teToca = m.a === propia && estado === 'espera'
       const orden = teToca ? 0 : m.de === propia ? 1 : 2
       const fila: FilaConversacion = {
-        de: m.de === propia ? 'esta' : m.deNombre,
-        a: m.a === propia ? 'esta' : m.aNombre,
+        de: m.de === propia ? 'esta' : (nombreDe(m.de) ?? m.deNombre),
+        a: m.a === propia ? 'esta' : ((m.a !== null ? nombreDe(m.a) : undefined) ?? m.aNombre),
         estado,
         teToca,
         desde: m.enviado,
@@ -209,7 +216,7 @@ export const filasConversaciones = (todos: readonly Mensaje[], propia: string, t
     .sort((x, y) => x.orden - y.orden || y.fila.desde - x.fila.desde)
     .map(x => x.fila)
 
-/** La línea plegada: «1 espera respuesta · 1 te pidió algo», o «2 recientes» si nadie espera. */
+/** La línea plegada: «1 espera respuesta · 1 te pidió algo», o «2 mensajes recientes, sin esperas». */
 export const resumenConversaciones = (filas: readonly FilaConversacion[]): string => {
   const esperan = filas.filter(f => f.estado === 'espera' && !f.teToca).length
   const piden = filas.filter(f => f.teToca).length
@@ -217,7 +224,7 @@ export const resumenConversaciones = (filas: readonly FilaConversacion[]): strin
     esperan > 0 ? `${esperan} ${esperan === 1 ? 'espera' : 'esperan'} respuesta` : '',
     piden > 0 ? `${piden} te ${piden === 1 ? 'pidió' : 'pidieron'} algo` : '',
   ].filter(Boolean)
-  return partes.length > 0 ? partes.join(' · ') : `${filas.length} ${filas.length === 1 ? 'reciente' : 'recientes'}`
+  return partes.length > 0 ? partes.join(' · ') : `${filas.length} ${filas.length === 1 ? 'mensaje reciente' : 'mensajes recientes'}, sin esperas`
 }
 
 /** La sesión de Claude y el nombre de pestaña que da `herdr agent get <destino>`; null si no es JSON o no los trae. */

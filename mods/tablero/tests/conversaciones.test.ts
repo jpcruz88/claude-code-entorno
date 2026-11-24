@@ -97,7 +97,8 @@ test('resumen de la línea plegada', () => {
   const fila = (p: Partial<FilaConversacion>): FilaConversacion => ({ de: 'esta', a: 'r', estado: 'espera', teToca: false, desde: 0, resumen: '', ...p })
   expect(resumenConversaciones([fila({}), fila({ de: 'Mazda', a: 'esta', teToca: true })])).toBe('1 espera respuesta · 1 te pidió algo')
   expect(resumenConversaciones([fila({}), fila({})])).toBe('2 esperan respuesta')
-  expect(resumenConversaciones([fila({ estado: 'respondio' }), fila({ estado: 'enviado' })])).toBe('2 recientes')
+  expect(resumenConversaciones([fila({ estado: 'respondio' }), fila({ estado: 'enviado' })])).toBe('2 mensajes recientes, sin esperas')
+  expect(resumenConversaciones([fila({ estado: 'respondio' })])).toBe('1 mensaje reciente, sin esperas')
 })
 
 test('archivos rotos o de más de 24 h se ignoran', () => {
@@ -121,4 +122,10 @@ test('destinoHerdr lee la sesión y el nombre de pestaña de herdr agent get', (
   expect(destinoHerdr(JSON.stringify({ result: { agent: { agent_session: { value: 'rev' } } } }))).toEqual({ id: 'rev', nombre: 'rev' })
   expect(destinoHerdr('no es json')).toBeNull()
   expect(destinoHerdr('{"result":{}}')).toBeNull()
+})
+
+test('el nombre actual de la sesión gana al que tenía la pestaña al enviar', () => {
+  const f = filasConversaciones([msg({ aNombre: 'Claude Code' })], 'yo', () => undefined, AHORA, id => (id === 'rev' ? 'Saludo de hola' : undefined))
+  expect(f[0]!.a).toBe('Saludo de hola')
+  expect(filasConversaciones([msg({ aNombre: 'Claude Code' })], 'yo', () => undefined, AHORA)[0]!.a).toBe('Claude Code')
 })

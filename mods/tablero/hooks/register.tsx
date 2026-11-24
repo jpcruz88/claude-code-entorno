@@ -1600,7 +1600,7 @@ export const register: Register = (on, options) => {
     // Conversaciones: quién le habla a quién y quién espera respuesta (conversaciones.ts).
     const turnosFin = new Map<string, number>(otrasNow.filter(o => o.turnoFin !== undefined).map(o => [o.id, o.turnoFin!]))
     if (convNow.turnoFin !== null && idPropio) turnosFin.set(idPropio, convNow.turnoFin)
-    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnosFin.get(id), now) : []
+    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnosFin.get(id), now, id => otrasNow.find(o => o.id === id)?.nombre ?? undefined) : []
     const conversacionesPanel = (w: number) => {
       if (filasConv.length === 0) return null
       const abierto = !plegadoNow.conversaciones
