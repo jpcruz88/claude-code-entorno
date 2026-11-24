@@ -12,7 +12,7 @@ La vista por defecto es una lista de secciones con título, sin cajas:
 - **Aduana:** solo mientras corren las pruebas largas.
 - **Gasto:** plegada, se abre con `g`.
 - **Sesiones:** plegada, se abre con `v`.
-- **Conversaciones:** quién le habla a quién entre sesiones (`SendMessage` y `herdr agent prompt|send-keys|wait`, `herdr pane run`) y quién espera respuesta. Plegada, se abre con `c`; solo sale con mensajes de la última media hora o una espera abierta.
+- **Conversaciones:** quién le habla a quién entre sesiones (`SendMessage` y `herdr agent prompt|send-keys|wait`, `herdr pane run`) y quién espera respuesta. Plegada, se abre con `c`; solo sale con mensajes de la última media hora o una espera abierta. Si el destino es una sesión sin este mod, no avisa cuando termina: su espera dura hasta 30 min. De `send-keys` no guarda lo tecleado.
 - **Permisos.**
 
 Con el panel sin colocar, un resumen de hasta 8 filas va sobre el prompt. El mapa de cajas de versiones anteriores sigue en `/tablero layout mapa`.

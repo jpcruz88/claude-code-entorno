@@ -23,8 +23,8 @@ test('ruta absoluta a herdr y comillas simples', () => {
   expect(envioDe('Bash', { command: `/opt/bin/herdr agent prompt rev 'hola'` })).toMatchObject({ destino: 'rev', resumen: 'hola', espera: false })
 })
 
-test('send-keys junta las teclas; pane run usa el id de pestaña', () => {
-  expect(envioDe('Bash', { command: 'herdr agent send-keys reviewer esc ctrl+c' })?.resumen).toBe('esc ctrl+c')
+test('send-keys no guarda lo tecleado (puede ser una contraseña); pane run usa el id de pestaña', () => {
+  expect(envioDe('Bash', { command: 'herdr agent send-keys reviewer mi-clave enter' })).toMatchObject({ destino: 'reviewer', resumen: '' })
   expect(envioDe('Bash', { command: 'herdr pane run w5:p2 "just test"' })).toMatchObject({ destino: 'w5:p2', resumen: 'just test', espera: false })
 })
 
@@ -61,9 +61,21 @@ const msg = (p: Partial<Mensaje>): Mensaje => ({
   ...p,
 })
 
-test('espera respuesta mientras el destino no termine un turno después del envío', () => {
-  expect(estadoMensaje(msg({}), () => AHORA - 200_000, AHORA)).toBe('espera')
-  expect(estadoMensaje(msg({}), () => AHORA - 60_000, AHORA)).toBe('respondio')
+test('espera respuesta mientras el destino no termine un turno empezado después del envío', () => {
+  expect(estadoMensaje(msg({}), () => ({ inicio: AHORA - 300_000, fin: AHORA - 200_000 }), AHORA)).toBe('espera')
+  expect(estadoMensaje(msg({}), () => ({ inicio: AHORA - 100_000, fin: AHORA - 60_000 }), AHORA)).toBe('respondio')
+})
+
+test('un turno que ya estaba en curso al enviar no cuenta como respuesta', () => {
+  expect(estadoMensaje(msg({}), () => ({ inicio: AHORA - 300_000, fin: AHORA - 60_000 }), AHORA)).toBe('espera')
+})
+
+test('un turno empezado después del envío que aún no termina no es respuesta', () => {
+  expect(estadoMensaje(msg({}), () => ({ inicio: AHORA - 60_000, fin: AHORA - 90_000 }), AHORA)).toBe('espera')
+})
+
+test('un registro viejo sin inicio de turno se juzga solo por el fin', () => {
+  expect(estadoMensaje(msg({}), () => ({ fin: AHORA - 60_000 }), AHORA)).toBe('respondio')
 })
 
 test('el fin de la llamada con --wait cierra la espera', () => {
@@ -90,7 +102,7 @@ test('filas: lo de esta sesión primero, «esta» en lugar de su nombre, te pidi
 })
 
 test('fuera de la ventana: respondidos de hace más de 30 min no salen', () => {
-  expect(filasConversaciones([msg({ enviado: AHORA - 40 * 60_000 })], 'yo', () => AHORA - 39 * 60_000, AHORA)).toEqual([])
+  expect(filasConversaciones([msg({ enviado: AHORA - 40 * 60_000 })], 'yo', () => ({ inicio: AHORA - 39.5 * 60_000, fin: AHORA - 39 * 60_000 }), AHORA)).toEqual([])
 })
 
 test('resumen de la línea plegada', () => {
@@ -128,4 +140,14 @@ test('el nombre actual de la sesión gana al que tenía la pestaña al enviar', 
   const f = filasConversaciones([msg({ aNombre: 'Claude Code' })], 'yo', () => undefined, AHORA, id => (id === 'rev' ? 'Saludo de hola' : undefined))
   expect(f[0]!.a).toBe('Saludo de hola')
   expect(filasConversaciones([msg({ aNombre: 'Claude Code' })], 'yo', () => undefined, AHORA)[0]!.a).toBe('Claude Code')
+})
+
+test('un mensaje que empieza por -- es texto, no un flag', () => {
+  expect(envioDe('Bash', { command: 'herdr agent prompt rev "--arregla la prueba" --wait' })).toMatchObject({ destino: 'rev', resumen: '--arregla la prueba', espera: true })
+})
+
+test('los secretos del texto no se guardan', () => {
+  // El valor se arma en tiempo de ejecución para que no parezca un secreto real en el código.
+  const valor = ['abc', '123', '456', '789'].join('')
+  expect(envioDe('SendMessage', { to: 'a', message: `usa token=${valor} para subir` })!.resumen).not.toContain(valor)
 })

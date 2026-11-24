@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.4.2 (tablero)
+
+Arreglos de la revisión final de Conversaciones.
+
+- **Respuestas:** un turno que ya corría cuando llegó el mensaje no cuenta como respuesta; cuenta el primero que empieza después y termina. El registro de Sesiones guarda también `turnoInicio`.
+- **`--wait` que falla** (tiempo agotado, rechazo o error) ya no sale como «Respondió».
+- **`agent wait`** reabre la espera desde ese momento: una respuesta anterior no la cierra.
+- **Dos envíos a la vez** quedan anotados los dos.
+- **Privacidad:** de `send-keys` no se guarda lo tecleado, y el resto de textos pasa por el filtro de secretos.
+- **Texto que empieza por `--`** («--arregla la prueba») se reconoce como mensaje: solo se quitan los flags de herdr conocidos.
+
 ## 1.4.1 (tablero)
 
 Arreglos de la prueba real de Conversaciones.
