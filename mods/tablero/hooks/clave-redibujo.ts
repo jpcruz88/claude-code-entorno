@@ -27,6 +27,13 @@ export type ModoReloj = 'rapido' | 'lento'
 export const modoReloj = (e: { animacion: boolean; hayTrabajo: boolean }): ModoReloj => (e.animacion && e.hayTrabajo ? 'rapido' : 'lento')
 
 /** Milisegundos entre cuadros en cada modo. Cada cuadro solo redibuja si la clave cambió. */
+/**
+ * ¿Puede arrancar el reloj un dibujo que empezó en la generación `generacionDibujo`? Solo si el reloj está parado y no se
+ * paró después (`session.end`, `ui.close`): un dibujo tardío no lo vuelve a arrancar.
+ */
+export const puedeArrancarReloj = (e: { corriendo: boolean; generacionDibujo: number; generacionActual: number }): boolean =>
+  !e.corriendo && e.generacionDibujo === e.generacionActual
+
 export const PERIODO_RELOJ_MS: Record<ModoReloj, number> = { rapido: 120, lento: 1000 }
 
 export const claveDeRedibujo = (e: EntradaClave): string =>
