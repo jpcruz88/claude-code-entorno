@@ -73,6 +73,8 @@ import {
   esperaPersona,
   settleCheck,
   shorten,
+  limpio,
+  TOPE_LECTURA,
   startConsult,
   stepSpeed,
   stepLoop,
@@ -177,7 +179,7 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const limites = typeof textoLimites === 'string' && leidos === null ? (await getJev($)).limites : leidos
   // Lo que actualizó la revisión «Al día»; ausente o roto es «sin dato» (la caja no se dibuja).
   const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
-  const alDia = typeof textoAlDia === 'string' ? textoAlDia : null
+  const alDia = typeof textoAlDia === 'string' && textoAlDia.length <= TOPE_LECTURA ? textoAlDia : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
   // Escribir el estado redibuja el panel: solo se escribe si algo cambió.
   const nuevo: JevEstado = { decisiones: ds, limites, alDia }
@@ -201,7 +203,7 @@ async function leerRama($: EngineInterface): Promise<string | null> {
     const head = await $.fs.read(`${dir}/.git/HEAD`).catch(() => null)
     if (head !== null) return ramaDeHead(head)
     const archivo = await $.fs.read(`${dir}/.git`).catch(() => null)
-    const gitdir = archivo === null ? null : gitdirDe(archivo)
+    const gitdir = archivo === null ? null : gitdirDe(archivo, dir)
     if (gitdir) return ramaDeHead(await $.fs.read(`${gitdir}/HEAD`).catch(() => ''))
     const padre = dir.replace(/[\\/][^\\/]*$/, '')
     if (padre === dir) break
@@ -689,13 +691,14 @@ export const register: Register = (on, options) => {
       await consultStarted($, cfg, id, e.subagentType.split(':').pop() ?? 'agente')
       return started
     }
+    const descripcion = limpio(e.description)
     const card: AgentCard = {
       ...normalizeCard({}),
       id,
       type: e.name ?? e.subagentType,
       model: started.model,
-      description: e.description,
-      jev: marcaDeSpawn(decisiones, e.description),
+      description: descripcion,
+      jev: marcaDeSpawn(decisiones, descripcion),
       spawnedAt: await $.clock.now(),
     }
     // Decided in the write: a resume whose first step already put its card back to running is not logged again.

@@ -41,6 +41,7 @@ import {
   receiptOf,
   recordCheck,
   redact,
+  shorten,
   settleCheck,
   trimRecent,
   startConsult,
@@ -1096,4 +1097,39 @@ test('a running connector keeps its length every frame: one face, clipped at its
     expect(heads.size > 5).toBe(true) // the dot travels along the line
     await ui.unmount()
   }
+})
+
+// Claves de ejemplo armadas a trozos para que ningún escáner de secretos las tome por reales.
+const AKIA = 'AKIA' + 'Z'.repeat(16)
+const AIZA = 'AIza' + '0123456789abcdefghijklmnopqrstuvwxy'
+const CLAVE = 'hun' + 'ter2'
+
+test('redaction: mysql -p pegado, AKIA, curl -u, clave Google y secret_key', () => {
+  expect(redact('mysql -pS3cretPass -u root')).toBe('mysql -p••• -u root')
+  expect(redact('mysql -u root -p')).toBe('mysql -u root -p')
+  expect(redact(`aws configure set aws_secret_access_key ${AKIA}`)).not.toContain(AKIA)
+  expect(redact(`curl -u admin:${CLAVE} https://h`)).toBe('curl -u admin:••• https://h')
+  expect(redact(`curl https://x?key=${AIZA}`)).not.toContain(AIZA)
+  expect(redact(`export secret_key=${CLAVE}x9`)).not.toContain(CLAVE)
+  const VALOR = 'w' + 'J'.repeat(39)
+  expect(redact(`aws configure set aws_secret_access_key ${VALOR}`)).toBe('aws configure set aws_secret_access_key •••')
+})
+
+test('redaction: sin falsos positivos en mkdir -p, git -u o un curl sin contraseña', () => {
+  expect(redact('mkdir -p src/x')).toBe('mkdir -p src/x')
+  expect(redact('git push -u origin main')).toBe('git push -u origin main')
+  expect(redact('curl -u https://h')).toBe('curl -u https://h')
+})
+
+test('texto externo: sin controles y con secretos tapados al mostrarse', () => {
+  expect(shorten('ls\x1b[2J\x07 -la\u009b', 40)).toBe('ls[2J -la')
+  expect(shorten('vea password=hunter2 ya', 40)).not.toContain('hunter2')
+  expect(describeInput('Bash', { command: 'ls\x1b[2J' })).toBe('Bash → ls[2J')
+  expect(describeInput('Bash', { command: `curl -u admin:${CLAVE} h` })).not.toContain(CLAVE)
+})
+
+test('el consejo del asesor no lleva secretos ni controles', () => {
+  const consejo = adviceLine('Usa el token=abc123xyz\x1b[31m en el paso dos')
+  expect(consejo).not.toContain('abc123xyz')
+  expect(consejo).not.toContain('\x1b')
 })

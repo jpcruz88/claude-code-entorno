@@ -2,7 +2,7 @@
 
 Mod de Claude Code que dibuja un panel en español junto al chat: un mapa con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt, en una terminal angosta, se queda en un resumen de hasta 8 filas.
 
-Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»).
+Es de observación: no bloquea ni retrasa nada. No usa red, no lanza procesos y no escribe archivos. Solo lee cuatro archivos, cada uno con un tope de 2 000 000 de caracteres: `~/.claude/jev/decisiones.jsonl` (las decisiones de Jev, ver «Jev»), `~/.claude/jev/limites.json` (el uso de la cuenta, ver «Tope por uso de la cuenta»), `~/.claude/al-dia/resultado.json` (lo que actualizó «Al día») y el `.git/HEAD` del repo, o el de su worktree, para la rama.
 
 ## Instalar
 
@@ -36,7 +36,7 @@ Jev responde tres preguntas, desde dos hooks de Python del repo:
 
 Las decisiones las toman esos hooks, no el mod. Cada decisión queda en `~/.claude/jev/decisiones.jsonl`, sin el encargo, y el archivo se recorta a sus últimas 2000 líneas.
 
-**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
+**Para Jev, el mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
 
 ### Dónde poner la clave
 

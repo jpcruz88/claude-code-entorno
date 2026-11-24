@@ -1,4 +1,5 @@
 // La revisión «Al día» como filas para la caja del tablero. Sin red ni disco: recibe el texto de resultado.json.
+import { TOPE_LECTURA, limpio } from './core'
 
 export type FilaAlDia = { marca: '↑' | '✗' | '…'; nombre: string; detalle: string; tipo: string; aviso: boolean }
 export type AlDia = { cuando: string; filas: FilaAlDia[]; alDia: number }
@@ -7,7 +8,7 @@ export type AlDia = { cuando: string; filas: FilaAlDia[]; alDia: number }
 const CADUCIDAD_MS = 24 * 3600 * 1000
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const texto = (v: unknown): string => (typeof v === 'string' ? v : '')
+const texto = (v: unknown): string => (typeof v === 'string' ? limpio(v) : '')
 const lista = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isObject) : [])
 const dos = (n: number): string => String(n).padStart(2, '0')
 
@@ -23,7 +24,7 @@ const cuandoDe = (ts: number, ahora: number): string => {
 }
 
 export const leerAlDia = (textoJson: string | null, ahora: number): AlDia | null => {
-  if (textoJson === null) return null
+  if (textoJson === null || textoJson.length > TOPE_LECTURA) return null
   let o: unknown
   try {
     o = JSON.parse(textoJson)

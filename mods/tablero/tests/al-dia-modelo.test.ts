@@ -61,3 +61,14 @@ test('ts de ayer 21:40 dice ayer 21:40', () => {
   const r = leerAlDia(json({ ts, fallos: [{ nombre: 'f', tipo: 'skill', error: 'e' }] }), AHORA)
   expect(r!.cuando).toBe('ayer 21:40')
 })
+
+test('los textos de la revisión no llevan controles de terminal', () => {
+  const r = leerAlDia(json({ fallos: [{ nombre: 'skill\x1b]0;x\x07', tipo: 'skill', error: 'e' }] }), AHORA)
+  expect(r!.filas[0]!.nombre).toBe('skill]0;x')
+  expect(r!.filas[0]!.nombre).not.toContain('\x1b')
+})
+
+test('un resultado.json mayor que el tope da null', () => {
+  const grande = json({ fallos: [{ nombre: 'a'.repeat(2_000_000), tipo: 'skill', error: 'e' }] })
+  expect(leerAlDia(grande, AHORA) === null).toBe(true)
+})
