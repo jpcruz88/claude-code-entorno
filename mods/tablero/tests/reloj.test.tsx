@@ -79,6 +79,16 @@ test('en reposo con el mapa a la vista, como mucho un redibujo por segundo', asy
   await ui.unmount()
 })
 
+test('en reposo con el mapa a la vista, como mucho un redibujo por minuto', async ($, on) => {
+  const m = motor(on)
+  await m.reloj.advance(1_000)
+  await iniciar($)
+  const ui = await $.ui.mount(pane as never)
+  await m.reloj.advance(2_000)
+  expect(await durante(m, 180_000)).toBeLessThanOrEqual(4)
+  await ui.unmount()
+})
+
 test('con el lead trabajando y la animación encendida, el mapa se anima rápido', async ($, on) => {
   const m = motor(on)
   await m.reloj.advance(1_000)

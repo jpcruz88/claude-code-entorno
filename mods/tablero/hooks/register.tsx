@@ -86,7 +86,7 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, enReposo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
 import { nombreDeTipo } from './nombres'
 import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
@@ -355,9 +355,10 @@ async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
   const [e, m] = await Promise.all([entradaDe($), getMain($)])
   if (!reloj) return
-  const modo = modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || e.agentesActivos > 0 })
+  const hayTrabajo = m.isRunning || e.agentesActivos > 0
+  const modo = modoReloj({ animacion: cfg.animacion, hayTrabajo })
   const s = suavizar(cfg, e)
-  const clave = claveDeRedibujo({ ...s, marco: mapaVisible && modo === 'rapido' ? fase : undefined, segundos: mapaVisible })
+  const clave = claveDeRedibujo({ ...s, marco: mapaVisible && modo === 'rapido' ? fase : undefined, segundos: mapaVisible, reposo: enReposo({ hayTrabajo, permisosPendientes: e.permisosPendientes }) })
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')

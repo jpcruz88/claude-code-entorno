@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { PASO_AGENTE_MS } from '../hooks/agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, puedeArrancarReloj } from '../hooks/clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, enReposo, puedeArrancarReloj } from '../hooks/clave-redibujo'
 
 const base = {
   contextoPct: 40,
@@ -51,4 +51,16 @@ test('el reloj solo arranca si está parado y el dibujo es de la generación act
   expect(puedeArrancarReloj({ corriendo: true, generacionDibujo: 2, generacionActual: 2 })).toBe(false)
   // Un dibujo tardío de antes de `session.end` o `ui.close`: la generación ya cambió.
   expect(puedeArrancarReloj({ corriendo: false, generacionDibujo: 1, generacionActual: 2 })).toBe(false)
+})
+
+test('en reposo, el mapa con relojes de segundos cambia la clave por minuto; con trabajo, por segundo', () => {
+  expect(claveDeRedibujo({ ...base, ahora: 1000, segundos: true, reposo: true })).toBe(claveDeRedibujo({ ...base, ahora: 2000, segundos: true, reposo: true }))
+  expect(claveDeRedibujo({ ...base, ahora: 59_000, segundos: true, reposo: true })).not.toBe(claveDeRedibujo({ ...base, ahora: 61_000, segundos: true, reposo: true }))
+  expect(claveDeRedibujo({ ...base, ahora: 1000, segundos: true, reposo: false })).not.toBe(claveDeRedibujo({ ...base, ahora: 2000, segundos: true, reposo: false }))
+})
+
+test('reposo: sin trabajo y sin permisos pendientes; un permiso que espera mantiene el panel vivo', () => {
+  expect(enReposo({ hayTrabajo: false, permisosPendientes: 0 })).toBe(true)
+  expect(enReposo({ hayTrabajo: true, permisosPendientes: 0 })).toBe(false)
+  expect(enReposo({ hayTrabajo: false, permisosPendientes: 1 })).toBe(false)
 })

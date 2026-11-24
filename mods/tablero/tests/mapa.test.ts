@@ -61,13 +61,14 @@ test('detenido: fondo rojo (warn) con los errores seguidos', () => {
   expect(fila(g, 3)).toContain('3 errores seguidos')
 })
 
-test('en espera: fondo gris (mut) y el latido alterna ○ y ●', () => {
+// Antes el latido alternaba ○ y ● cada segundo; en reposo el panel ahora se redibuja por minuto, así que la franja queda quieta.
+test('en espera: fondo gris (mut) y el latido queda ○ fijo, sin alternar', () => {
   const a = componerMapa({ ...datos(0), situacion: 'inactivo', detalle: {} }, 0)
-  // Late una vez por segundo: en reposo el panel se redibuja como mucho cada segundo.
   const b = componerMapa({ ...datos(0), situacion: 'inactivo', detalle: {} }, 1.2)
   expect(a[2][0].bg).toBe('mut')
   expect(fila(a, 2)).toContain('E N   E S P E R A')
-  expect(fila(a, 2)).not.toBe(fila(b, 2))
+  expect(fila(a, 2)).toContain('○')
+  expect(fila(a, 2)).toBe(fila(b, 2))
 })
 
 test('te espera y detenido parpadean: el bloque se apaga y el fondo desaparece', () => {
