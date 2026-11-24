@@ -20,7 +20,7 @@ const banda = (bodyColumns = 100) => ({
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 12, bodyColumns, scroll: { offset: 0, bodyRows: 12 }, view: {}, rows: [] },
 })
 
-type Opciones = { herdr?: boolean; colocado?: boolean }
+type Opciones = { herdr?: boolean; colocado?: boolean; cache?: Record<string, unknown>; ghFalla?: boolean; llamadasGh?: { n: number } }
 
 const motor = (on: On, o: Opciones = {}) => {
   const reloj = mock.clock(on)
@@ -49,7 +49,7 @@ const motor = (on: On, o: Opciones = {}) => {
           session_id: 'abc',
           session_name: 'Nuevo mod de prueba',
           thinking: true,
-          prompt_cache: { warm: true, ttl: '5m', expires_at: ahoraS() + 192, hit_ratio: 0.91 },
+          prompt_cache: o.cache ?? { warm: true, ttl: '5m', expires_at: ahoraS() + 192, hit_ratio: 0.91 },
           pr: { number: 41, url: 'u', review_state: 'pending' },
         }),
       }
@@ -57,6 +57,7 @@ const motor = (on: On, o: Opciones = {}) => {
     throw new Error('ENOENT')
   })
   on('fs.write', () => ({ value: undefined }))
+  on('tool.check', () => ({ decision: 'allow' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
   on('fs.list', (_$, e) => ({ value: String((e as { path?: string }).path ?? '').endsWith('/sesiones') ? [{ name: 'otra.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] : [] }) as never)
   on('session.messages', () => ({
@@ -71,6 +72,8 @@ const motor = (on: On, o: Opciones = {}) => {
     const argv = (e as unknown as { argv: string[] }).argv
     if (argv[0] === 'git' && argv[1] === 'diff') return { value: { exitCode: 0, stdout: ' 3 files changed, 24 insertions(+), 7 deletions(-)\n', stderr: '' } } as never
     if (argv[0] === 'git') return { value: { exitCode: 0, stdout: '1\n', stderr: '' } } as never
+    if (o.llamadasGh) o.llamadasGh.n += 1
+    if (o.ghFalla) return { value: { exitCode: 4, stdout: '', stderr: 'gh: not logged in' } } as never
     return { value: { exitCode: 0, stdout: '[{"bucket":"pass"}]', stderr: '' } } as never
   })
   on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: '{"status":{"indicator":"none"}}' } }) as never)
@@ -152,12 +155,57 @@ test('Gasto y Sesiones salen plegadas en una línea', async ($, on) => {
   await ui.unmount()
 })
 
-test('a 40 columnas ninguna línea pasa del ancho', async ($, on) => {
+// El texto de cada fila tal como se dibuja: un Text con todos sus Text anidados.
+const filasDibujadas = (n: any, out: string[] = [], dentroDeText = false): string[] => {
+  if (!n || typeof n !== 'object') return out
+  const plano = (x: any): string => (typeof x === 'string' ? x : x && Array.isArray(x.children) ? x.children.map(plano).join('') : '')
+  if (n.type === 'Text' && !dentroDeText) out.push(plano(n))
+  for (const c of n.children ?? []) filasDibujadas(c, out, dentroDeText || n.type === 'Text')
+  return out
+}
+
+test('a 40 columnas ninguna fila pasa del ancho, con Gasto y Sesiones abiertas', async ($, on) => {
   const reloj = motor(on, { herdr: false })
   await preparar($, reloj)
   const ui = await $.ui.mount(pane(40) as never)
-  const largas = (await textos(ui)).flatMap(t => t.split('\n')).filter(l => [...l].length > 40)
+  await ui.press({ key: 'gasto-plegar' })
+  await ui.press({ key: 'sesiones-plegar' })
+  const filas = filasDibujadas(await ui.drawn())
+  expect(filas.some(f => f.startsWith('Read src/a.ts'))).toBe(true)
+  expect(filas.some(f => f.includes('Te espera') && f.includes('Mazda'))).toBe(true)
+  // Cada línea de cada fila: las filas que pueden partirse (wrap) se miden por línea.
+  const largas = filas.flatMap(f => f.split('\n')).filter(l => [...l].length > 40)
   expect(largas).toEqual([])
+  await ui.unmount()
+})
+
+test('la cache fría sin dato de aciertos sigue saliendo: «○ Fría»', async ($, on) => {
+  const reloj = motor(on, { herdr: true, cache: { warm: false, ttl: '5m', expires_at: null, hit_ratio: null } })
+  await preparar($, reloj)
+  const ui = await $.ui.mount(pane(108) as never)
+  expect(await ui.find({ text: /^Cache +○ Fría/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('si gh falla no se reintenta cada 10 s: como mucho una vez por minuto', async ($, on) => {
+  const llamadasGh = { n: 0 }
+  const reloj = motor(on, { herdr: true, ghFalla: true, llamadasGh })
+  await preparar($, reloj)
+  const antes = llamadasGh.n
+  await reloj.advance(40_000)
+  expect(llamadasGh.n - antes).toBe(0)
+  await reloj.advance(30_000)
+  expect(llamadasGh.n - antes).toBe(1)
+})
+
+test('Sesiones y Permisos no comparten tecla', async ($, on) => {
+  const reloj = motor(on, { herdr: true })
+  await preparar($, reloj)
+  await ($ as any).tool.check({ tool: 'Bash', tool_use_id: 'k1', input: { command: 'ls' } })
+  const ui = await $.ui.mount(pane(108) as never)
+  const botones = await ui.findAll({ type: 'Button' })
+  const teclas = botones.map((b: any) => b.props?.hotkey).filter(Boolean)
+  expect(new Set(teclas).size).toBe(teclas.length)
   await ui.unmount()
 })
 

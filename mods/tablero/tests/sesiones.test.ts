@@ -34,3 +34,11 @@ test('un estado desconocido o campos con otro tipo invalidan el registro', () =>
   expect(leerSesiones([{ nombre: 'a.json', texto: reg('a', 'bailando') }], 'yo', AHORA)).toEqual([])
   expect(leerSesiones([{ nombre: 'a.json', texto: JSON.stringify({ id: 'a', estado: 'espera', costo: 'mucho', actualizado: AHORA }) }], 'yo', AHORA)).toEqual([])
 })
+
+test('una sesión que dejó de escribir hace más de 30 s cuenta como inactiva, aunque dijera que esperaba', () => {
+  const r = leerSesiones([{ nombre: 'a.json', texto: reg('a', 'espera', AHORA - 31_000) }, { nombre: 'b.json', texto: reg('b', 'trabajando', AHORA - 10_000) }], 'yo', AHORA)
+  expect(r.map(s => [s.id, s.estado])).toEqual([
+    ['b', 'trabajando'],
+    ['a', 'inactiva'],
+  ])
+})

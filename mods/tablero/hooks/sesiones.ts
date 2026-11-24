@@ -2,6 +2,8 @@
 import type { RegistroSesion } from '../types'
 
 const MAX_EDAD_MS = 24 * 3_600_000
+/** Cada tablero escribe su registro cada 5 s: sin noticias en 30 s, la sesión ya no corre (se cerró o se colgó). */
+const VIVA_MS = 30_000
 const ORDEN: Record<RegistroSesion['estado'], number> = { espera: 0, trabajando: 1, inactiva: 2 }
 
 /** Esperar a la persona (un permiso o una pregunta de un plan) gana a estar trabajando. */
@@ -22,7 +24,8 @@ const valido = (v: unknown): v is RegistroSesion => {
   )
 }
 
-/** Los registros de las demás sesiones: sin la propia, sin los rotos ni los de más de 24 h, los que esperan primero. */
+/** Los registros de las demás sesiones: sin la propia, sin los rotos ni los de más de 24 h, los que esperan primero.
+ *  Una sesión que lleva más de 30 s sin escribir cuenta como inactiva desde su última escritura. */
 export const leerSesiones = (textos: readonly { nombre: string; texto: string }[], propia: string, ahoraMs: number): RegistroSesion[] =>
   textos
     .map(({ texto }) => {
@@ -34,4 +37,5 @@ export const leerSesiones = (textos: readonly { nombre: string; texto: string }[
     })
     .filter(valido)
     .filter(r => r.id !== propia && ahoraMs - r.actualizado <= MAX_EDAD_MS)
+    .map(r => (ahoraMs - r.actualizado > VIVA_MS && r.estado !== 'inactiva' ? { ...r, estado: 'inactiva' as const, desde: r.actualizado } : r))
     .sort((a, b) => ORDEN[a.estado] - ORDEN[b.estado] || b.actualizado - a.actualizado)

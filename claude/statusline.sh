@@ -147,7 +147,7 @@ guardar_linea() {
       actualizado: (now | floor),
       session_id: .session_id,
       session_name: (.session_name // null),
-      thinking: (.thinking.enabled // null),
+      thinking: (if (.thinking.enabled | type) == "boolean" then .thinking.enabled else null end),
       prompt_cache: (if (.prompt_cache | type) == "object" then
           {warm: .prompt_cache.warm, ttl: .prompt_cache.ttl,
            expires_at: .prompt_cache.expires_at, hit_ratio: .prompt_cache.hit_ratio}

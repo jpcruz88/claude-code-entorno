@@ -202,6 +202,8 @@ const leerOtras = async ($: EngineInterface) => {
   await update($, otras, () => leerSesiones(textos, id, ahora))
 }
 let vueltaFuentes = 0
+// El último intento de leer el CI: con qué PR y cuándo (ms), para no lanzar gh más de una vez por minuto.
+let ciIntento: { pr: number | null; en: number } = { pr: null, en: 0 }
 /** Lo que tarde más que `ms` se da por perdido: el panel no espera a una red lenta. */
 const conTope = <T,>($: EngineInterface, ms: number, p: Promise<T>): Promise<T | null> =>
   Promise.race([p.catch(() => null), $.clock.sleep(ms).then(() => null)])
@@ -572,13 +574,19 @@ export const register: Register = (on, options) => {
     }).catch(() => undefined)
     if (relojFuentes === null) {
       vueltaFuentes = 0
-      const vuelta = async () => {
+      // Una vuelta nunca lanza: una fuente que falla deja su dato como estaba y el resto sigue.
+      const vuelta = () => vueltaSegura().catch(() => undefined)
+      const vueltaSegura = async () => {
         const n = vueltaFuentes++
         const tareas: Promise<unknown>[] = []
         if (cfg.extras.has('git')) tareas.push(leerGit($))
-        // El CI se mira cada minuto, y también en cuanto aparece un PR que aún no tiene dato.
-        const sinCi = normalize(DEFAULT_FUENTES, await read($, fuentes)).ci === null && normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr
-        if (cfg.extras.has('ci') && (n % 6 === 0 || sinCi)) tareas.push(leerCi($))
+        // El CI se mira en cuanto aparece un PR nuevo y después como mucho una vez por minuto, aunque gh falle.
+        const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr?.number ?? null
+        const ahoraCi = await $.clock.now()
+        if (cfg.extras.has('ci') && pr !== null && (pr !== ciIntento.pr || ahoraCi - ciIntento.en >= 60_000)) {
+          ciIntento = { pr, en: ahoraCi }
+          tareas.push(leerCi($))
+        }
         if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
         if (n % 30 === 0) tareas.push(leerConfig($))
         if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) tareas.push(leerOtras($))
@@ -1246,7 +1254,7 @@ export const register: Register = (on, options) => {
                   u.tokens !== null ? `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}` : '',
                 )
               : null}
-            {cacheNow && (cacheNow.caliente || cacheNow.aciertos !== null) ? (
+            {cacheNow && lineaNow?.prompt_cache ? (
               <Text wrap="truncate">
                 {etq('Cache')}
                 {trozos(
@@ -1424,24 +1432,27 @@ export const register: Register = (on, options) => {
               </Text>
             </Text>
             <Box flexShrink={0}>
-              <Button plain hotkey="g" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('gasto')} />
+              <Button key="gasto-plegar" plain hotkey="g" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('gasto')} />
             </Box>
           </Box>
           {abierto ? (
             <Box flexDirection="column" paddingLeft={2}>
               {gastoFilas.map((f, i) => {
+                // Ancho completo desde 80 columnas; por debajo, la llamada y los tokens.
+                const ancho = w >= 80
+                const llamadaW = ancho ? 32 : Math.max(8, w - 10)
                 const llenas = celdasUso((f.tokens / Math.max(1, primera.tokens)) * 100, 12)
                 return (
                   <Text key={`gasto-${i}`} wrap="truncate">
-                    <Text>{`${shorten(f.llamada, 32).padEnd(32)} `}</Text>
-                    <Text dimColor>{`${f.motivo.padEnd(24)} `}</Text>
-                    <Text color={C.main}>{'█'.repeat(llenas)}</Text>
-                    <Text color={C.faint}>{'░'.repeat(12 - llenas)}</Text>
-                    <Text tabular>{`  ${kTokens(f.tokens)}`}</Text>
+                    <Text>{`${shorten(f.llamada, llamadaW).padEnd(llamadaW)} `}</Text>
+                    {ancho ? <Text dimColor>{`${f.motivo.padEnd(24)} `}</Text> : null}
+                    {ancho ? <Text color={C.main}>{'█'.repeat(llenas)}</Text> : null}
+                    {ancho ? <Text color={C.faint}>{'░'.repeat(12 - llenas)}</Text> : null}
+                    <Text tabular>{`${ancho ? '  ' : ''}${kTokens(f.tokens)}`}</Text>
                   </Text>
                 )
               })}
-              {gastoNow?.consejo ? <Text dimColor wrap="truncate">{gastoNow.consejo}</Text> : null}
+              {gastoNow?.consejo ? <Text dimColor wrap="truncate">{shorten(gastoNow.consejo, w - 2)}</Text> : null}
             </Box>
           ) : null}
         </Box>
@@ -1460,7 +1471,7 @@ export const register: Register = (on, options) => {
             <Text wrap="truncate">
               <Text weight="semibold">Sesiones</Text>
               {abierto ? (
-                <Text dimColor>  Otras sesiones de esta máquina</Text>
+                <Text dimColor>{`  ${shorten('Otras sesiones de esta máquina', Math.max(4, w - 21))}`}</Text>
               ) : (
                 <Text>
                   {trozos(
@@ -1477,7 +1488,7 @@ export const register: Register = (on, options) => {
               )}
             </Text>
             <Box flexShrink={0}>
-              <Button plain hotkey="s" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('sesiones')} />
+              <Button key="sesiones-plegar" plain hotkey="v" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('sesiones')} />
             </Box>
           </Box>
           {abierto ? (
@@ -1487,7 +1498,7 @@ export const register: Register = (on, options) => {
                   <Text color={o.estado === 'espera' ? C.amber : o.estado === 'trabajando' ? C.main : C.dim}>
                     {o.estado === 'espera' ? '◆ Te espera  ' : o.estado === 'trabajando' ? `${emojiDeEstado(now, 'running', i, cfg.animacion)} Trabajando ` : '○ Inactiva   '}
                   </Text>
-                  <Text>{`${shorten(`${nombre(o)}${o.nombre ? ` · ${o.carpeta}` : ''}`, 34).padEnd(34)} `}</Text>
+                  <Text>{`${shorten(`${nombre(o)}${o.nombre ? ` · ${o.carpeta}` : ''}`, Math.min(34, w - 24)).padEnd(Math.min(34, w - 24))} `}</Text>
                   <Text dimColor>{fmtDuration(Math.max(0, now - o.desde))}</Text>
                 </Text>
               ))}
@@ -2053,7 +2064,7 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ) : null}
-          {cacheNow && (cacheNow.caliente || cacheNow.aciertos !== null) ? (
+          {cacheNow && lineaNow?.prompt_cache ? (
             <Text wrap="truncate">
               <Text dimColor>Cache </Text>
               <Text color={cacheNow.caliente ? C.gate : C.amber}>{cacheNow.caliente ? `● Caliente ${cacheNow.queda ?? ''}` : '○ Fría'}</Text>
