@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { estadoSesion, leerSesiones } from '../hooks/sesiones'
+import { abiertas, estadoSesion, leerSesiones } from '../hooks/sesiones'
 
 const AHORA = Date.parse('2026-11-24T12:00:00Z')
 const reg = (id: string, estado: string, actualizado = AHORA - 1000) =>
@@ -41,4 +41,17 @@ test('una sesión que dejó de escribir hace más de 30 s cuenta como inactiva, 
     ['b', 'trabajando'],
     ['a', 'inactiva'],
   ])
+})
+
+test('abiertas son solo las que escribieron en los últimos 30 s: una cerrada no cuenta, aunque siga en el registro', () => {
+  const r = leerSesiones(
+    [
+      { nombre: 'viva.json', texto: reg('viva', 'inactiva', AHORA - 5_000) },
+      { nombre: 'cerrada.json', texto: reg('cerrada', 'trabajando', AHORA - 24 * 60_000) },
+    ],
+    'yo',
+    AHORA,
+  )
+  expect(r).toHaveLength(2)
+  expect(abiertas(r, AHORA).map(s => s.id)).toEqual(['viva'])
 })
