@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Roster, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Receipt, Roster, Turn, Usage, View } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -22,7 +22,6 @@ import {
   afterCall,
   applyStep,
   bucketOf,
-  cellWidth,
   piecesThatFit,
   cardTitle,
   afterCompactRead,
@@ -61,7 +60,6 @@ import {
   normalizeGate,
   noteTool,
   PALETTES,
-  SVG_COLORS,
   parseConfig,
   prettyModel,
   handbackOf,
@@ -87,16 +85,17 @@ import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, type ModoReloj } from './
 import { nombreDeTipo } from './nombres'
 import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
-import { lineasDeEdicion, restoCompacto } from './resumen-modelo'
+import { lineasDeEdicion } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, lineaRegistroJev, marcaTarjeta, recientesJev, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
-import { anotarCosto, costoPorMinuto, type MuestraCosto } from './costo-min'
+import { filaRitmo, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
+import { anotarCosto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
-import { leerAlDia } from './al-dia-modelo'
-import { situacionDe } from './situacion'
-import { MAPA_ANCHO, MAPA_MIN, SPARK_ANCHO, componerMapa, filasDeMapa, type DatosMapa, type TarjetaMapa, type Tinta } from './mapa'
+import { MAPA_ANCHO, MAPA_MIN, SPARK_ANCHO } from './mapa'
+import { datosDelMapa, tintaDeNivel, vistaMapa } from './mapa-vista'
+import { carrilesSvg } from './carriles-svg'
+import { anchoDe, filaDeMarcas, linea, type Piece } from './linea'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -317,6 +316,9 @@ let modoActual: ModoReloj = 'lento'
 // Sube cada vez que el reloj se para: un dibujo que empezó antes de parar no lo vuelve a arrancar al terminar.
 let generacionReloj = 0
 const redondeo = (n: number) => Math.round(n * 10) / 10
+/** «último turno» con su duración, agentes, ediciones y errores: la línea del recibo y la del modo compacto. */
+const textoUltimoTurno = (r: Receipt) =>
+  `último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}`
 
 async function entradaDe($: EngineInterface): Promise<BandaEntrada> {
   const [u, g, cards, ahora] = await Promise.all([getUsage($), getGate($), getCards($), $.clock.now()])
@@ -818,7 +820,9 @@ export const register: Register = (on, options) => {
       read($, gitBranch),
       read($, usos).then(x => normalize(DEFAULT_USOS, x)),
     ])
-    const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
+    const rit = ritmoSemana(jevs.limites, now / 1000)
+    const filaRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)
+    const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRit }
     const jevN = resumenJevs.total
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
@@ -885,49 +889,13 @@ export const register: Register = (on, options) => {
       )
 
     const isTerminal = e.surface === 'terminal'
-    // A row of marks (gate checks, loop dots), sized by `marksIn`. Should a surface draw them wider
-    // still, the row is cut at its box rather than running past it.
-    const markRow = (marks: RenderChildren, lead = 0) => (
-      <Box overflow="hidden" {...(lead ? { marginLeft: lead } : {})}>
-        <Text wrap="truncate-start">{marks}</Text>
-      </Box>
-    )
     // A terminal's border row stands apart from the text above it; a graphical surface draws the
     // border flush against it, so the legend keeps one row of air there.
     const legendGap = isTerminal ? 0 : 1
 
-    // A line of coloured pieces, drawn as a row of boxes. A Text nesting
-    // coloured Texts truncates as one line in a terminal, but the desktop app wraps each nested piece on its
-    // own, lays truncating ones out as blocks of their own, and collapses runs of spaces. So pieces sit `gap`
-    // cells apart (a piece's `lead` adds more), each keeps its width, and pieces that don't fit in `room` are
-    // left out from the end; or a piece marked `fill` (one span) truncates to what the others leave.
-    type Span = { text: string; color?: string; dim?: boolean; bold?: boolean }
-    type Piece = { spans: Span[]; lead?: number; fill?: boolean }
-    const styleOf = (s: Span) => ({ ...(s.color ? { color: s.color } : {}), ...(s.dim ? { dimColor: true } : {}), ...(s.bold ? { bold: true } : {}) })
-    const widthOf = (p: Piece) => p.spans.reduce((n, s) => n + cellWidth(s.text), 0)
-    const line = (pieces: (Piece | null)[], room: number, gap = 1, justify?: 'center') => {
-      const all = pieces.filter((p): p is Piece => p !== null)
-      const shown = all.some(p => p.fill) ? all : all.slice(0, piecesThatFit(all.map(p => ({ width: widthOf(p), lead: p.lead })), room, gap))
-      return (
-        <Box width={room} columnGap={gap} overflow="hidden" {...(justify ? { justifyContent: justify } : {})}>
-          {shown.map(p => {
-            const lead = p.lead ? { marginLeft: p.lead } : {}
-            if (p.fill && p.spans[0]) {
-              return (
-                <Text {...styleOf(p.spans[0])} wrap="truncate">
-                  {p.spans[0].text}
-                </Text>
-              )
-            }
-            return (
-              <Box flexShrink={0} {...lead}>
-                {p.spans.length === 1 && p.spans[0] ? <Text {...styleOf(p.spans[0])}>{p.spans[0].text}</Text> : <Text>{p.spans.map(s => <Text {...styleOf(s)}>{s.text}</Text>)}</Text>}
-              </Box>
-            )
-          })}
-        </Box>
-      )
-    }
+    // Las piezas de una línea y las filas de marcas: linea.tsx.
+    const line = (pieces: (Piece | null)[], room: number, gap = 1, justify?: 'center') => linea(els, pieces, room, gap, justify)
+    const markRow = (marks: RenderChildren, lead = 0) => filaDeMarcas(els, marks, lead)
 
     // ---- main
     const effortN = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 }[m.effort] ?? 0
@@ -1100,7 +1068,7 @@ export const register: Register = (on, options) => {
         { spans: [{ text: isShort ? `✗ ${s.deny}` : `✗ ${plural(s.deny, 'denegado', 'denegados')}`, color: s.deny > 0 ? C.warn : C.dim }] },
       ]
       const words = totalsOf(false)
-      const isShort = piecesThatFit(words.map(p => ({ width: widthOf(p) })), w - 4, 2) < words.length
+      const isShort = piecesThatFit(words.map(p => ({ width: anchoDe(p) })), w - 4, 2) < words.length
       const totals = isShort ? totalsOf(true) : words
       return (
         <Box flexDirection="column" borderStyle="round" borderColor={C.gate} paddingX={1} width={w}>
@@ -1341,7 +1309,7 @@ export const register: Register = (on, options) => {
               [
                 { spans: [{ text: r.reason === 'answer' ? '✓' : '✗', color: r.reason === 'answer' ? C.gate : C.warn }] },
                 {
-                  spans: [{ text: `último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}` }],
+                  spans: [{ text: textoUltimoTurno(r) }],
                   fill: true,
                 },
                 r.costDelta !== null ? { spans: [{ text: `· +${fmtUsd(r.costDelta)}`, color: C.main }] } : null,
@@ -1385,10 +1353,9 @@ export const register: Register = (on, options) => {
     // En escritorio la vida es un SVG con degradado continuo; en la terminal, la fila de texto.
     const vidaEscritorio = (w: number) => {
       if (e.surface === 'terminal') return null
-      const ui = $.ui.resolve(e)
       const v = vidaDe(ctxFill.pct)
-      if (!('Svg' in ui) || v === null) return null
-      const { Svg } = ui
+      if (!('Svg' in els) || v === null) return null
+      const { Svg } = els
       const px = Math.max(120, Math.min(600, w * 8 - 48))
       return <Svg source={svgVida(v, px)} alt={`vida ${v}%`} width={px} height={18} />
     }
@@ -1431,35 +1398,7 @@ export const register: Register = (on, options) => {
     )
 
     // Desktop draws the agents' time axis as SVG under the panels.
-    const svgLanes =
-      e.surface !== 'terminal' && panels.includes('agents') && cards.length > 0
-        ? (() => {
-            const { Svg } = $.ui.resolve(e)
-            const rowH = 18
-            const pxW = 520
-            const geo = lanes(cards.slice(-10), now, 100)
-            const rects = cards
-              .slice(-10)
-              .map((c, i) => {
-                const gm = geo[i]
-                const x = 150 + ((gm?.before ?? 0) / 100) * (pxW - 160)
-                const wpx = Math.max(3, ((gm?.bar ?? 1) / 100) * (pxW - 160))
-                const fill = c.status === 'running' ? SVG_COLORS.running : c.status === 'done' ? SVG_COLORS.done : c.status === 'failed' ? SVG_COLORS.failed : SVG_COLORS.other
-                const label = shorten(cardTitle(c), 22).replace(/[<&>]/g, '')
-                return `<text x="4" y="${i * rowH + 13}" font-size="11" fill="${SVG_COLORS.label}">${label}</text><rect x="${x}" y="${i * rowH + 4}" width="${wpx}" height="10" rx="3" fill="${fill}"/>`
-              })
-              .join('')
-            const svgH = Math.min(10, cards.length) * rowH + 4
-            // No width or height on the element: it takes the markup's own width up to the pane's and
-            // scales down to fit a narrow one, rather than running past it at 520 pixels.
-            return (
-              <Svg
-                source={`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${svgH}" viewBox="0 0 ${pxW} ${svgH}">${rects}</svg>`}
-                alt={`${cards.length} agentes en una línea de tiempo`}
-              />
-            )
-          })()
-        : null
+    const svgLanes = e.surface !== 'terminal' && panels.includes('agents') && cards.length > 0 ? carrilesSvg($.ui.resolve(e).Svg, cards, now) : null
 
     // Inline above the prompt (the terminal's main screen), the pane is a summary of at most 8 rows.
     // Con `auto` y 66 columnas o más, el diagrama también va inline; el resumen queda para lo más estrecho.
@@ -1523,7 +1462,7 @@ export const register: Register = (on, options) => {
           {cfg.panels.includes('loops') && lp.length > 0 ? <Text dimColor wrap="truncate">{`otros loops ${lp.length} · ${lp.filter(l => isLoopActive(l, now)).length} activos`}</Text> : null}
           {!m.isRunning && r && cfg.panels.includes('receipt') ? (
             <Text dimColor wrap="truncate">
-              {`último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}${r.costDelta !== null ? ` · +${fmtUsd(r.costDelta)}` : ''}`}
+              {`${textoUltimoTurno(r)}${r.costDelta !== null ? ` · +${fmtUsd(r.costDelta)}` : ''}`}
             </Text>
           ) : null}
         </Box>
@@ -1564,98 +1503,41 @@ export const register: Register = (on, options) => {
       activo: running.length > 0,
     }) : null
 
-    // La rejilla de 100 columnas de la propuesta: desde 100 columnas, el diagrama se dibuja así (ver mapa.ts).
-    const colorDeTinta = (k: Tinta): string =>
-      ({ fg: C.text, mut: C.faint, lead: C.main, jev: C.cleared, jevd: '#1f6f4f', enj: C.agent, ase: C.arch, warn: C.warn, box: C.dim, amb: C.amber, osc: '#101014' })[k]
-    const rit = ritmoSemana(jevs.limites, now / 1000)
-    const nivelRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)?.nivel
+    const nivelRit = filaRit?.nivel
     const ritmoMapa = rit && nivelRit
-      ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: (nivelRit === 'verde' ? 'jev' : nivelRit === 'ambar' ? 'amb' : 'warn') as Tinta }
+      ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: tintaDeNivel(nivelRit) }
       : undefined
-    const situacion = situacionDe({ trabajando: running.length > 0 || m.isRunning, turnoActivo: m.isRunning, permisosPendientes: s.ask, rachaErrores: t.errorStreak })
     // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
     const topeVigente = topeAhora(jevs.limites, now / 1000)
     anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
-    const juntar = (o: Record<string, number>) => Object.entries(o).map(([k, n]) => `${k}×${n}`).join(' ')
-    const mapaDatos: DatosMapa = {
-      tiempo: u.startedAt ? fmtTimer(now - u.startedAt) : '--:--',
-      reloj: fmtClock(now).slice(0, 5),
-      rama: branchNow || null,
-      version: MOD_VERSION,
-      situacion,
-      detalle: { turno: m.isRunning && t.startedAt ? fmtTimer(now - t.startedAt) : undefined, permisos: s.ask, errores: t.errorStreak },
-      estado: {
-        costo: `$${(u.costUsd ?? 0).toFixed(2)}`,
-        ultimoTurno: r?.costDelta != null ? fmtUsd(r.costDelta) : null,
-        limites: [
-          { kind: 'five_hour', etiqueta: '5h' },
-          { kind: 'seven_day', etiqueta: '7d' },
-        ].flatMap(({ kind, etiqueta }) => {
-          const l = u.limits.find(x => x.kind === kind)
-          return l
-            ? [{ etiqueta, valor: l.pct / 100, texto: `${Math.round(l.pct)}%`, reinicio: restoCompacto(l.resetsAt ?? null, now) || undefined, ritmo: kind === 'seven_day' ? ritmoMapa : undefined }]
-            : []
-        }),
-        permisos: { pendientes: s.ask, denegados: s.deny, modo: m.mode },
-        bucles: lp.length,
-        errores: t.errorStreak,
-        ediciones: t.edits,
-        costoMin: costoPorMinuto(muestrasCosto, now, SPARK_ANCHO),
-        skills: juntar(usosNow.skills),
-        mcp: juntar(usosNow.mcp),
-      },
-      asesor:
-        showArchitect && cfg.panels.includes('architect')
-          ? {
-              estado: advising ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`,
-              consultas: a.consults.length,
-              ultima: lastConsult ? `hace ${fmtDuration(now - lastConsult.at)}` : null,
-            }
-          : null,
-      lead: {
-        modelo: modelName,
-        turno: m.isRunning && t.startedAt ? fmtTimer(now - t.startedAt) : null,
-        ctx: ctxFill.pct === null ? null : ctxFill.pct / 100,
-        mas: u.linesAdded ?? 0,
-        menos: u.linesRemoved ?? 0,
-        respuestas: m.steps,
-        delegando: running.length > 0,
-      },
-      jev: {
-        umbral: 0.8,
-        recientes: recientesJev(jevs.decisiones),
-        decisiones: jevN,
-        tope: topeVigente.texto,
-        topeTinta: topeVigente.nivel === 'verde' ? 'jev' : topeVigente.nivel === 'ambar' ? 'amb' : 'warn',
-      },
-      tarjetas: cards.map((c): TarjetaMapa => ({
-        nombre: nombreDeTipo(c.type),
-        modelo: prettyModel(c.model),
-        hechos: c.steps,
-        // Nadie reporta un plan de pasos: sin total, el mapa muestra los pasos dados sin barra.
-        total: null,
-        estado: c.status === 'running' ? 'R' : c.status === 'done' ? 'D' : c.status === 'failed' ? 'F' : c.status === 'stopped' ? 'S' : 'Q',
-      })),
-      registro: jevs.decisiones.slice(-5).reverse().map(lineaRegistroJev),
-      alDia: cfg.panels.includes('aldia') ? leerAlDia(jevs.alDia ?? null, now) : null,
+    // La vista del mapa (`auto`, desde 40 columnas): sus datos y su dibujo están en mapa-vista.tsx.
+    const mapaDatos = datosDelMapa({
+      now,
+      rama: branchNow,
+      u,
+      m,
+      t,
+      r,
+      s,
+      cards,
+      lp,
+      a,
+      jevs,
+      usos: usosNow,
+      muestras: muestrasCosto,
+      panels: cfg.panels,
+      jevN,
+      modelo: modelName,
+      agentesActivos: running.length,
+      contexto: ctxFill.pct,
+      asesorVisible: showArchitect,
       asesorActivo: advising,
-      barra: { hechos: cards.filter(c => c.status !== 'running').length, total: cards.length },
-    }
-    const mapaBody = enMapa ? (
-      <Box flexDirection="column" width={Math.min(W, MAPA_ANCHO)}>
-        {filasDeMapa(componerMapa(mapaDatos, now / 1000, W, cfg.animacion)).map((tramos, y) => (
-          <Text key={String(y)}>
-            {tramos.map((tr, i) => (
-              <Text key={String(i)} color={colorDeTinta(tr.k)} backgroundColor={tr.bg ? colorDeTinta(tr.bg) : undefined}>
-                {tr.c}
-              </Text>
-            ))}
-          </Text>
-        ))}
-      </Box>
-    ) : null
+      ritmo: ritmoMapa,
+      tope: topeVigente,
+    })
+    if (enMapa) return vistaMapa(els, C, mapaDatos, W, now, cfg.animacion)
 
-    const body = enMapa ? mapaBody : enDiagrama ? diagramaBody : isWide ? (
+    const body = enDiagrama ? diagramaBody : isWide ? (
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}
@@ -1665,8 +1547,6 @@ export const register: Register = (on, options) => {
     ) : (
       column(panels, W)
     )
-
-    if (enMapa) return <Box flexDirection="column" width={W}>{mapaBody}</Box>
 
     return (
       <Box flexDirection="column" width={W}>
