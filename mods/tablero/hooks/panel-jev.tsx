@@ -45,7 +45,7 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
         </Box>
         <Text color={colores.cleared}>{barraJev(f.confianza)}</Text>
         <Box width={4} flexShrink={0}>
-          <Text bold>{valor}</Text>
+          <Text weight="semibold">{valor}</Text>
         </Box>
         <Box width={14} flexShrink={0}>
           <Text dimColor>{forma}</Text>
@@ -54,13 +54,13 @@ export const panelJev = (els: Elementos, colores: Colors, w: number, resumen: Re
     )
   }
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={colores.cleared} paddingX={1} width={w}>
+    <Box flexDirection="column" paddingX={1} width={w}>
       <Box justifyContent="space-between">
-        <Text color={colores.cleared} bold wrap="truncate">
+        <Text color={colores.faint} weight="semibold" wrap="truncate">
           JEV · elige modelo y esfuerzo
         </Text>
         <Box flexShrink={0}>
-          <Text color={colores.cleared} bold>
+          <Text color={colores.faint} weight="semibold">
             {miles(resumen.total)}
           </Text>
         </Box>

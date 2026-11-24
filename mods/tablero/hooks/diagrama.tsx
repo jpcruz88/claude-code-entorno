@@ -87,7 +87,7 @@ export const disposicionDiagrama = (els: Elementos, colores: Colors, p: PiezasDi
       {p.tarjetas}
       {p.expandido}
       {p.vuelta ? (
-        <Box marginLeft={p.asesor !== null ? p.aw + ANCHO_FLECHA : 0} width={rw} borderStyle="round" borderColor={colores.main} paddingX={1}>
+        <Box marginLeft={p.asesor !== null ? p.aw + ANCHO_FLECHA : 0} width={rw} paddingX={1}>
           <Text color={colores.main} wrap="truncate">
             de vuelta al lead · revisar y verificar
           </Text>

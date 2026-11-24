@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 (tablero)
+
+Segunda pasada del rediseño: menos marcos y la línea de ritmo del mapa con ⇡/⇣.
+
+- El panel ya no dibuja cajas dentro de la caja exterior. Principal, asesor, permisos, JEV y la tarjeta vista son títulos con `weight` en color `subtle` (la cabecera de la principal conserva el color del tema). Las cajas de la distribución `diagrama` (con JEV) también salen sin marco.
+- La línea de ritmo de ESTADO en el mapa pasa a la misma notación que el panel: `rojo ⇡61%` en lugar de `rojo +61 pts`; `⇣` si hay margen.
+- `bold` sale de todos los textos del panel: se usa `weight` (`semibold` para lo que iba en negrita). El tipo `Span` de `linea.tsx` lleva `weight`.
+- Pruebas nuevas: el panel no dibuja más de un marco en `diagrama` y `compact`; ningún texto dibujado lleva `bold`; `textoRitmoMapa` da `⇡`/`⇣` según el signo.
+
+Pendiente, no entra en 1.1.0:
+- Mapa en terminal (`mapa.ts`): sus cajas (ESTADO, LEAD, AL DÍA, REGISTRO) siguen con marco; son glifos dibujados en cuadrícula, así que quitarlos cambia la instantánea y las pruebas del mapa.
+- Separación entre secciones con `gap` en la columna: hoy la separan los enlaces `▾` entre paneles, que un `gap` partiría. Falta decidir cómo.
+- Barras de cupo y contexto como barra de Boxes o `Progress`: siguen en `▓░` / `▰▱` de texto.
+- `tabular` en cronómetros y porcentajes.
+- Estado del dibujo a `$.state` con contrato en `types/` (`register.tsx`, variables de módulo que dibujan).
+- Mapa con `Raster` y `$.ui.blit`: no se toca en esta versión.
+
 ## 1.0.0 (tablero)
 
 Rediseño visual: menos marcos, colores del tema y símbolos en lugar de emoji. Mismo contenido.
