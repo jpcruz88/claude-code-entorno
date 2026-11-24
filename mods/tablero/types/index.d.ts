@@ -198,6 +198,14 @@ export type Extra = {
   base: number
 }
 
+/** Lo que leen los temporizadores externos (git, gh, página de estado, configuración); null = sin dato. */
+export type Fuentes = {
+  git: { archivos: number; mas: number; menos: number; sinSubir: number | null } | null
+  ci: 'corriendo' | 'pasa' | 'falla' | null
+  servicio: { ok: boolean; texto: string } | null
+  config: string | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -224,6 +232,8 @@ declare module 'claude-code' {
       aduana: EstadoAduana | null
       /** Lo que deja la statusline para esta sesión (linea-sesion.ts), el trabajo del lead y la cache leída. */
       extra: Extra
+      /** Git, CI, servicio de Claude y config cargada (ver Fuentes). */
+      fuentes: Fuentes
       /** El modo caveman que dicen los prompts de la sesión. */
       caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
