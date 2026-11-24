@@ -135,6 +135,20 @@ export type Roster = { architectTypes: string[] }
 /** Cuántas veces la sesión usó cada habilidad (herramienta Skill) y cada servidor MCP. */
 export type Usos = { skills: Record<string, number>; mcp: Record<string, number> }
 
+/** Los planes de trabajo (antes barra-plan): pasos planos, estado, la nota a leer y su reloj. */
+export type EstadoPlan = 'running' | 'needs_input' | 'error' | 'done'
+export type EstadoPaso = 'pending' | 'active' | 'done' | 'failed'
+export type Paso = { title: string; status: EstadoPaso }
+export type Plan = {
+  id: string
+  title: string
+  pasos: Paso[]
+  estado: EstadoPlan
+  note: string | null
+  startedAt: number
+  endedAt: number | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'tablero': {
@@ -155,6 +169,8 @@ declare module 'claude-code' {
       branch: string | null
       /** Las decisiones de Jev de la sesión y el último limites.json (ver JevEstado). */
       jev: JevEstado
+      /** Los planes abiertos y los terminados hace menos de 30 s (herramienta plan_progress). */
+      planes: Plan[]
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
         title: string
