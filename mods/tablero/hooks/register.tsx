@@ -28,6 +28,11 @@ import {
   claimCompactRead,
   contextFill,
   faultKey,
+  anotarFallo,
+  anotarTipoAsesor,
+  consejoNuevo,
+  esTipoAsesor,
+  llamadaConAutomatica,
   forgetCompactRead,
   titleLines,
   consultTimeline,
@@ -81,7 +86,7 @@ import {
 import type { Config, Panel } from './core'
 import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
 import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, type ModoReloj } from './clave-redibujo'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
 import { nombreDeTipo } from './nombres'
 import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
@@ -484,12 +489,7 @@ export const register: Register = (on, options) => {
 
   on('agent.offer', async ($, e, next) => {
     const offered = await next(e)
-    if (cfg.architect.test(e.agent) || (cfg.matchDescriptions && cfg.architect.test(e.description))) {
-      await update($, roster, r => {
-        const x = normalize(DEFAULT_ROSTER, r)
-        return x.architectTypes.includes(e.agent) ? x : { architectTypes: [...listOf<string>(x.architectTypes), e.agent].slice(-20) }
-      })
-    }
+    if (esTipoAsesor(cfg.architect, cfg.matchDescriptions, e)) await update($, roster, r => anotarTipoAsesor(normalize(DEFAULT_ROSTER, r), e.agent))
     return offered
   })
 
@@ -614,15 +614,9 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     callLoop.set(e.tool_use_id, e.agentId ?? null)
     // La `ask` del clasificador se lee al terminar la llamada, y se borra aunque la llamada lance: no queda para siempre.
-    const cierre: { auto?: Check } = {}
-    const ran = await next(e).finally(() => {
-      callLoop.delete(e.tool_use_id)
-      cierre.auto = autoAsks.get(e.tool_use_id)
-      autoAsks.delete(e.tool_use_id)
-    })
+    const { ran, auto } = await llamadaConAutomatica(autoAsks, e.tool_use_id, () => next(e)).finally(() => callLoop.delete(e.tool_use_id))
     const didRun = ran.deny === undefined
     // Una `ask` que decidió el clasificador se anota ahora, ya resuelta: corrió o fue rechazada.
-    const auto = cierre.auto
     if (auto) {
       await update($, gate, g => recordCheck(normalizeGate(g), { ...auto, verdict: didRun ? 'cleared' : 'deny' }))
     }
@@ -632,12 +626,8 @@ export const register: Register = (on, options) => {
     if (isSettled) await update($, gate, g => settleCheck(normalizeGate(g), e.tool_use_id, didRun))
     // A background agent hands its report back through this tool; an architect's report is its advice.
     if (String(e.tool) === 'SubagentHandback') {
-      const message = (e as unknown as { message?: unknown }).message
-      const a = e.agentId ? await getArchitect($) : null
-      if (a && e.agentId && a.ids.includes(e.agentId) && typeof message === 'string') {
-        const advice = adviceLine(message)
-        if (advice && advice !== a.lastAdvice) await noteAdvice($, cfg, advice)
-      }
+      const consejo = consejoNuevo(e.agentId ? await getArchitect($) : null, e.agentId, (e as unknown as { message?: unknown }).message)
+      if (consejo) await noteAdvice($, cfg, consejo)
       return ran
     }
     if (e.tool === 'Agent') return ran
@@ -788,9 +778,7 @@ export const register: Register = (on, options) => {
   // module, and other surfaces, keep theirs. Keyed by faultKey: `desktop:rail.tsx`.
   const faulted = new Set<string>()
   on('ui.fault', async ($, e, next) => {
-    const key = faultKey(e.surface, e.module)
-    if (e.requestId === PANE && !faulted.has(key)) {
-      faulted.add(key)
+    if (anotarFallo(faulted, PANE, e)) {
       $.ui.log(`tablero: ${e.module} faulted on ${e.surface} (${e.phase}: ${e.reason}); drawing it without animation`)
       $.ui.invalidate('ui.render')
     }
@@ -844,7 +832,7 @@ export const register: Register = (on, options) => {
     // El panel se está dibujando: si el reloj no corre (recién abierto o reabierto), arranca al ritmo que toca.
     mapaVisible = enMapa
     // Si el reloj se paró mientras este dibujo esperaba datos (cierre o fin de sesión), no lo arranca.
-    if (!reloj && generacion === generacionReloj) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
+    if (puedeArrancarReloj({ corriendo: reloj !== null, generacionDibujo: generacion, generacionActual: generacionReloj })) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.

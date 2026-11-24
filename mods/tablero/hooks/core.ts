@@ -599,6 +599,14 @@ export const noteTool = (c: AgentCard, n: ToolNote): AgentCard => ({ ...c, tools
 /** A surface module's fault key, `desktop:rail.tsx`, from `hooks/rail.tsx` or `hooks\rail.tsx` alike. */
 export const faultKey = (surface: string, module: string) => `${surface}:${module.split(/[\\/]/).pop()}`
 
+/** Anota un fallo de un módulo de superficie del panel `pane`; dice si es el primero de esa pieza (hay que volver a dibujar). */
+export const anotarFallo = (fallados: Set<string>, pane: string, e: { requestId: string; surface: string; module: string }): boolean => {
+  const key = faultKey(e.surface, e.module)
+  if (e.requestId !== pane || fallados.has(key)) return false
+  fallados.add(key)
+  return true
+}
+
 /** A card whose agent was resumed after it finished (SendMessage): running again, its clock from its first spawn. */
 export const resumeCard = (c: AgentCard): AgentCard => ({ ...c, status: 'running', endedAt: null })
 
@@ -716,5 +724,35 @@ export const handbackOf = (text: string): { from: string; body: string } | null 
 export const adviceLine = (report: string) => {
   const first = report.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('[') && !l.startsWith('<')) ?? ''
   return shorten(first.replace(/\*\*|__/g, '').replace(/^[#>*\s-]+/, ''), 160)
+}
+
+/** El consejo que una entrega de SubagentHandback trae al panel, o null: solo de un asesor conocido, con texto y distinto del último. */
+export const consejoNuevo = (a: Architect | null, agentId: string | undefined, message: unknown): string | null => {
+  if (!a || !agentId || !a.ids.includes(agentId) || typeof message !== 'string') return null
+  const advice = adviceLine(message)
+  return advice && advice !== a.lastAdvice ? advice : null
+}
+
+/** ¿Es asesor este tipo de agente? Por su nombre o, si `matchDescriptions`, también por su descripción. */
+export const esTipoAsesor = (patron: RegExp, matchDescriptions: boolean, e: { agent: string; description: string }): boolean =>
+  patron.test(e.agent) || (matchDescriptions && patron.test(e.description))
+
+/** Anota un tipo de asesor en el roster: sin repetirlo y con tope de 20 (se queda con los más nuevos). */
+export const anotarTipoAsesor = (r: Roster, tipo: string): Roster => {
+  const tipos = listOf<string>(r.architectTypes)
+  return tipos.includes(tipo) ? r : { architectTypes: [...tipos, tipo].slice(-20) }
+}
+
+/**
+ * Corre la llamada `next` y, al terminar aunque lance, saca de `autoAsks` la `ask` que el clasificador decidió para ella.
+ * Devuelve lo que dejó la llamada y esa `ask` (si la hubo), para anotarla ya resuelta.
+ */
+export const llamadaConAutomatica = async <T>(autoAsks: Map<string, Check>, id: string, next: () => Promise<T>): Promise<{ ran: T; auto?: Check }> => {
+  try {
+    const ran = await next()
+    return { ran, auto: autoAsks.get(id) }
+  } finally {
+    autoAsks.delete(id)
+  }
 }
 
