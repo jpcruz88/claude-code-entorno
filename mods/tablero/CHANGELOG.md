@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0 (tablero)
+
+Quién le habla a quién entre sesiones, y quién espera respuesta.
+
+- **Conversaciones:** sección nueva, plegada, que se abre con `c`. Dice qué mensajes se mandan las sesiones (`SendMessage` y `herdr agent prompt`, `send-keys`, `wait` y `herdr pane run`), y si alguien espera respuesta («◆ Espera respuesta») o le pidieron algo a esta sesión («◆ Te pidió algo»). Solo sale con mensajes de la última media hora o una espera abierta.
+- **Cómo se sabe:** cada tablero anota los envíos de su sesión principal en `~/.claude/tablero/conversaciones/<sesión>.json` y lee los de todas. El destino de herdr se pregunta con `herdr agent get` (tope de 2 s). Un mensaje deja de esperar cuando el destino termina un turno después del envío, cuando acaba la llamada con `--wait`, o a los 30 min.
+- **Sesiones:** el registro de cada sesión guarda `turnoFin`, el fin de su último turno.
+
 ## 1.3.2 (tablero)
 
 Textos que se entienden solos, sin conocer el mod.

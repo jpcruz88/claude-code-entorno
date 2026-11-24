@@ -12,6 +12,7 @@ La vista por defecto es una lista de secciones con título, sin cajas:
 - **Aduana:** solo mientras corren las pruebas largas.
 - **Gasto:** plegada, se abre con `g`.
 - **Sesiones:** plegada, se abre con `v`.
+- **Conversaciones:** quién le habla a quién entre sesiones (`SendMessage` y `herdr agent prompt|send-keys|wait`, `herdr pane run`) y quién espera respuesta. Plegada, se abre con `c`; solo sale con mensajes de la última media hora o una espera abierta.
 - **Permisos.**
 
 Con el panel sin colocar, un resumen de hasta 8 filas va sobre el prompt. El mapa de cajas de versiones anteriores sigue en `/tablero layout mapa`.
@@ -24,13 +25,14 @@ Qué lee, qué lanza y qué escribe. Cada fuente se apaga con la opción `extras
   - `.git/HEAD`;
   - `~/.claude/tablero/linea/<sesión>.json`: lo que deja la statusline (cache, nombre de la sesión, thinking, PR);
   - `~/.claude/tablero/sesiones/*.json`: las demás sesiones;
+  - `~/.claude/tablero/conversaciones/*.json`: lo que se mandan las sesiones;
   - `~/.cache/detector-humo/en-curso.json` (Aduana);
   - los mensajes de la propia sesión, para Gasto.
 
   Cada lectura de archivo tiene un tope de 2 000 000 de caracteres.
-- **Lanza:** `git diff --shortstat` y `git rev-list` cada 10 s, y `gh pr checks` cada minuto si hay PR. Cada uno con tope de tiempo.
+- **Lanza:** `git diff --shortstat` y `git rev-list` cada 10 s, `gh pr checks` cada minuto si hay PR, y `herdr agent get <destino>` cuando la sesión envía algo por herdr (tope de 2 s). Cada uno con tope de tiempo.
 - **Red:** `https://status.claude.com/api/v2/status.json` cada 5 min.
-- **Escribe:** su propio `~/.claude/tablero/sesiones/<sesión>.json`, con su estado, para las demás sesiones y el presupuesto.
+- **Escribe:** su propio `~/.claude/tablero/sesiones/<sesión>.json`, con su estado y el fin de su último turno, para las demás sesiones y el presupuesto, y `~/.claude/tablero/conversaciones/<sesión>.json` con sus últimos 20 envíos a otras sesiones.
 
 ## Instalar
 
