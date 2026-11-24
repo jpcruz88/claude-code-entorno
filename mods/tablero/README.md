@@ -2,7 +2,7 @@
 
 Mod de Claude Code que dibuja un panel en español junto al chat: un mapa con la situación del lead (trabajando, te espera, detenido o en espera), el costo, los cupos de uso y su ritmo, los permisos, el lead, las decisiones de Jev con el tope vigente, los subagentes y lo que actualizó la revisión «Al día». Sobre el prompt, en una terminal angosta, se queda en un resumen de hasta 8 filas.
 
-Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»).
+Es de observación: no bloquea ni retrasa nada. No usa red, no lanza procesos y no escribe archivos. Solo lee cuatro archivos, cada uno con un tope de 2 000 000 de caracteres: `~/.claude/jev/decisiones.jsonl` (las decisiones de Jev, ver «Jev»), `~/.claude/jev/limites.json` (el uso de la cuenta, ver «Tope por uso de la cuenta»), `~/.claude/al-dia/resultado.json` (lo que actualizó «Al día») y el `.git/HEAD` del repo, o el de su worktree, para la rama.
 
 ## Instalar
 
@@ -36,7 +36,7 @@ Jev responde tres preguntas, desde dos hooks de Python del repo:
 
 Las decisiones las toman esos hooks, no el mod. Cada decisión queda en `~/.claude/jev/decisiones.jsonl`, sin el encargo, y el archivo se recorta a sus últimas 2000 líneas.
 
-**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
+**Para Jev, el mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
 
 ### Dónde poner la clave
 
@@ -125,7 +125,7 @@ En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si 
 
 **Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. Los topes no cuentan en el total de decisiones de Jev.
 
-**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· fable ok` cuando el tope dejaría pasar Fable, y `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
+**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. El color es el del tope que rige: verde hasta +5 (el tope deja pasar opus con high o xhigh), ámbar de +5 a +25 (el tope recorta) y rojo por encima de +25 (baja a haiku). La ventana de 5 horas también puede poner el color. Añade `· fable ok` cuando el tope dejaría pasar Fable, y `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
 
 **La fila usa los valores por defecto.** El mod no lee `~/.claude/jev/config.json`: calcula la fila con los valores de `DEFAULTS_LIMITES`. Si cambias `limites`, el tope real del guardián puede no coincidir con lo que muestra la fila (el ritmo, el corte y `xhigh ok`).
 
@@ -146,8 +146,8 @@ En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si 
 |---|---|---|
 | `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
 | `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
-| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. Por encima del último, haiku con medium. |
-| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. Desde el último, haiku con medium. |
+| `semana_escalones` | `[[-20,"fable","xhigh"],[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. Por encima del último, haiku con medium. |
+| `h5_escalones` | `[[40,"fable","xhigh"],[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. Desde el último, haiku con medium. |
 | `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana ya no pone tope. |
 | `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
 | `corte_hora` | `23` | Hora local del corte. |
@@ -163,7 +163,7 @@ En la tarjeta principal, una barra muestra la vida que te queda de contexto (`vi
 
 ## Subagentes
 
-Cada subagente se ve en la caja AGENTES del panel con su nombre, modelo, estado (en curso, listo, ⛔ detenido, ❌ falló) y los pasos que lleva. La barra de avance y la cuenta `n/n` salen solo si alguien reporta un plan de pasos; si no, se muestran los pasos dados. Para el progreso de `savvy-flow`, usa el plugin savvy-progress.
+Cada subagente se ve en la caja AGENTES del panel con su nombre, modelo, estado (en curso, listo, 🛑 detenido, ❌ falló) y los pasos que lleva. La barra de avance y la cuenta `n/n` salen solo si alguien reporta un plan de pasos; si no, se muestran los pasos dados. Para el progreso de `savvy-flow`, usa el plugin savvy-progress.
 
 ## El asesor
 

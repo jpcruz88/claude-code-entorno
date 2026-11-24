@@ -52,7 +52,7 @@ export const resumenUsos = (u: Usos): string => {
   return partes.join(' · ')
 }
 // Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
-export const MOD_VERSION = '0.10.1'
+export const MOD_VERSION = '0.11.0'
 
 // ---------------------------------------------------------------- defaults
 
@@ -232,7 +232,6 @@ export const SVG_COLORS = { running: '#3b82f6', done: '#16a34a', failed: '#dc262
 
 // ---------------------------------------------------------------- formatting
 
-/** `claude-opus-5-5` → `Opus 5.5`; anything else is shown as given. */
 /**
  * A model id as people say it, from any provider's spelling: `claude-opus-5-5[1m]` → `Opus 5.5 1M`,
  * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` → `Sonnet 4.5`, `claude-3-5-haiku-20241022` →
@@ -249,8 +248,14 @@ export const prettyModel = (id: string) => {
   return shorten(id, 22)
 }
 
+/** Tope de lectura de un archivo de datos: lo que pase de aquí no se toma como dato («sin dato»). */
+export const TOPE_LECTURA = 2_000_000
+
+/** Espacios normales y sin caracteres de control (ESC, BEL, C1…): lo que se puede guardar o dibujar. */
+export const sinControles = (s: string) => s.replace(/\s+/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim()
+
 export const shorten = (s: string, n: number) => {
-  const one = s.replace(/\s+/g, ' ').trim()
+  const one = limpio(s)
   return n <= 0 ? '' : one.length > n ? `${one.slice(0, Math.max(0, n - 1)).trimEnd()}…` : one
 }
 
@@ -392,14 +397,22 @@ const SECRETS: [RegExp, string][] = [
   [/(authorization\s*[:=]\s*)(bearer\s+|basic\s+)?\S+/gi, '$1$2•••'],
   [/\b(bearer)\s+[A-Za-z0-9._~+/-]{8,}=*/gi, '$1 •••'],
   [/\b(sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g, '•••'],
-  [/((?:api[_-]?key|access[_-]?token|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
+  [/((?:api[_-]?key|access[_-]?token|secret[_-]?key|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
   [/(--(?:token|password|api-key|secret)[= ])\S+/gi, '$1•••'],
   [/(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)=)\S+/g, '$1•••'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s@]+@/gi, '$1•••@'],
+  [/(\b(?:mysql|mariadb|mysqldump)\b[^\n|;&]*?\s-p)\S+/gi, '$1•••'],
+  [/(\baws_secret_access_key\s+)\S+/gi, '$1•••'],
+  [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '•••'],
+  [/\bAIza[0-9A-Za-z_-]{35}/g, '•••'],
+  [/(\b(?:curl|wget)\b[^\n|;&]*?\s(?:-u|--user)[ =]*[^\s:]+:)(?!\/\/)\S+/gi, '$1•••'],
 ]
 
 /** What the gate drill-down may store: credentials masked before anything is written to state. */
 export const redact = (s: string) => SECRETS.reduce((t, [re, to]) => t.replace(re, to), s)
+
+/** Todo texto de fuera antes de guardarse o dibujarse: sin controles y con los secretos tapados. */
+export const limpio = (s: string) => redact(sinControles(s))
 
 // ---------------------------------------------------------------- tools and gate
 
@@ -418,10 +431,13 @@ export const describeInput = (tool: string, input: unknown) => {
     typeof i.command === 'string'
       ? i.command
       : path || (typeof i.pattern === 'string' ? i.pattern : typeof i.url === 'string' ? i.url : typeof i.description === 'string' ? i.description : '')
-  return redact(what ? `${tool} → ${what}` : tool)
+  return limpio(what ? `${tool} → ${what}` : tool)
 }
 
-/** Keeps the last `max` checks, but never drops a pending ask: its settle must still find it. */
+/**
+ * Guarda unos `max` controles: primero se quitan los más viejos ya resueltos. Un permiso pendiente nunca se quita,
+ * porque su resolución tiene que encontrarlo; por eso la lista puede pasar de `max`, hasta `max * 2`.
+ */
 export const trimRecent = (list: Check[], max: number): Check[] => {
   let extra = list.length - max
   if (extra <= 0) return list
@@ -508,8 +524,21 @@ export const afterCall = (t: Turn, c: { inSubagent: boolean; hasFailed: boolean;
 export const momentOf = (t: Pick<Turn, 'edits' | 'errorStreak'>): Moment =>
   t.errorStreak >= 2 ? 'error repeats' : t.edits === 0 ? 'before a plan' : 'before done'
 
+/** Abre una consulta. Si el id ya está, es el mismo asesor reanudado: su consulta se reabre con su hora de inicio. */
 export const startConsult = (a: Architect, c: { id: string; at: number; moment: Moment; via: string }): Architect =>
-  a.consults.some(x => x.id === c.id) ? a : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+  a.consults.some(x => x.id === c.id)
+    ? { ...a, consults: a.consults.map(x => (x.id === c.id ? { ...x, endAt: null } : x)) }
+    : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+
+/**
+ * Cierra las consultas abiertas que ya no tendrán respuesta. Al terminar el turno del lead se cierran las de la
+ * herramienta de servidor, pero no la de un subagente asesor (su id está en `ids`), que puede seguir en segundo plano
+ * y se cierra al terminar él. Con `todas` (al abrir la sesión) se cierran también esas.
+ */
+export const cerrarConsultas = (a: Architect, at: number, todas = false): Architect => ({
+  ...a,
+  consults: a.consults.map(c => (c.endAt === null && (todas || !a.ids.includes(c.id)) ? { ...c, endAt: at } : c)),
+})
 
 /** Ends the open consult (the latest without an end), or the one named. */
 export const endConsult = (a: Architect, at: number, advice: string | null, id?: string): Architect => {
@@ -577,10 +606,20 @@ export const resumeCard = (c: AgentCard): AgentCard => ({ ...c, status: 'running
  * A spawned card joins the list. An id already there is that agent resumed: its card runs again
  * where it stands, with its tallies and the new task and model, so no two cards share keys.
  */
-export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] =>
-  cards.some(c => c.id === card.id)
-    ? cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
-    : [...cards, card].slice(-24)
+export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] => {
+  if (cards.some(c => c.id === card.id))
+    return cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
+  // Pasado 24, se quitan primero las tarjetas terminadas más viejas. Una en curso se queda: si las 24 están en curso, la lista pasa de 24.
+  const out = [...cards, card]
+  let sobran = out.length - 24
+  return out.filter(c => {
+    if (sobran > 0 && c.status !== 'running') {
+      sobran -= 1
+      return false
+    }
+    return true
+  })
+}
 
 export const stepLoop = (loops: Loop[], id: string, at: number): Loop[] => {
   const found = loops.find(l => l.id === id)

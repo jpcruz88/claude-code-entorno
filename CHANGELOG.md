@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- `tablero` 0.11.0: revisión de seguridad, correctitud y rendimiento. El texto externo pierde los caracteres de control (un ESC tumbaba el panel), la redacción de secretos cubre más casos, las lecturas de disco tienen tope, una consulta al asesor interrumpida ya no queda abierta, el tope de tarjetas no quita agentes en curso y `decisiones.jsonl` no se reparsea sin cambios. Detalle en `mods/tablero/CHANGELOG.md`.
 - Regla `codigo-minimo.md`: una línea que pide escribir lo mínimo que resuelva la tarea completa, reutilizando lo que ya existe y sin quitar validaciones ni pruebas. Sale de las pruebas de Aduana: con la regla, las mismas tareas pasaron las pruebas ocultas igual que sin ella (21 de 21 y 15 de 15 por modelo), con 28 a 44 % menos líneas y un costo de 0.81 a 0.98 veces el de antes. Se probó como texto añadido al sistema, no como archivo de regla, y con tareas acotadas.
 - Mod `aduana-panel` 0.1.0: franja sobre el prompt con el avance de las pruebas largas de Aduana (corridas hechas del total, en curso, costo, toast al terminar). Lee `~/.cache/detector-humo/en-curso.json`; no escribe ni usa la red.
 - `terminal/terminal.sh`: con `CLAUDE_RESUME_SALTAR_PERMISOS=1`, una función `claude` añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`. herdr reanuda las sesiones al reiniciar con `claude --resume <id>`, sin esa bandera. Apagada por omisión, y no toca sesiones nuevas, `-p` ni `--permission-mode`.
