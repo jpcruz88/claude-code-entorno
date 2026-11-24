@@ -5,10 +5,10 @@ import type { EngineInterface, RenderChildren } from 'claude-code'
 import { cellWidth, piecesThatFit } from './core'
 
 type Elementos = ReturnType<EngineInterface['ui']['resolve']>
-export type Span = { text: string; color?: string; dim?: boolean; bold?: boolean }
+export type Span = { text: string; color?: string; dim?: boolean; weight?: 'semibold' }
 export type Piece = { spans: Span[]; lead?: number; fill?: boolean }
 
-const estiloDe = (s: Span) => ({ ...(s.color ? { color: s.color } : {}), ...(s.dim ? { dimColor: true } : {}), ...(s.bold ? { bold: true } : {}) })
+const estiloDe = (s: Span) => ({ ...(s.color ? { color: s.color } : {}), ...(s.dim ? { dimColor: true } : {}), ...(s.weight ? { weight: s.weight } : {}) })
 export const anchoDe = (p: Piece) => p.spans.reduce((n, s) => n + cellWidth(s.text), 0)
 
 // Una línea de trozos de color, dibujada como una fila de cajas. Un Text que anida otros Text de color se trunca

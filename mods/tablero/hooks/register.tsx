@@ -93,7 +93,7 @@ import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
 import { gitdirDe, ramaDeHead } from './rama'
-import { filaRitmo, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
+import { filaRitmo, textoRitmoMapa, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
 import { anotarCosto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
@@ -895,9 +895,9 @@ export const register: Register = (on, options) => {
     const carpeta = carpetaDe(cwd, Math.max(8, Math.floor((colW - 4) / 3)))
     const ctxGauge = ctxFill.pct !== null ? gauge(ctxFill.pct, 10) : null
     const mainPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.main} paddingX={1} width={w}>
+      <Box flexDirection="column" paddingX={1} width={w}>
         <Box justifyContent="space-between">
-          <Text color={C.main} bold wrap="truncate">
+          <Text color={C.main} weight="semibold" wrap="truncate">
             {modelName} · principal
           </Text>
           <Box flexShrink={0}>
@@ -912,7 +912,7 @@ export const register: Register = (on, options) => {
               spans: [
                 { text: 'esfuerzo ', dim: true },
                 { text: `${'▮'.repeat(effortN) + '▯'.repeat(4 - effortN)} `, color: C.main },
-                { text: m.effort || '—', color: C.main, bold: true },
+                { text: m.effort || '—', color: C.main, weight: 'semibold' },
               ],
             },
             m.mode ? { spans: [{ text: `modo ${m.mode}`, dim: true }] } : null,
@@ -946,7 +946,7 @@ export const register: Register = (on, options) => {
                     { text: 'contexto ', dim: true },
                     { text: ctxGauge.on, color: ctxFill.pct !== null && ctxFill.pct >= 80 ? C.warn : C.main },
                     { text: ctxGauge.off, color: C.faint },
-                    { text: ` ${Math.round(ctxFill.pct ?? 0)}%`, bold: true },
+                    { text: ` ${Math.round(ctxFill.pct ?? 0)}%`, weight: 'semibold' },
                   ],
                 },
                 u.tokens !== null ? { spans: [{ text: `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}`, dim: true }] } : null,
@@ -999,15 +999,15 @@ export const register: Register = (on, options) => {
       // Both ends are anchors (the first consult, now): should it run past its box, it asks to lose the middle.
       const tl = consultTimeline(a, now, Math.max(8, w - 4))
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.arch} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           <Box justifyContent="space-between">
-            <Text color={C.arch} bold wrap="truncate">
+            <Text color={C.faint} weight="semibold" wrap="truncate">
               {cfg.architectLabel} · {advising ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`}
             </Text>
             <Box flexShrink={0}>
               <Text>
                 <Text dimColor>consultas </Text>
-                <Text color={C.arch} bold>
+                <Text color={C.arch} weight="semibold">
                   {a.consults.length}
                 </Text>
               </Text>
@@ -1030,7 +1030,7 @@ export const register: Register = (on, options) => {
               {(['before a plan', 'error repeats', 'before done'] as const).map(mo => {
                 const isOn = lastConsult?.moment === mo
                 return (
-                  <Text color={isOn ? C.arch : C.dim} bold={isOn}>
+                  <Text color={isOn ? C.arch : C.dim} weight={isOn ? 'semibold' : 'regular'}>
                     {isOn ? '◆' : '◇'} {momentLabel(mo)}
                   </Text>
                 )
@@ -1069,9 +1069,9 @@ export const register: Register = (on, options) => {
       const isShort = piecesThatFit(words.map(p => ({ width: anchoDe(p) })), w - 4, 2) < words.length
       const totals = isShort ? totalsOf(true) : words
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.gate} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           <Box justifyContent="space-between">
-            <Text color={C.gate} bold wrap="truncate">
+            <Text color={C.faint} weight="semibold" wrap="truncate">
               {cfg.gateLabel} · revisión
             </Text>
             <Box flexShrink={0}>
@@ -1147,7 +1147,7 @@ export const register: Register = (on, options) => {
       const isNarrow = w < 40
       const header = (
         <Box justifyContent="space-between" width={w}>
-          <Text bold wrap="truncate">
+          <Text weight="semibold" wrap="truncate">
             {isNarrow ? `agentes · ${running.length}/${cards.length}` : `agentes · ${running.length} activos · ${cards.length} total`}
           </Text>
           {cards.length > 0 ? (
@@ -1181,7 +1181,7 @@ export const register: Register = (on, options) => {
               const isViewed = viewed === c.id
               return (
                 <Box key={c.id} columnGap={1}>
-                  <Text color={statusColor(c)} bold={isViewed}>
+                  <Text color={statusColor(c)} weight={isViewed ? 'semibold' : 'regular'}>
                     {isViewed ? '▶ ' : glyph(c, i)}
                   </Text>
                   <Box width={labelW} flexShrink={0}>
@@ -1244,8 +1244,8 @@ export const register: Register = (on, options) => {
     const expandedCard = cards.find(c => c.id === v.expanded)
     const expandedPanel = (w: number) =>
       expandedCard ? (
-        <Box flexDirection="column" borderStyle="single" borderColor={C.agent} paddingX={1} width={w}>
-          <Text bold wrap="wrap">
+        <Box flexDirection="column" paddingX={1} width={w}>
+          <Text weight="semibold" wrap="wrap">
             {expandedCard.description || nombreDeTipo(expandedCard.type)}
           </Text>
           <Text dimColor wrap="truncate">{`${nombreDeTipo(expandedCard.type)} · ${prettyModel(expandedCard.model)} · ${statusLabel(expandedCard.status)} · ${expandedCard.steps} pasos`}</Text>
@@ -1271,7 +1271,7 @@ export const register: Register = (on, options) => {
       const isNarrow = w < 40
       return (
         <Box width={w} columnGap={1}>
-          <Text bold>{isNarrow ? 'loops' : 'otros loops'}</Text>
+          <Text color={C.faint} weight="semibold">{isNarrow ? 'loops' : 'otros loops'}</Text>
           <Text dimColor>{isNarrow ? `${lp.length} · ${active} activos` : `${lp.length} vistos · ${active} activos`}</Text>
           {markRow(
             dots.map(l => (
@@ -1287,7 +1287,7 @@ export const register: Register = (on, options) => {
     const receiptPanel = (w: number) => {
       const isReview = t.isReviewing
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.main} borderDimColor={!m.isRunning && !isReview} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           {m.isRunning ? (
             <Box width={w - 4} columnGap={1} overflow="hidden">
               <Text color={C.main} wrap="truncate">{`◐ turno de ${modelName.toLowerCase()}`}</Text>
@@ -1331,7 +1331,7 @@ export const register: Register = (on, options) => {
             const trail = tr.texto.length - tr.texto.trimEnd().length
             return [
               lead > 0 ? <Box key={`l${j}`} width={lead} flexShrink={0} /> : null,
-              <Text key={`t${j}`} color={C[COLOR_DE[tr.tono]]} bold={tr.tono === 'peligro'}>
+              <Text key={`t${j}`} color={C[COLOR_DE[tr.tono]]} weight={tr.tono === 'peligro' ? 'semibold' : 'regular'}>
                 {core}
               </Text>,
               trail > 0 ? <Box key={`r${j}`} width={trail} flexShrink={0} /> : null,
@@ -1404,7 +1404,7 @@ export const register: Register = (on, options) => {
             [
               {
                 spans: [
-                  { text: modelName, color: C.main, bold: true },
+                  { text: modelName, color: C.main, weight: 'semibold' },
                   { text: m.isRunning ? ' ● trabajando' : ' ○ en espera', color: m.isRunning ? C.main : C.dim },
                 ],
               },
@@ -1495,7 +1495,7 @@ export const register: Register = (on, options) => {
 
     const nivelRit = filaRit?.nivel
     const ritmoMapa = rit && nivelRit
-      ? { texto: `${nivelRit === 'verde' ? 'verde' : nivelRit === 'ambar' ? 'ámbar' : 'rojo'} ${Math.round(rit.exceso) < 0 ? '−' : '+'}${Math.abs(Math.round(rit.exceso))} pts`, k: tintaDeNivel(nivelRit) }
+      ? { texto: textoRitmoMapa(rit.exceso, nivelRit), k: tintaDeNivel(nivelRit) }
       : undefined
     // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
     const topeVigente = topeAhora(jevs.limites, now / 1000)
@@ -1543,17 +1543,17 @@ export const register: Register = (on, options) => {
         {/* Below 40 columns the frame's own title names the pane, so the header starts at the model. */}
         {line(
           [
-            W >= 40 ? { spans: [{ text: 'TABLERO', bold: true }, { text: ' ·', color: C.dim, bold: true }] } : null,
-            { spans: [{ text: modelName.toUpperCase(), color: C.main, bold: true }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', bold: true }] },
+            W >= 40 ? { spans: [{ text: 'TABLERO', weight: 'semibold' }, { text: ' ·', color: C.dim, weight: 'semibold' }] } : null,
+            { spans: [{ text: modelName.toUpperCase(), color: C.main, weight: 'semibold' }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', weight: 'semibold' }] },
             W >= 40 ? { spans: [{ text: `v${MOD_VERSION}`, dim: true }] } : null,
             W >= 56 ? { spans: [{ text: `⏱ ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`, dim: true }] } : null,
             W >= 56 ? { spans: [{ text: `🕐 ${fmtClock(now).slice(0, 5)}`, dim: true }] } : null,
             showArchitect
               ? {
                   spans: [
-                    { text: '· ', color: C.dim, bold: true },
-                    { text: cfg.architectLabel, color: C.arch, bold: true },
-                    { text: advising ? ' ASESORANDO' : ' DE GUARDIA', bold: true },
+                    { text: '· ', color: C.dim, weight: 'semibold' },
+                    { text: cfg.architectLabel, color: C.arch, weight: 'semibold' },
+                    { text: advising ? ' ASESORANDO' : ' DE GUARDIA', weight: 'semibold' },
                   ],
                 }
               : null,
@@ -1581,7 +1581,7 @@ export const register: Register = (on, options) => {
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column" width={Math.max(20, e.props.bodyColumns)}>
-        <Text bold>TABLERO</Text>
+        <Text weight="semibold">TABLERO</Text>
         <Text color={C.warn} wrap="wrap">{`falló el dibujo (${next.error.kind}): ${next.error.message ?? 'sin mensaje'}`}</Text>
       </Box>
     )
