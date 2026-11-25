@@ -90,6 +90,7 @@ dices que sí.
 | Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
+| Atajo `cl` | `terminal/cl` | `cl` arranca Claude Code sin pedir permisos (`claude --dangerously-skip-permissions`, con lo que le pases detrás). En Mac y Linux es un script en `~/.local/bin/cl`; en Windows, una función en tu perfil de PowerShell (7 y 5.1). Sin `--saltar-aviso-permisos`, Claude Code muestra antes su advertencia. Ver [el riesgo](#ajuste-opcional-saltar-el-aviso-de-permisos). |
 | OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan (Mac y Linux). En Windows, `cl-go` y `cl-or` se cargan desde tu perfil de PowerShell. Opcional: `--sin-opencode` (en Windows, `-SinOpencode`). Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Config de OpenCode | *fuera de este repo* | Trae de [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config) la config global de OpenCode en `~/.config/opencode`: el router que elige modelo por complejidad y el script `gomodel`. Va en un repo aparte **a propósito**: si se copiara aquí, esa config tendría dos fuentes de verdad. Mac y Linux. Opcional: `--sin-opencode-config`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
@@ -302,19 +303,23 @@ cd claude-code-entorno
 11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-12. **OpenCode**: en Mac y Linux copia `opencode/opencode.sh` a
+12. **Atajo `cl`**: en Mac y Linux copia `terminal/cl` a `~/.local/bin/cl` (y avisa
+    si esa carpeta no está en tu `PATH`). En Windows agrega a tu perfil de
+    PowerShell (7 y 5.1) la función
+    `function cl { claude --dangerously-skip-permissions @args }`, solo la primera vez.
+13. **OpenCode**: en Mac y Linux copia `opencode/opencode.sh` a
     `~/.config/claude-code-entorno/` y `opencode/opencode-go-modelos` a
     `~/.local/bin/`, y agrega al rc la línea que carga el primero. En Windows copia
     `opencode/opencode.ps1` a `%USERPROFILE%\.config\claude-code-entorno\` y lo
     carga desde tu perfil de PowerShell (7 y 5.1). Solo define `cl-go` y `cl-or` si
     su variable de entorno existe; no pide ni escribe claves. Ver
     [OpenCode como respaldo](#opencode-como-respaldo).
-13. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
+14. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
     a `~/.config/opencode` — clon, `git pull` si ya estaba, o conversión de una
     carpeta que ya existiera (sin tocar sus archivos sin seguimiento, como
     `service.json`) — y enlaza `gomodel` en `~/.local/bin/`. Solo lee y sincroniza:
     no edita ese repo. Ver [OpenCode como respaldo](#opencode-como-respaldo).
-14. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
+15. Copia el gitignore global si no tienes uno y lo activa si no hay otro activo.
 
 En Mac, antes del paso 5, `instalar.sh` también instala con Homebrew las
 herramientas de terminal y Stats (ver [Terminal y Stats](#terminal-y-stats)).
@@ -901,6 +906,7 @@ instalado:
 | `alt+c` | Entra a una subcarpeta (`fzf`). |
 | `ctrl+r` | Busca en el historial de todas tus terminales (`atuin`; en bash, el de `fzf`). La flecha arriba sigue como siempre. |
 | `bat <archivo>` | Muestra un archivo con colores, con el tema de VS Code. |
+| `cl` | Abre Claude Code sin pedir permisos (`claude --dangerously-skip-permissions`); `cl --resume <id>` reanuda así una sesión. Lo instala el instalador también con `--sin-terminal` y en Windows (ver [Qué incluye](#qué-incluye)). |
 | `claude --resume <id>` | Con `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu rc (lo pone `--saltar-aviso-permisos`, antes de la línea que carga `terminal.sh`), añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`: así reanuda tus sesiones herdr al reiniciar. Apagado por omisión; no toca sesiones nuevas ni `-p`, ni repite una bandera que ya pasaste. |
 
 No cambia `ls` ni `cat`: Claude Code y los scripts los usan y esperan su salida de
@@ -1240,6 +1246,7 @@ instalaría.
 ├── ghostty/config                 config de Ghostty (con {{RUTA_HERDR}})
 ├── nvim/                          config de Neovim (LazyVim con el tema Kanagawa)
 ├── terminal/terminal.sh           eza, bat, zoxide, fzf y atuin para zsh y bash
+├── terminal/cl                    atajo cl: Claude Code sin pedir permisos
 ├── opencode/                      OpenCode como respaldo: aliases cl-go/cl-or y su script
 ├── local-services-panel/          página que muestra todo lo que corre en la máquina
 ├── herramientas/                  scripts de apoyo (fusión, exportación, privacidad)

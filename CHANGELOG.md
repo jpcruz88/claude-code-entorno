@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- El atajo `cl` (Claude Code sin pedir permisos) ahora lo instala el instalador: en Mac y Linux, `terminal/cl` en `~/.local/bin/cl`; en Windows, una función `cl` en el perfil de PowerShell. Antes solo existía en la Mac donde se creó a mano, y en Windows el comando no existía.
 - `--saltar-aviso-permisos` también activa reanudar con bypass: pone `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en el rc, antes de la línea que carga `terminal/terminal.sh`, y `claude --resume <id>` reanuda la sesión con `--dangerously-skip-permissions`. Con `--sin-terminal` avisa de que no se puede. CONTRIBUTING explica el archivo de términos privados que exigen los hooks.
 - Los hooks de git exigen la lista de términos privados (`revisar_privacidad.py --exigir-terminos`): sin ella no dejan hacer commit ni push. Antes solo avisaban, y desde una copia sin la lista se publicó un nombre privado en una maqueta; se quitó de todo el historial.
 - Avisos de herdr con nombre claro: en Mac, `herdr/avisos.py` (servicio de launchd que instala el instalador) avisa «Colabora: Claude terminó» con «m4 › Personales» debajo, también de las máquinas conectadas. El aviso de herdr se apaga (`delivery = "off"`): decía «claude finished · Personales · 1», sin la máquina, con el número del espacio y sin la pestaña si el espacio tenía una sola. En Windows y Linux sigue avisando herdr.

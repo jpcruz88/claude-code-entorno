@@ -58,13 +58,14 @@ class Fusion(unittest.TestCase):
         self.assertEqual(self.respaldos(), [])
 
     def test_conserva_lo_existente_y_respalda(self):
-        propio = {"model": "sonnet", "theme": "light", "env": {"MI_VAR": "1"},
+        # Un modelo que la base nunca tendrá: exportar.sh copia a la base el modelo real.
+        propio = {"model": "modelo-propio-de-prueba", "theme": "light", "env": {"MI_VAR": "1"},
                   "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "mi-script"}]}]}}
         self.destino.write_text(json.dumps(propio), encoding="utf-8")
         codigo, salida = self.aplicar(python_hooks="python3")
         self.assertEqual(codigo, 0)
         r = self.leer()
-        self.assertEqual(r["model"], "sonnet")
+        self.assertEqual(r["model"], "modelo-propio-de-prueba")
         self.assertEqual(r["theme"], "light")
         self.assertEqual(r["env"], {"MI_VAR": "1"})
         self.assertIn((None, "mi-script"), comandos(r, "Stop"))
