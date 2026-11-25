@@ -4,7 +4,7 @@
 set -u
 REPO="$(git rev-parse --show-toplevel)" || exit 1
 
-python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" --historial || {
+python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" --exigir-terminos --historial || {
   echo "pre-push: la revisión de privacidad del historial encontró algo. No se publica."
   exit 1
 }

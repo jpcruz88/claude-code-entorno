@@ -97,6 +97,53 @@ class Privacidad(unittest.TestCase):
             self.assertEqual([(h[0], h[1]) for h in hallazgos], [("sucio.md", 1)])
 
 
+class ExigirTerminos(unittest.TestCase):
+    """Sin la lista de términos privados, los hooks de git no dejan pasar nada.
+
+    Un push desde una copia del repo sin la lista publicó un nombre privado: la
+    revisión solo avisaba y seguía.
+    """
+
+    def correr(self, repo, *args):
+        import io
+        from contextlib import redirect_stdout
+        salida = io.StringIO()
+        with redirect_stdout(salida):
+            codigo = rp.main(["--repo", str(repo)] + list(args))
+        return codigo, salida.getvalue()
+
+    def test_sin_lista_y_exigida_falla(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d) / "repo"
+            repo.mkdir()
+            codigo, salida = self.correr(repo, "--terminos", str(Path(d) / "no-hay.txt"),
+                                         "--exigir-terminos")
+            self.assertEqual(codigo, 1)
+            self.assertIn("ENTORNO_TERMINOS_PRIVADOS", salida)
+
+    def test_sin_lista_y_no_exigida_solo_avisa(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d) / "repo"
+            repo.mkdir()
+            codigo, _ = self.correr(repo, "--terminos", str(Path(d) / "no-hay.txt"))
+            self.assertEqual(codigo, 0)
+
+    def test_con_lista_y_exigida_pasa(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d) / "repo"
+            repo.mkdir()
+            lista = Path(d) / "terminos.txt"
+            lista.write_text("clienteuno\n", encoding="utf-8")
+            codigo, _ = self.correr(repo, "--terminos", str(lista), "--exigir-terminos")
+            self.assertEqual(codigo, 0)
+
+    def test_los_hooks_de_git_la_exigen(self):
+        for hook in ("pre-commit", "pre-push"):
+            with self.subTest(hook=hook):
+                texto = (RAIZ / ".githooks" / hook).read_text(encoding="utf-8")
+                self.assertIn("--exigir-terminos", texto)
+
+
 class Historial(unittest.TestCase):
     """Autor/committer y nombres de archivo, en un repo git de prueba."""
 
