@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.4.4 (tablero)
+
+- **Contrato de tipos:** `types/index.d.ts` declara el tipo de los mensajes de Conversaciones dentro del archivo, sin `import`. `claude plugin validate` exige un contrato autónomo y fallaba en el CI. Sin cambios de comportamiento.
+
+## 1.4.3 (tablero)
+
+- **Pruebas:** el valor de ejemplo de la prueba de secretos se arma en tiempo de ejecución, para que gitleaks no lo tome por un secreto real. Sin cambios de comportamiento.
+
+## 1.4.2 (tablero)
+
+Arreglos de la revisión final de Conversaciones.
+
+- **Respuestas:** un turno que ya corría cuando llegó el mensaje no cuenta como respuesta; cuenta el primero que empieza después y termina. El registro de Sesiones guarda también `turnoInicio`.
+- **`--wait` que falla** (tiempo agotado, rechazo o error) ya no sale como «Respondió».
+- **`agent wait`** reabre la espera desde ese momento: una respuesta anterior no la cierra.
+- **Dos envíos a la vez** quedan anotados los dos.
+- **Privacidad:** de `send-keys` no se guarda lo tecleado, y el resto de textos pasa por el filtro de secretos.
+- **Texto que empieza por `--`** («--arregla la prueba») se reconoce como mensaje: solo se quitan los flags de herdr conocidos.
+
+## 1.4.1 (tablero)
+
+Arreglos de la prueba real de Conversaciones.
+
+- **Nombres:** cada sesión sale con su nombre actual del registro de Sesiones. Antes salía el título que tenía la pestaña de herdr al enviar, que al arrancar es «Claude Code».
+- **Línea plegada:** sin esperas dice «1 mensaje reciente, sin esperas» en vez de «1 reciente».
+
+## 1.4.0 (tablero)
+
+Quién le habla a quién entre sesiones, y quién espera respuesta.
+
+- **Conversaciones:** sección nueva, plegada, que se abre con `c`. Dice qué mensajes se mandan las sesiones (`SendMessage` y `herdr agent prompt`, `send-keys`, `wait` y `herdr pane run`), y si alguien espera respuesta («◆ Espera respuesta») o le pidieron algo a esta sesión («◆ Te pidió algo»). Solo sale con mensajes de la última media hora o una espera abierta.
+- **Cómo se sabe:** cada tablero anota los envíos de su sesión principal en `~/.claude/tablero/conversaciones/<sesión>.json` y lee los de todas. El destino de herdr se pregunta con `herdr agent get` (tope de 2 s). Un mensaje deja de esperar cuando el destino termina un turno después del envío, cuando acaba la llamada con `--wait`, o a los 30 min.
+- **Sesiones:** el registro de cada sesión guarda `turnoFin`, el fin de su último turno.
+
 ## 1.3.2 (tablero)
 
 Textos que se entienden solos, sin conocer el mod.
