@@ -553,6 +553,7 @@ class Instalador:
             "ProgramArguments": [python, str(guion), herdr],
             "RunAtLoad": True,
             "KeepAlive": True,
+            "StandardOutPath": str(self.home / "Library" / "Logs" / "herdr-avisos.log"),
             "StandardErrorPath": str(self.home / "Library" / "Logs" / "herdr-avisos.log"),
         })
         antes = [p.read_bytes() if p.exists() else None for p in (guion, plist)]

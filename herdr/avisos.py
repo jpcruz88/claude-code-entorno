@@ -72,6 +72,15 @@ def orden_notificacion(titulo, subtitulo, cuerpo):
             "-e", "end run", cuerpo, titulo, subtitulo]
 
 
+def avisar(a):
+    """Manda el aviso y deja una línea en el registro (~/Library/Logs/herdr-avisos.log)."""
+    titulo, subtitulo, cuerpo = texto(a)
+    print("%s  %s · %s · %s" % (time.strftime("%Y-%m-%d %H:%M:%S"), titulo, subtitulo, cuerpo),
+          flush=True)
+    subprocess.run(orden_notificacion(titulo, subtitulo, cuerpo), stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+
+
 def _json(herdr, maquina, *args):
     orden = [herdr] + (["--machine", maquina] if maquina else []) + list(args)
     r = subprocess.run(orden, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -123,8 +132,7 @@ def main():
     while True:
         agentes, respondieron = leer(herdr)
         for a in vigia.paso(time.time(), agentes, respondieron):
-            subprocess.run(orden_notificacion(*texto(a)), stdin=subprocess.DEVNULL,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+            avisar(a)
         time.sleep(intervalo)
 
 

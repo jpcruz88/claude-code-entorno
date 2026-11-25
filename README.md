@@ -573,7 +573,7 @@ conversación.
   `herdr/avisos.py` (un servicio de launchd, `dev.claude-code-entorno.herdr-avisos`)
   y dicen la pestaña, la máquina y el espacio: «Colabora: Claude terminó» y debajo
   «m4 › Personales». El aviso propio de herdr está apagado porque no nombra la
-  máquina y su «1» es el número del espacio. Errores en
+  máquina y su «1» es el número del espacio. Cada aviso y cada error quedan en
   `~/Library/Logs/herdr-avisos.log`.
 - **Historial de paneles** (`pane_history`): guarda lo que se veía en cada panel
   para mostrarlo tras un reinicio. Se guarda en disco, en

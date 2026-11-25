@@ -150,6 +150,7 @@ class PasoHerdr(unittest.TestCase):
         self.assertEqual(datos["ProgramArguments"][1:], [str(copia), str(herdr)])
         self.assertTrue(datos["RunAtLoad"])
         self.assertTrue(datos["KeepAlive"])
+        self.assertEqual(datos["StandardOutPath"], datos["StandardErrorPath"])
         self.assertIn("bootstrap gui/%d %s" % (os.getuid(), self.plist_vigia), self.llamadas("launchctl"))
 
     @unittest.skipUnless(ES_MAC, "el vigía de avisos es solo para Mac")

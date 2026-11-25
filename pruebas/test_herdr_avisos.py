@@ -161,6 +161,17 @@ class Leer(unittest.TestCase):
 
 
 class Notificar(unittest.TestCase):
+    def test_avisar_notifica_y_deja_registro(self):
+        import io
+        from unittest import mock
+        m = cargar()
+        salida = io.StringIO()
+        with mock.patch.object(m.subprocess, "run") as run, mock.patch("sys.stdout", salida):
+            m.avisar(agente("done"))
+        self.assertEqual(run.call_args[0][0][-2:], ["Colabora: Claude terminó", "m4 › Personales"])
+        linea = salida.getvalue()
+        self.assertIn("Colabora: Claude terminó · m4 › Personales · Cloudflare a disco duro externo", linea)
+
     def test_pasa_los_textos_como_argumentos_sin_escapar(self):
         m = cargar()
         args = m.orden_notificacion('Tab "rara"', "m4 › X", "tarea con 'comillas'")
