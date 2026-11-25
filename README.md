@@ -250,7 +250,7 @@ cd claude-code-entorno
   | `--sin-codebase-memory` | No instala codebase-memory-mcp ni sus hooks. |
   | `--sin-skills` | No instala las skills de terceros (ver [Skills](#skills)). |
   | `--sin-mods` | No instala los mods de `mods/` (por omisión sí). |
-  | `--saltar-aviso-permisos` | Ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos). Apagado si no lo pones. |
+  | `--saltar-aviso-permisos` | Ver [Ajuste opcional](#ajuste-opcional-saltar-el-aviso-de-permisos). Además pone `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu `.zshrc` o `.bashrc`: `claude --resume <id>` reanuda la sesión con bypass. Apagado si no lo pones. |
   | `--sin-herdr` | No instala herdr, su config, su skill ni sus plugins, ni Ghostty. |
   | `--sin-ghostty` | No instala Ghostty ni su config (herdr sí). |
   | `--sin-plugins-herdr` | No instala los plugins de herdr (el de Telegram). |
@@ -901,7 +901,7 @@ instalado:
 | `alt+c` | Entra a una subcarpeta (`fzf`). |
 | `ctrl+r` | Busca en el historial de todas tus terminales (`atuin`; en bash, el de `fzf`). La flecha arriba sigue como siempre. |
 | `bat <archivo>` | Muestra un archivo con colores, con el tema de VS Code. |
-| `claude --resume <id>` | Con `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu rc, añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`: así reanuda tus sesiones herdr al reiniciar. Apagado por omisión; no toca sesiones nuevas ni `-p`, ni repite una bandera que ya pasaste. |
+| `claude --resume <id>` | Con `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu rc (lo pone `--saltar-aviso-permisos`, antes de la línea que carga `terminal.sh`), añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`: así reanuda tus sesiones herdr al reiniciar. Apagado por omisión; no toca sesiones nuevas ni `-p`, ni repite una bandera que ya pasaste. |
 
 No cambia `ls` ni `cat`: Claude Code y los scripts los usan y esperan su salida de
 siempre. Para pasar a atuin el historial que ya tenías: `atuin import auto` (se

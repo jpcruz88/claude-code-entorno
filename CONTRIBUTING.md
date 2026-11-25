@@ -13,6 +13,11 @@ otros la reusen: los cambios se revisan para que no entre nada privado.
    y pushes. Una prueba (`pruebas/test_githooks_activos.py`) falla con este mismo
    comando si en tu clon no está activado; en CI se salta.
 2. Instala `gitleaks` (`brew install gitleaks`) y Python 3.
+3. Crea la lista de términos privados en
+   `../claude-code-entorno-privado/terminos-privados.txt`, junto al clon (o di
+   dónde está con `ENTORNO_TERMINOS_PRIVADOS`): un nombre de cliente, empresa o
+   teléfono por línea. Sin ese archivo los hooks no dejan hacer commit ni push.
+   Si no tienes nada que proteger, basta un archivo vacío.
 
 ## Flujo
 

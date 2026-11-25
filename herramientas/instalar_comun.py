@@ -669,6 +669,9 @@ class Instalador:
         self.paso("Archivo de la terminal (terminal/terminal.sh en tu .zshrc o .bashrc)")
         if self.sin_terminal:
             self.info("Se omite (--sin-terminal).")
+            if self.saltar_aviso:
+                self.aviso("--sin-terminal: sin terminal.sh, `claude --resume <id>` no reanuda "
+                           "con bypass (--dangerously-skip-permissions).")
             return
         origen = REPO / "terminal" / "terminal.sh"
         destino = self.home / ".config" / "claude-code-entorno" / "terminal.sh"
@@ -679,15 +682,24 @@ class Instalador:
         linea = ('[ -f "$HOME/.config/claude-code-entorno/terminal.sh" ] && '
                  '. "$HOME/.config/claude-code-entorno/terminal.sh"')
         texto = rc.read_text(encoding="utf-8") if rc.exists() else ""
-        if linea in texto:
+        nuevo = texto
+        if linea not in nuevo:
+            separador = "\n" if nuevo and not nuevo.endswith("\n") else ""
+            nuevo += ("%s\n# Herramientas de terminal de claude-code-entorno (ver su README)\n%s\n"
+                      % (separador, linea))
+        # Con --saltar-aviso-permisos, `claude --resume <id>` (y -r, -c, --continue) reanuda
+        # la sesión con bypass. terminal.sh mira la variable al cargarse: va antes de la línea.
+        if self.saltar_aviso and not re.search(r"^\s*export CLAUDE_RESUME_SALTAR_PERMISOS=1\s*$",
+                                               nuevo, re.M):
+            i = nuevo.index(linea)
+            nuevo = (nuevo[:i] + "# Reanudar sesiones con bypass (--saltar-aviso-permisos)\n"
+                     "export CLAUDE_RESUME_SALTAR_PERMISOS=1\n" + nuevo[i:])
+        if nuevo == texto:
             self.info("al día: %s ya lo carga" % rc)
         elif self.simular:
             self.info("[simular] agregaría a %s: %s" % (rc, linea))
         else:
-            separador = "\n" if texto and not texto.endswith("\n") else ""
-            with rc.open("a", encoding="utf-8") as f:
-                f.write("%s\n# Herramientas de terminal de claude-code-entorno (ver su README)\n%s\n"
-                        % (separador, linea))
+            rc.write_text(nuevo, encoding="utf-8")
             self.info("agregado a %s" % rc)
             self.pendientes.append("Abre una terminal nueva para usar ll, z, ctrl+t (fzf) y "
                                    "ctrl+r (atuin); ver README, «Terminal».")
