@@ -79,5 +79,14 @@ class ConfiguracionCompleta(unittest.TestCase):
         self.assertIn("realmente", texto)
 
 
+    def test_regla_de_git_deja_solo_main(self):
+        """Regla de oro: al terminar, la rama se fusiona a main y se borra."""
+        texto = (RAIZ / "claude" / "rules" / "git.md").read_text(encoding="utf-8")
+        self.assertIn("Regla de oro", texto)
+        self.assertIn("gh pr merge", texto)
+        self.assertIn("--delete-branch", texto)
+        self.assertIn("git fetch --prune", texto)
+
+
 if __name__ == "__main__":
     unittest.main()
