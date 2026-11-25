@@ -72,3 +72,17 @@ test('un resultado.json mayor que el tope da null', () => {
   const grande = json({ fallos: [{ nombre: 'a'.repeat(2_000_000), tipo: 'skill', error: 'e' }] })
   expect(leerAlDia(grande, AHORA) === null).toBe(true)
 })
+
+test('el repo del entorno enseña su motivo o su error, no el texto genérico', () => {
+  const r = leerAlDia(
+    json({
+      fallos: [{ nombre: 'claude-code-entorno', tipo: 'entorno', error: 'fatal: Not possible to fast-forward' }],
+      pendientes: [{ nombre: 'claude-code-entorno', tipo: 'entorno', motivo: 'copia con cambios sin commit · no se tocó' }],
+    }),
+    AHORA,
+  )
+  expect(r!.filas.map(f => f.detalle)).toEqual([
+    'no se pudo actualizar · fatal: Not possible to fast-forward',
+    'copia con cambios sin commit · no se tocó',
+  ])
+})

@@ -568,6 +568,81 @@ def _ruta_diff(home, ahora, nombre, tipo, usadas):
     return ruta
 
 
+TIEMPO_INSTALADOR = 1800   # el instalador del entorno salta lo hecho, pero puede bajar programas
+CLAVE_ENTORNO = "entorno"
+NOMBRE_ENTORNO = "claude-code-entorno"
+
+
+def _ok(ejecutar, cmd, timeout=TIEMPO_CONSULTA):
+    """(código, salida) de `cmd`; (1, error) si lanza."""
+    try:
+        return ejecutar(cmd, timeout)
+    except Exception as e:
+        return 1, str(e)
+
+
+def actualizar_entorno(home, ejecutar, buscar_=None):
+    """Trae `main` del repo y, si el commit instalado no es el último, reinstala.
+
+    Lee ~/.claude/al-dia/entorno.json, que escribe el instalador: {"repo", "plataforma",
+    "opciones", "commit"}. Devuelve (cambios, fallos, pendientes); todo vacío si no hay
+    nada que hacer. Nunca toca una copia con cambios sin commit o fuera de `main`.
+    """
+    buscar_ = buscar_ or buscar
+    datos = leer_json(carpeta(home) / "entorno.json")
+    if not isinstance(datos, dict) or not isinstance(datos.get("repo"), str):
+        return [], [], []
+    opciones = [o for o in datos.get("opciones") or [] if isinstance(o, str)]
+    guardado = datos.get("commit") if isinstance(datos.get("commit"), str) else None
+    git = buscar_("git", home)
+    if not git:
+        return [], [], []
+    repo = datos["repo"]
+    g = [git, "-C", repo]
+
+    def pendiente(motivo):
+        return [], [], [{"nombre": NOMBRE_ENTORNO, "tipo": CLAVE_ENTORNO, "motivo": motivo}]
+
+    def fallo(salida):
+        return [], [{"nombre": NOMBRE_ENTORNO, "tipo": CLAVE_ENTORNO,
+                     "error": _error(salida)}], []
+
+    codigo, salida = _ok(ejecutar, g + ["status", "--porcelain"])
+    if codigo != 0:
+        return fallo(salida)
+    if salida.strip():
+        return pendiente("copia con cambios sin commit · no se tocó")
+    codigo, salida = _ok(ejecutar, g + ["rev-parse", "--abbrev-ref", "HEAD"])
+    if codigo != 0:
+        return fallo(salida)
+    if salida.strip() != "main":
+        return pendiente("la copia no está en main · no se tocó")
+    codigo, salida = _ok(ejecutar, g + ["pull", "--ff-only", "-q"], TIEMPO_PASO)
+    if codigo != 0:
+        return fallo(salida)
+    codigo, salida = _ok(ejecutar, g + ["rev-parse", "HEAD"])
+    if codigo != 0:
+        return fallo(salida)
+    head = salida.strip()
+    if head == guardado:
+        return [], [], []
+
+    if datos.get("plataforma") == "windows":
+        cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+               str(Path(repo) / "instalar.ps1"), "-NoInteractivo", *opciones]
+    else:
+        cmd = ["bash", str(Path(repo) / "instalar.sh"), "--no-interactivo", *opciones]
+    ruta = buscar_(cmd[0], home)
+    if not ruta:
+        return fallo(cmd[0] + " no encontrado")
+    codigo, salida = _ok(ejecutar, [ruta, *cmd[1:]], TIEMPO_INSTALADOR)
+    if codigo != 0:
+        return fallo(salida)
+    return [{"nombre": NOMBRE_ENTORNO, "tipo": CLAVE_ENTORNO,
+             "antes": (guardado or "")[:7] or "?", "despues": head[:7],
+             "cambio_texto": False, "diff": None}], [], []
+
+
 def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
     """Actualiza, compara la foto de antes con la de después y guarda el resultado.
 
@@ -575,6 +650,10 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
     se suma al anterior si este tiene menos de 24 h.
     """
     home = Path(home)
+    # El repo primero: su instalador puede cambiar lo que revisan los pasos siguientes.
+    ent_cambios, ent_fallos, ent_pendientes = [], [], []
+    if solo is None or CLAVE_ENTORNO in solo:
+        ent_cambios, ent_fallos, ent_pendientes = actualizar_entorno(home, ejecutar, buscar)
     antes = foto(home, ejecutar, buscar)
     lista = pasos(antes, cli_skills or skills_cli(home))
     if solo is not None:
@@ -587,7 +666,8 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
         if datos and datos["tipo"] in ("skill", "plugin") and datos.get("carpeta"):
             textos_antes[clave] = textos(datos["carpeta"])
 
-    fallos, pendientes, malas = [], [], []
+    fallos, pendientes = list(ent_fallos), list(ent_pendientes)
+    malas = [CLAVE_ENTORNO] if ent_fallos else []
     for clave, cmd, timeout in lista:
         ruta = buscar(cmd[0], home)
         if not ruta:
@@ -607,7 +687,7 @@ def revisar(home, ahora, ejecutar, buscar=buscar, solo=None, cli_skills=None):
         malas.append(clave)
 
     despues = foto(home, ejecutar, buscar)
-    cambios, usadas = [], set()
+    cambios, usadas = list(ent_cambios), set()
     for clave, d in despues.items():
         a = antes.get(clave)
         if not a or a["version"] == d["version"]:
