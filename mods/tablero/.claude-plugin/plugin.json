@@ -1,6 +1,6 @@
 {
   "name": "tablero",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Tablero: panel en español junto al chat con todo el estado de la sesión, sin duplicados: costo, cupos, cache, git y CI, planes, subagentes, decisiones de Jev, Aduana, gasto y otras sesiones. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",

@@ -345,6 +345,12 @@ if ($SinSkills) { $argumentos += '--sin-skills' }
 if ($SinMods) { $argumentos += '--sin-mods' }
 if ($SinOpencode) { $argumentos += '--sin-opencode' }
 if ($SaltarAvisoPermisos) { $argumentos += '--saltar-aviso-permisos' }
+# Las opciones elegidas, para que «Al día» reinstale igual cuando haya cambios en main.
+if ($SinCodebaseMemory) { $argumentos += '--recordar=-SinCodebaseMemory' }
+if ($SinSkills) { $argumentos += '--recordar=-SinSkills' }
+if ($SinMods) { $argumentos += '--recordar=-SinMods' }
+if ($SinOpencode) { $argumentos += '--recordar=-SinOpencode' }
+if ($SaltarAvisoPermisos) { $argumentos += '--recordar=-SaltarAvisoPermisos' }
 if ($gitBash) { $argumentos += @('--git-bash', $gitBash) }
 # cl-go y cl-or (OpenCode de respaldo) se cargan desde el perfil de PowerShell 7 y
 # del 5.1. MyDocuments sigue a OneDrive si la carpeta Documentos está ahí.

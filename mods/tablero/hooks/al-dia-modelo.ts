@@ -39,7 +39,8 @@ export const leerAlDia = (textoJson: string | null, ahora: number): AlDia | null
   const fallos: FilaAlDia[] = lista(o.fallos).map(f => ({
     marca: '✗',
     nombre: texto(f.nombre),
-    detalle: 'no se pudo bajar · sigue la anterior',
+    // El repo del entorno: su error dice qué pasó (pull o instalador).
+    detalle: f.tipo === 'entorno' ? `no se pudo actualizar · ${texto(f.error)}` : 'no se pudo bajar · sigue la anterior',
     tipo: texto(f.tipo),
     aviso: false,
   }))
@@ -53,7 +54,7 @@ export const leerAlDia = (textoJson: string | null, ahora: number): AlDia | null
   const pendientes: FilaAlDia[] = lista(o.pendientes).map(p => ({
     marca: '…',
     nombre: texto(p.nombre),
-    detalle: 'pendiente · se reintenta en la próxima sesión',
+    detalle: p.tipo === 'entorno' ? texto(p.motivo) : 'pendiente · se reintenta en la próxima sesión',
     tipo: texto(p.tipo),
     aviso: false,
   }))

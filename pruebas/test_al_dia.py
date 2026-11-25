@@ -943,6 +943,164 @@ def cargar_hook():
     return modulo
 
 
+class PruebaEntorno(unittest.TestCase):
+    """actualizar_entorno: trae main del repo y reinstala con las opciones guardadas."""
+
+    REPO = "/repo/claude-code-entorno"
+    VIEJO = "a" * 40
+    NUEVO = "b" * 40
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.home = Path(self._tmp.name)
+        self.ahora = 1_800_000_000.0
+        self.estado = ""            # salida de git status --porcelain
+        self.rama = "main"
+        self.head = self.VIEJO
+        self.tras_pull = self.NUEVO
+        self.pull = (0, "")
+        self.instalador = (0, "Resumen: todo bien")
+        self.llamadas = []
+
+    def guardar(self, **datos):
+        base = {"repo": self.REPO, "plataforma": "unix", "opciones": ["--sin-skills"],
+                "commit": self.VIEJO}
+        base.update(datos)
+        cargar().escribir_json(cargar().carpeta(self.home) / "entorno.json", base)
+
+    def buscar(self, programa, home):
+        return programa
+
+    def ejecutar(self, cmd, timeout):
+        cmd = list(cmd)
+        self.llamadas.append((cmd, timeout))
+        if cmd[:3] == ["git", "-C", self.REPO]:
+            resto = cmd[3:]
+            if resto == ["status", "--porcelain"]:
+                return 0, self.estado
+            if resto == ["rev-parse", "--abbrev-ref", "HEAD"]:
+                return 0, self.rama + "\n"
+            if resto == ["rev-parse", "HEAD"]:
+                return 0, self.head + "\n"
+            if resto == ["pull", "--ff-only", "-q"]:
+                if self.pull[0] == 0:
+                    self.head = self.tras_pull
+                return self.pull
+        if cmd[0] in ("bash", "powershell"):
+            return self.instalador
+        return 1, "no existe"
+
+    def revisar(self, **kw):
+        return cargar().revisar(self.home, self.ahora, self.ejecutar, self.buscar,
+                                cli_skills="skills@1", **kw)
+
+    def comandos(self):
+        return [c for c, _ in self.llamadas]
+
+    def instaladores(self):
+        return [(c, t) for c, t in self.llamadas if c[0] in ("bash", "powershell")]
+
+    def entorno(self, lista):
+        return [x for x in lista if x.get("tipo") == "entorno"]
+
+    def test_sin_opciones_guardadas_no_toca_git(self):
+        r = self.revisar()
+        self.assertFalse(any(c[0] == "git" for c in self.comandos()))
+        self.assertEqual(self.entorno(r["cambios"] + r["fallos"] + r["pendientes"]), [])
+
+    def test_commit_nuevo_reinstala_con_las_mismas_opciones(self):
+        self.guardar()
+        r = self.revisar()
+        [(cmd, tiempo)] = self.instaladores()
+        self.assertEqual(cmd, ["bash", self.REPO + "/instalar.sh", "--no-interactivo",
+                               "--sin-skills"])
+        self.assertEqual(tiempo, 1800)
+        self.assertEqual(self.entorno(r["cambios"]), [{
+            "nombre": "claude-code-entorno", "tipo": "entorno", "antes": "aaaaaaa",
+            "despues": "bbbbbbb", "cambio_texto": False, "diff": None}])
+
+    def test_va_antes_que_los_demas_pasos(self):
+        self.guardar()
+        self.revisar()
+        cmds = self.comandos()
+        pull = cmds.index(["git", "-C", self.REPO, "pull", "--ff-only", "-q"])
+        self.assertLess(pull, cmds.index(["claude", "plugin", "list", "--json"])
+                        if ["claude", "plugin", "list", "--json"] in cmds else len(cmds))
+        self.assertEqual(cmds[0][0], "git")
+
+    def test_sin_commits_nuevos_no_reinstala(self):
+        self.guardar(commit=self.NUEVO)
+        r = self.revisar()
+        self.assertEqual(self.instaladores(), [])
+        self.assertEqual(self.entorno(r["cambios"] + r["fallos"]), [])
+
+    def test_instalacion_anterior_fallida_se_repite_aunque_no_haya_commits(self):
+        self.guardar(commit=None)
+        self.tras_pull = self.VIEJO
+        self.revisar()
+        self.assertEqual(len(self.instaladores()), 1)
+
+    def test_copia_con_cambios_no_se_toca(self):
+        self.guardar()
+        self.estado = " M AGENTS.md\n"
+        r = self.revisar()
+        self.assertNotIn(["git", "-C", self.REPO, "pull", "--ff-only", "-q"], self.comandos())
+        self.assertEqual(self.instaladores(), [])
+        self.assertEqual(self.entorno(r["pendientes"]), [{
+            "nombre": "claude-code-entorno", "tipo": "entorno",
+            "motivo": "copia con cambios sin commit · no se tocó"}])
+
+    def test_copia_en_otra_rama_no_se_toca(self):
+        self.guardar()
+        self.rama = "feat/algo"
+        r = self.revisar()
+        self.assertNotIn(["git", "-C", self.REPO, "pull", "--ff-only", "-q"], self.comandos())
+        self.assertEqual(self.entorno(r["pendientes"])[0]["motivo"],
+                         "la copia no está en main · no se tocó")
+
+    def test_pull_que_falla_es_fallo_y_se_reintenta(self):
+        self.guardar()
+        self.pull = (1, "fatal: Not possible to fast-forward, aborting.")
+        r = self.revisar()
+        self.assertEqual(self.instaladores(), [])
+        [f] = self.entorno(r["fallos"])
+        self.assertIn("fast-forward", f["error"])
+        estado = cargar().leer_json(cargar().carpeta(self.home) / "ultima-revision.json")
+        self.assertIn("entorno", estado["repetir"])
+
+    def test_instalador_que_falla_es_fallo(self):
+        self.guardar()
+        self.instalador = (1, "ERROR: no se pudo instalar herdr")
+        r = self.revisar()
+        [f] = self.entorno(r["fallos"])
+        self.assertIn("herdr", f["error"])
+        self.assertEqual(self.entorno(r["cambios"]), [])
+
+    def test_windows_usa_powershell(self):
+        self.guardar(plataforma="windows", opciones=["-SinSkills"])
+        self.revisar()
+        [(cmd, _)] = self.instaladores()
+        self.assertEqual(cmd, ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                               "-File", str(Path(self.REPO) / "instalar.ps1"),
+                               "-NoInteractivo", "-SinSkills"])
+
+    def test_reintento_solo_del_entorno(self):
+        self.guardar()
+        self.revisar(solo={"entorno"})
+        self.assertEqual(len(self.instaladores()), 1)
+        self.llamadas.clear()
+        self.revisar(solo={"skill:caveman"})
+        self.assertFalse(any(c[0] == "git" for c in self.comandos()))
+
+    def test_archivo_roto_no_hace_nada(self):
+        ruta = cargar().carpeta(self.home) / "entorno.json"
+        ruta.parent.mkdir(parents=True, exist_ok=True)
+        ruta.write_text("{roto", encoding="utf-8")
+        self.revisar()
+        self.assertFalse(any(c[0] == "git" for c in self.comandos()))
+
+
 class PruebaHook(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

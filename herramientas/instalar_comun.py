@@ -884,7 +884,20 @@ class Instalador:
         return 0
 
 
-def main(argv=None):
+def recordar_entorno(home, repo, plataforma, opciones, commit):
+    """Guarda en ~/.claude/al-dia/entorno.json cómo se instaló, para que «Al día»
+    traiga `main` y reinstale igual. `commit` None: la instalación tuvo problemas y
+    «Al día» la repetirá."""
+    ruta = Path(home) / ".claude" / "al-dia" / "entorno.json"
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    datos = {"repo": str(repo), "plataforma": plataforma, "opciones": list(opciones),
+             "commit": commit}
+    temporal = ruta.with_suffix(".tmp")
+    temporal.write_text(json.dumps(datos, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporal, ruta)
+
+
+def argumentos(argv=None):
     p = argparse.ArgumentParser(description="Pasos comunes de instalación.")
     p.add_argument("--plataforma", choices=("unix", "windows"), required=True)
     p.add_argument("--simular", action="store_true")
@@ -917,7 +930,23 @@ def main(argv=None):
                    help="no instala la config de Neovim (nvim/)")
     p.add_argument("--git-bash", default=None,
                    help="ruta a bash.exe si no está en el lugar de siempre (Windows)")
-    a = p.parse_args(argv)
+    p.add_argument("--recordar", action="append", default=[],
+                   help="opción del instalador que «Al día» repetirá al reinstalar "
+                        "(--recordar=--sin-skills); se puede repetir")
+    return p.parse_args(argv)
+
+
+def _commit_del_repo():
+    try:
+        r = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
+                           capture_output=True, text=True, timeout=30)
+        return r.stdout.strip() or None if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def main(argv=None):
+    a = argumentos(argv)
     if os.path.isabs(a.python_hooks) and not a.python_hooks.startswith('"'):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
@@ -928,7 +957,14 @@ def main(argv=None):
             paso()
         except Exception as e:  # un paso roto no impide los demás
             inst.fallo("%s: %s" % (paso.__name__, e))
-    return inst.resumen()
+    codigo = inst.resumen()
+    if not a.simular:
+        try:
+            recordar_entorno(inst.home, REPO, a.plataforma, a.recordar,
+                             _commit_del_repo() if codigo == 0 else None)
+        except Exception as e:  # sin esto «Al día» no actualiza el repo, pero la instalación vale
+            print("    AVISO: no pude guardar las opciones para «Al día»: %s" % e)
+    return codigo
 
 
 if __name__ == "__main__":
