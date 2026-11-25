@@ -24,33 +24,29 @@ import {
   describeInput,
   endConsult,
   fitLegend,
-  fmtResetIn,
   fmtSpeed,
   gateSummary,
   lanes,
   limitLabel,
   limitOf,
-  logRows,
   marksIn,
   momentOf,
   normalizeCard,
   normalizeGate,
-  normalizeLog,
   titleLines,
   parseConfig,
   prettyModel,
-  promptLine,
   handbackOf,
   adviceLine,
   receiptOf,
   recordCheck,
   redact,
+  shorten,
   settleCheck,
   trimRecent,
   startConsult,
   stepSpeed,
 } from '../hooks/core'
-import { EMOJI_AGENTES } from '../hooks/agentes-anim'
 import type { Check } from '../types'
 
 // ---------------------------------------------------------------- pure behaviour
@@ -163,24 +159,32 @@ test('consults open, close by id, and draw on a shared timeline', () => {
 
 test('config is read leniently: bad values fall back to defaults', () => {
   const d = parseConfig({})
-  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 9])
+  expect([d.maxCards, d.paneColumns, d.layout, d.motion, d.moments, d.panels.length]).toEqual([3, 66, 'auto', true, true, 7])
   expect(d.architect.test('fable-advisor:fable-advisor')).toBe(true)
-  const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'log, gate ,nope,gate', motion: 'off' })
+  const c = parseConfig({ architectPattern: '([', maxCards: 99, layout: 'diagonal', panels: 'gate ,nope,gate', motion: 'off' })
   expect(c.architect.test('advisor')).toBe(true) // invalid regex → default
   expect([c.maxCards, c.layout, c.motion]).toEqual([6, 'auto', false])
   expect([46.4, 12, Number.NaN, '90'].map(n => parseConfig({ paneColumns: n }).paneColumns)).toEqual([46, 40, 66, 66])
-  expect(c.panels).toEqual(['log', 'gate'])
+  expect(c.panels).toEqual(['gate'])
+})
+
+test('the default panels show the work: no session panel, no session log', () => {
+  expect(parseConfig({}).panels).toEqual(['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'aldia'])
+})
+
+test('el panel de «último turno» ya no sale por defecto, pero se puede volver a activar', () => {
+  expect(parseConfig({}).panels).not.toContain('receipt')
+  expect(parseConfig({ panels: 'main,receipt' }).panels).toEqual(['main', 'receipt'])
 })
 
 test('state saved under an older shape still reads', () => {
-  expect(normalizeLog([{ at: '08:00:00', who: 'jev', text: 'x' }])[0]).toEqual({ at: 0, who: 'jev', text: 'x', agentId: null, kind: 'info' })
   const g = normalizeGate({ file: { allow: 1 } }) // v1 gate shape
   expect(g.recent).toEqual([])
   expect(g.totals.shell.rule).toBe(0)
   expect(normalizeCard({ id: 'a', status: 'done' }).tools).toEqual([])
 })
 
-test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never wraps', () => {
+test('layout math: lanes share one axis, the legend never wraps', () => {
   const cards = [
     { ...normalizeCard({}), id: 'a', spawnedAt: 1000, endedAt: 1050 },
     { ...normalizeCard({}), id: 'b', spawnedAt: 1050, endedAt: null },
@@ -189,7 +193,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(a).toEqual({ id: 'a', before: 0, bar: 10, after: 10 })
   expect(b?.before).toBe(10)
   expect((b?.before ?? 0) + (b?.bar ?? 0) + (b?.after ?? 0)).toBe(20)
-  expect([logRows(10, 40), logRows(50, 40), logRows(200, 40)]).toEqual([4, 7, 8])
   expect(fitLegend([{ label: 'main' }, { label: 'agents' }, { label: 'architect' }], 20).map(x => x.label)).toEqual(['main', 'agents'])
   expect([marksIn(64, true), marksIn(64, false), marksIn(6, false)]).toEqual([64, 42, 4])
   expect(limitLabel('five_hour')).toBe('5h')
@@ -200,7 +203,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(prettyModel('claude-3-opus-20240229')).toBe('Opus 3')
   expect(prettyModel('z-ai/glm-5.3-flash-with-a-long-name')).toBe('z-ai/glm-5.3-flash-wi…')
   expect(prettyModel('')).toBe('—')
-  expect(promptLine('fix the parser')).toEqual({ who: 'you', text: 'fix the parser' })
   const hb = '<agent-message from="a1940a83d593229d5">\n[Subagent hand-back] The text below is the final report. The report follows:\n  Add gate tests: redaction edge cases.\n  - more\n</agent-message>'
   expect(handbackOf(hb)).toEqual({ from: 'a1940a83d593229d5', body: 'Add gate tests: redaction edge cases.' })
   expect(handbackOf('<agent-message from="x">\nPlain report line\n</agent-message>')).toEqual({ from: 'x', body: 'Plain report line' })
@@ -208,7 +210,6 @@ test('layout math: lanes share one axis, the log gets 4-8 rows, the legend never
   expect(adviceLine('## Ship it after one more gate test.\n- details')).toBe('Ship it after one more gate test.')
   expect(adviceLine('[Subagent hand-back] header\n\n**Fix card overflow first**')).toBe('Fix card overflow first')
   expect(adviceLine('')).toBe('')
-  expect(promptLine('<agent-message from="a1492260715f3be7b"> [Subagent hand-back]')).toEqual({ who: 'engine', text: 'mensaje de agente de a1492260' })
   expect(receiptOf({ ...DEFAULT_TURN, costAtStart: 5 }, { durationMs: 1, agentsSince: 0, costNow: 5, reason: 'answer' }).costDelta).toBe(null)
   expect(titleLines('Write tinyqueue test suite', 13, 16)).toEqual(['Write', 'tinyqueue test…'])
   expect(titleLines('Short', 13, 16)).toEqual(['Short', ''])
@@ -223,12 +224,10 @@ test('a request\'s speed is its time to the first piece of response, and no outp
   expect(fmtSpeed({ ttftMs: 800, tokPerS: 9844 } as { ttftMs: number })).toBe('1er token 0.8s')
 })
 
-test('a window keeps its reset time, drawn as the time left', () => {
+test('a window keeps its reset time', () => {
   expect(limitOf({ kind: 'five_hour', percentUsed: 19, resetsAt: '1970-01-01T03:10:00.000Z' })).toEqual({ kind: 'five_hour', pct: 19, resetsAt: 11_400_000 })
   expect(limitOf({ kind: 'seven_day', percentUsed: 3 }).resetsAt).toBe(null)
   expect(limitOf({ kind: 'spend_limit', percentUsed: 1, resetsAt: 'soon' }).resetsAt).toBe(null)
-  expect([fmtResetIn(11_400_000, 0), fmtResetIn(25 * 60_000 + 5_000, 0), fmtResetIn(4 * 86_400_000 + 2 * 3_600_000, 0)]).toEqual(['3h10m', '25m', '4d2h'])
-  expect([fmtResetIn(null, 0), fmtResetIn(undefined, 0), fmtResetIn(5, 10)]).toEqual(['', '', ''])
 })
 
 // ---------------------------------------------------------------- drawing
@@ -267,13 +266,14 @@ const spawn = (subagentType: string, description: string) => ({
   fork: false,
 })
 
-test('a fresh session draws on every surface and width, empty panels hidden', async ($, on) => {
+test('a fresh session draws on every surface and width, empty panels hidden', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     for (const cols of [40, 60, 86, 120]) {
       const ui = await $.ui.mount({ ...pane(cols), surface })
       expect(await ui.find({ text: /· principal$/ })).toBeDefined()
-      expect(await ui.find({ text: /registro de sesión/ })).toBeDefined()
+      expect(await ui.find({ text: /registro/ })).toBeUndefined() // no session log panel
+      expect(await ui.find({ text: /^sesión$/ })).toBeUndefined() // no session panel
       expect(await ui.find({ text: /agentes ·/ })).toBeUndefined() // no subagents: no agents panel
       expect(await ui.find({ text: /revisión/ })).toBeUndefined() // no checks yet: no gate panel
       await ui.unmount()
@@ -281,7 +281,7 @@ test('a fresh session draws on every surface and width, empty panels hidden', as
   }
 })
 
-test('inline above the prompt, the pane is a summary of at most 8 rows', async ($, on) => {
+test('inline above the prompt, the pane is a summary of at most 8 rows', { options: { layout: 'mini' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: `m${++n}` }))
@@ -290,7 +290,7 @@ test('inline above the prompt, the pane is a summary of at most 8 rows', async (
   for (const d of ['one', 'two', 'three', 'four', 'five']) await $.agent.spawn(spawn('general-purpose', `task ${d}`))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a' }, tool_use_id: 'm-k1' })
   for (const surface of ['terminal', 'vscode'] as const) {
-    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const }, surface })
+    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } , surface })
     const root = (await ui.drawn()) as { children?: unknown[] }
     expect((root.children ?? []).filter(Boolean).length <= 8).toBe(true)
     expect(await ui.find({ text: /\+2 agentes más/ })).toBeDefined()
@@ -312,22 +312,35 @@ test('/clear starts the pane fresh', async ($, on) => {
   await ui.unmount()
 })
 
-test('colours come from the theme by default, raw hex only when asked', async ($, on) => {
+test('the theme palette is on by default, with no config', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  const title = await ui.find({ text: /· principal$/ })
-  expect(title?.props.color).toBe('claude')
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('claude')
   await ui.unmount()
 })
 
-test('pastel keeps the fixed dark-terminal colours', { options: { palette: 'pastel' } }, async ($, on) => {
+test('palette theme takes the theme colours', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('claude')
+  await ui.unmount()
+})
+
+test('pastel keeps the fixed dark-terminal colours', { options: { layout: 'diagrama', palette: 'pastel' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#7dd3fc')
   await ui.unmount()
 })
 
-test('subagents become cards, then swimlanes past the card limit; a card expands on its hotkey', async ($, on) => {
+test('neon colours the principal title in saturated fixed colour', { options: { layout: 'diagrama', palette: 'neon' } }, async ($, on) => {
+  engine(on)
+  const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
+  expect((await ui.find({ text: /· principal$/ }))?.props.color).toBe('#00f0ff')
+  await ui.unmount()
+})
+
+test('subagents become cards, then swimlanes past the card limit; a card expands on its hotkey', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: `ag${++n}` }))
@@ -346,14 +359,14 @@ test('subagents become cards, then swimlanes past the card limit; a card expands
   await $.agent.spawn(spawn('general-purpose', 'Review the parser'))
   for (const surface of ['terminal', 'desktop'] as const) {
     const lanesUi = await $.ui.mount({ ...pane(64), surface })
-    expect(await lanesUi.find({ text: /4 total/ })).toBeDefined()
+    expect(await lanesUi.find({ text: /4 en total/ })).toBeDefined()
     expect(await lanesUi.find({ text: /━/ })).toBeDefined()
-    expect(await lanesUi.find({ text: new RegExp(EMOJI_AGENTES.join('|')) })).toBeDefined() // el cangrejo del carril
+    expect(await lanesUi.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧]/u })).toBeDefined() // el giro del carril
     await lanesUi.unmount()
   }
 })
 
-test('the server-side advisor is read from assistant rows: consulting, then on call', async ($, on) => {
+test('the server-side advisor is read from assistant rows: consulting, then on call', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   await $.turn.start({ text: 'plan it', turnId: 'T2' })
   const row = (content: unknown[]) =>
@@ -373,12 +386,12 @@ test('the server-side advisor is read from assistant rows: consulting, then on c
 
   await row([{ type: 'advisor_tool_result', tool_use_id: 'srv1', content: { type: 'advisor_redacted_result' } }])
   const after = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await after.find({ text: /ASESOR · de guardia/ })).toBeDefined()
+  expect(await after.find({ text: /ASESOR · 1 consulta$/ })).toBeDefined()
   expect(await after.find({ text: /^1$/ })).toBeDefined()
   await after.unmount()
 })
 
-test('the gate strip fills from checks and a row opens its redacted drill-down', async ($, on) => {
+test('the gate strip fills from checks and a row opens its redacted drill-down', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.check', (_$, e) => ({ decision: e.tool === 'Read' ? 'allow' : 'ask' }))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a/b.ts' }, tool_use_id: 'k1' })
@@ -392,7 +405,7 @@ test('the gate strip fills from checks and a row opens its redacted drill-down',
   await ui.unmount()
 })
 
-test('config changes labels, hides panels and turns the moments off', { options: { architectLabel: 'REVIEWER', panels: 'main,architect,agents,log', moments: false } }, async ($, on) => {
+test('config changes labels, hides panels and turns the moments off', { options: { layout: 'diagrama', architectLabel: 'REVIEWER', panels: 'main,architect,agents,log', moments: false } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-fable-5-1', agentId: `r${++n}` }))
@@ -405,7 +418,7 @@ test('config changes labels, hides panels and turns the moments off', { options:
   await ui.unmount()
 })
 
-test('a consult whose start and result share one row closes, and its review flag with it', async ($, on) => {
+test('a consult whose start and result share one row closes, and its review flag with it', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'go', turnId: 'T4' })
@@ -427,13 +440,13 @@ test('a consult whose start and result share one row closes, and its review flag
     })
     .catch(() => undefined)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /ASESOR · de guardia/ })).toBeDefined()
+  expect(await ui.find({ text: /ASESOR · 1 consulta$/ })).toBeDefined()
   expect(await ui.find({ text: /◆ antes de terminar/ })).toBeDefined()
   expect(await ui.find({ text: /revisando antes de terminar/ })).toBeUndefined()
   await ui.unmount()
 })
 
-test('with no architect anywhere, the panel, legend entry and status field stay hidden', async ($, on) => {
+test('with no architect anywhere, the panel, legend entry and status field stay hidden', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
   expect(await ui.find({ text: /ASESOR/ })).toBeUndefined()
@@ -441,7 +454,7 @@ test('with no architect anywhere, the panel, legend entry and status field stay 
   await ui.unmount()
 })
 
-test('cards that cannot fit the pane fall back to lanes', async ($, on) => {
+test('cards that cannot fit the pane fall back to lanes', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   let n = 0
   on('agent.spawn', () => ({ model: 'claude-opus-5-5', agentId: `w${++n}` }))
@@ -456,7 +469,7 @@ test('cards that cannot fit the pane fall back to lanes', async ($, on) => {
   await wide.unmount()
 })
 
-test("a background architect's advice is read from its hand-back", async ($, on) => {
+test("a background architect's advice is read from its hand-back", { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('agent.spawn', () => ({ model: 'claude-fable-5-1', agentId: 'fab1' }))
   await $.turn.start({ text: 'review it', turnId: 'H1' })
@@ -471,7 +484,7 @@ test("a background architect's advice is read from its hand-back", async ($, on)
   await ui.unmount()
 })
 
-test('each rate-limit window shows the time to its reset where the main panel has room', async ($, on) => {
+test('each rate-limit window shows the time to its reset where the main panel has room', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   const at = (ms: number) => new Date(ms).toISOString()
@@ -485,8 +498,8 @@ test('each rate-limit window shows the time to its reset where the main panel ha
   })
   for (const cols of [64, 120]) {
     const ui = await $.ui.mount({ ...pane(cols), surface: 'terminal' })
-    expect(await ui.find({ text: /19% ↻3h10m/ })).toBeDefined()
-    expect(await ui.find({ text: /3% ↻4d2h/ })).toBeDefined()
+    expect(await ui.find({ text: /19% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined() // el ritmo va entre el % y el reinicio
+    expect(await ui.find({ text: /3% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
     await ui.unmount()
   }
   const narrow = await $.ui.mount({ ...pane(40), surface: 'terminal' })
@@ -496,7 +509,7 @@ test('each rate-limit window shows the time to its reset where the main panel ha
   await narrow.unmount()
 })
 
-test("the main box shows the last request's time to first token, and no tokens per second", async ($, on) => {
+test("the main box shows the last request's time to first token, and no tokens per second", { options: { layout: 'diagrama' } }, async ($, on) => {
   const clock = engine(on)
   // The model beneath: 800 ms to its first words, then 2 s more to stop after 120 tokens.
   on('turn.step', async function* () {
@@ -529,7 +542,7 @@ test("the main box shows the last request's time to first token, and no tokens p
   }
 })
 
-test('on a graphical surface, rows of marks hold fewer marks, keep the newest and clip at their box', async ($, on) => {
+test('on a graphical surface, rows of marks hold fewer marks, keep the newest and clip at their box', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   // The newest check is the one refused: its ✗ must stay in sight.
   on('tool.check', (_$, e) => ({ decision: e.tool_use_id === 'g29' ? 'deny' : 'allow' }))
@@ -567,12 +580,12 @@ test('on a graphical surface, rows of marks hold fewer marks, keep the newest an
   }
 })
 
-test("the inline summary's strip holds fewer marks on a graphical surface and keeps the newest", async ($, on) => {
+test("the inline summary's strip holds fewer marks on a graphical surface and keeps the newest", { options: { layout: 'mini' } }, async ($, on) => {
   engine(on)
   on('tool.check', (_$, e) => ({ decision: e.tool_use_id === 'n59' ? 'deny' : 'allow' }))
   for (let i = 0; i < 60; i += 1) await $.tool.check({ tool: 'Bash', input: { command: `ls ${i}` }, tool_use_id: `n${i}` })
   for (const surface of ['terminal', 'vscode'] as const) {
-    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const }, surface })
+    const ui = await $.ui.mount({ ...pane(80), props: { ...pane(80).props, placement: 'inline' as const } , surface })
     // 80 columns less "permisos " (el rótulo en español, 4 más que "gate ") and " 59 permitidos · 0 tú · 1 denegado" leave 37: 37 marks in a terminal, 24 elsewhere.
     const strip = await ui.find({ type: 'Text', text: /^[■✗]{2,}$/ })
     expect(strip?.props.wrap).toBe('truncate-start')
@@ -595,7 +608,7 @@ test('a draw that fails says why instead of leaving the pane empty', async ($, o
   }
 })
 
-test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane', async ($, on) => {
+test('a finished agent that takes another step (resumed by SendMessage) runs again, in the pane', { options: { layout: 'diagrama' } }, async ($, on) => {
   // engine(on), with a status line that keeps what it was told
   mock.clock(on)
   const status: (string | undefined)[] = []
@@ -618,9 +631,8 @@ test('a finished agent that takes another step (resumed by SendMessage) runs aga
   await $.turn.complete({ answer: 'ok', durationMs: 10, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
   await step()
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /◐ en curso/ })).toBeDefined()
-  expect(await ui.find({ text: /✓ listo/ })).toBeUndefined()
-  expect(await ui.find({ text: /^reanudado$/ })).toBeDefined()
+  expect(await ui.find({ text: /[⠋⠙⠹⠸⠼⠴⠦⠧] En curso/u })).toBeDefined()
+  expect(await ui.find({ text: /✓ Hecho/ })).toBeUndefined()
   expect(await ui.find({ text: /ctx 10 · sal 10 · 2 pas\./ })).toBeDefined()
   await ui.unmount()
 })
@@ -677,7 +689,7 @@ const compactHost = (on: On, o: { window: () => number; compact: number | null; 
   return asked
 }
 
-test('the gauge and inline summary measure against the compaction window, read once per model window', async ($, on) => {
+test('the gauge and inline summary measure against the compaction window, read once per model window', { options: { layout: 'diagrama', palette: 'theme' } }, async ($, on) => {
   mock.clock(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   let window = 1_000_000
@@ -715,7 +727,7 @@ test('the gauge and inline summary measure against the compaction window, read o
 })
 
 const keepsModelWindow = (name: string, host: { compact: number | null; isEnabled?: boolean }, asks: number) =>
-  test(name, async ($, on) => {
+  test(name, { options: { layout: 'diagrama' } }, async ($, on) => {
     mock.clock(on)
     on('ui.status', () => ({ value: undefined }))
     on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -736,7 +748,7 @@ const keepsModelWindow = (name: string, host: { compact: number | null; isEnable
 keepsModelWindow('a host that gives no breakdown keeps the model window and stops asking after 3 tries', { compact: null }, 3)
 keepsModelWindow('with auto-compaction off the gauge keeps the model window and is asked once', { compact: 400_000, isEnabled: false }, 1)
 
-test('a resumed session reads its compaction window at start, and /clear leaves the reading alone', async ($, on) => {
+test('a resumed session reads its compaction window at start, and /clear leaves the reading alone', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -762,7 +774,7 @@ test('a resumed session reads its compaction window at start, and /clear leaves 
   await cleared.unmount()
 })
 
-test('a compaction-window read that fails is asked again at the next measurement', async ($, on) => {
+test('a compaction-window read that fails is asked again at the next measurement', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -818,7 +830,7 @@ test("a surface module's fault key is the same for the hook's path, either separ
   expect(faultKey('terminal', 'hooks/elapsed.tsx')).not.toBe(faultKey('desktop', 'hooks/elapsed.tsx'))
 })
 
-test('switching to another model with the same window reads its compaction window afresh', async ($, on) => {
+test('switching to another model with the same window reads its compaction window afresh', { options: { layout: 'diagrama' } }, async ($, on) => {
   mock.clock(on)
   on('ui.status', () => ({ value: undefined }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
@@ -856,57 +868,7 @@ test('switching to another model with the same window reads its compaction windo
   await ui.unmount()
 })
 
-test('a resume through agent.spawn logs once, whether its spawn or its first step lands first; "done" times the run', async ($, on) => {
-  const clock = mock.clock(on)
-  on('ui.status', () => ({ value: undefined }))
-  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
-  on('turn.complete', () => ({ text: '' }))
-  const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, model: 'claude-sonnet-5-5' }
-  on('turn.step', async function* () {
-    return { turnId: 'R1', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage }
-  })
-  const step = async () => {
-    const s = $.turn.step({ turnId: 'R1', index: 0, model: 'claude-sonnet-5-5', messageCount: 1, agentId: 'r1' })
-    for await (const _ of s) void _
-    await s.result
-  }
-  // A resumed agent may take its first step before its spawn's own hooks have finished.
-  let isStepFirst = false
-  on('agent.spawn', async (_$, e) => {
-    if (e.resume && isStepFirst) await step()
-    return { model: 'claude-sonnet-5-5', agentId: e.resume?.agentId ?? 'r1' }
-  })
-  const complete = (durationMs: number) =>
-    $.turn.complete({ answer: 'ok', durationMs, isAborted: false, turnId: 'R1', agentId: 'r1', reason: 'answer' })
-  const lines = async (re: RegExp) => {
-    const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-    const n = (await ui.findAll({ text: re })).length
-    await ui.unmount()
-    return n
-  }
-  await $.turn.start({ text: 'go', turnId: 'T1' })
-  await $.agent.spawn(spawn('general-purpose', 'Audit the parser'))
-  await step()
-  await clock.advance(60_000)
-  await complete(60_000)
-  // Idle half an hour, then resumed: the spawn first, then its step.
-  await clock.advance(30 * 60_000)
-  await $.agent.spawn({ ...spawn('general-purpose', 'Audit it again'), resume: { agentId: 'r1' } })
-  await step()
-  expect(await lines(/^reanudado$/)).toBe(1)
-  await clock.advance(90_000)
-  await complete(90_000)
-  // Resumed again, its first step landing inside the spawn.
-  isStepFirst = true
-  await $.agent.spawn({ ...spawn('general-purpose', 'And once more'), resume: { agentId: 'r1' } })
-  expect(await lines(/^reanudado$/)).toBe(2)
-  expect(await lines(/^Audit the parser$/)).toBe(0) // one card, the latest task
-  // Each run timed on its own, not from the first spawn.
-  expect(await lines(/^listo · 1m00s$/)).toBe(1)
-  expect(await lines(/^listo · 1m30s$/)).toBe(1)
-})
-
-test("a subagent's turn start is its own: no prompt line, and the main turn keeps its count", async ($, on) => {
+test("a subagent's turn start does not reset the main turn's count", { options: { layout: 'diagrama', panels: 'main,receipt' } }, async ($, on) => {
   engine(on)
   on('tool.call', () => ({ result: {}, text: 'ok' }))
   await $.turn.start({ text: 'refactor it', turnId: 'T1' })
@@ -914,8 +876,6 @@ test("a subagent's turn start is its own: no prompt line, and the main turn keep
   await $.turn.start({ text: 'Look at the parser again', turnId: 'A1', agentId: 'sub1' })
   await $.turn.complete({ answer: '', durationMs: 1000, isAborted: false, turnId: 'T1', reason: 'answer' })
   const ui = await $.ui.mount({ ...pane(64), surface: 'terminal' })
-  expect(await ui.find({ text: /Look at the parser again/ })).toBeUndefined()
-  expect(await ui.find({ text: /refactor it/ })).toBeDefined()
   expect(await ui.find({ text: /· 1 edición ·/ })).toBeDefined()
   await ui.unmount()
 })
@@ -1044,7 +1004,7 @@ const busySession = async ($: Parameters<TestBody>[0], on: On) => {
   return clock
 }
 
-test('every panel fits the pane at every width from 24 columns, on every surface and placement, in lines a graphical surface keeps whole', { timeoutMs: 60_000 }, async ($, on) => {
+test('every panel fits the pane at every width from 24 columns, on every surface and placement, in lines a graphical surface keeps whole', { options: { layout: 'diagrama' }, timeoutMs: 60_000 }, async ($, on) => {
   await busySession($, on)
   const failures: string[] = []
   const check = async (label: string) => {
@@ -1084,7 +1044,7 @@ test('every panel fits the pane at every width from 24 columns, on every surface
   expect([...new Set(failures.map(f => f.replace(/ (terminal|desktop|vscode|mobile) /, ' ')))]).toEqual([])
 })
 
-test('a single agent card fits from 24 columns, and the time axis scales to the pane', async ($, on) => {
+test('a single agent card fits from 24 columns, and the time axis scales to the pane', { options: { layout: 'diagrama' } }, async ($, on) => {
   const clock = engine(on)
   await clock.advance(3_600_000)
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'one' }))
@@ -1106,7 +1066,7 @@ test('a single agent card fits from 24 columns, and the time axis scales to the 
   expect(failures).toEqual([])
 })
 
-test('a running connector keeps its length every frame: one face, clipped at its width, the dot still moving', async ($, on) => {
+test('a running connector keeps its length every frame: one face, clipped at its width, the dot still moving', { options: { layout: 'diagrama' } }, async ($, on) => {
   engine(on)
   on('tool.check', () => ({ decision: 'allow' }))
   await $.tool.check({ tool: 'Read', input: { file_path: '/a' }, tool_use_id: 'r1' })
@@ -1137,4 +1097,39 @@ test('a running connector keeps its length every frame: one face, clipped at its
     expect(heads.size > 5).toBe(true) // the dot travels along the line
     await ui.unmount()
   }
+})
+
+// Claves de ejemplo armadas a trozos para que ningún escáner de secretos las tome por reales.
+const AKIA = 'AKIA' + 'Z'.repeat(16)
+const AIZA = 'AIza' + '0123456789abcdefghijklmnopqrstuvwxy'
+const CLAVE = 'hun' + 'ter2'
+
+test('redaction: mysql -p pegado, AKIA, curl -u, clave Google y secret_key', () => {
+  expect(redact('mysql -pS3cretPass -u root')).toBe('mysql -p••• -u root')
+  expect(redact('mysql -u root -p')).toBe('mysql -u root -p')
+  expect(redact(`aws configure set aws_secret_access_key ${AKIA}`)).not.toContain(AKIA)
+  expect(redact(`curl -u admin:${CLAVE} https://h`)).toBe('curl -u admin:••• https://h')
+  expect(redact(`curl https://x?key=${AIZA}`)).not.toContain(AIZA)
+  expect(redact(`export secret_key=${CLAVE}x9`)).not.toContain(CLAVE)
+  const VALOR = 'w' + 'J'.repeat(39)
+  expect(redact(`aws configure set aws_secret_access_key ${VALOR}`)).toBe('aws configure set aws_secret_access_key •••')
+})
+
+test('redaction: sin falsos positivos en mkdir -p, git -u o un curl sin contraseña', () => {
+  expect(redact('mkdir -p src/x')).toBe('mkdir -p src/x')
+  expect(redact('git push -u origin main')).toBe('git push -u origin main')
+  expect(redact('curl -u https://h')).toBe('curl -u https://h')
+})
+
+test('texto externo: sin controles y con secretos tapados al mostrarse', () => {
+  expect(shorten('ls\x1b[2J\x07 -la\u009b', 40)).toBe('ls[2J -la')
+  expect(shorten('vea password=hunter2 ya', 40)).not.toContain('hunter2')
+  expect(describeInput('Bash', { command: 'ls\x1b[2J' })).toBe('Bash → ls[2J')
+  expect(describeInput('Bash', { command: `curl -u admin:${CLAVE} h` })).not.toContain(CLAVE)
+})
+
+test('el consejo del asesor no lleva secretos ni controles', () => {
+  const consejo = adviceLine('Usa el token=abc123xyz\x1b[31m en el paso dos')
+  expect(consejo).not.toContain('abc123xyz')
+  expect(consejo).not.toContain('\x1b')
 })

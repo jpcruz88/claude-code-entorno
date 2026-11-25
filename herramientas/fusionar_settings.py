@@ -2,7 +2,8 @@
 """Fusiona claude/settings.base.json con el settings.json de Claude Code de la máquina.
 
 Reglas:
-- Antes de escribir guarda una copia: settings.json.bak-AAAAMMDD-HHMMSS.
+- Antes de escribir guarda una copia: settings.json.bak-AAAAMMDD-HHMMSS (se
+  conservan las 3 más recientes; las más viejas se borran).
 - Lo que ya tienes se conserva: si una clave existe con otro valor, gana el tuyo
   (y se avisa). Solo se agregan las claves que faltan.
 - Los hooks se agregan sin duplicar: un hook ya está si el mismo script (por
@@ -226,6 +227,32 @@ def escribir_json(ruta, datos):
         raise
 
 
+CONSERVAR_RESPALDOS = 3
+
+
+def podar_respaldos(ruta, conservar=CONSERVAR_RESPALDOS):
+    """Borra los respaldos más viejos de `ruta` y deja los `conservar` más recientes.
+
+    Solo cuenta y borra archivos llamados exactamente <archivo>.bak-AAAAMMDD-HHMMSS
+    en la misma carpeta; cualquier otro nombre (otro archivo, sello con sufijo,
+    carpetas) no se toca. Devuelve las rutas borradas.
+    """
+    ruta = Path(ruta)
+    formato = re.compile(re.escape(ruta.name) + r"\.bak-\d{8}-\d{6}")
+    if not ruta.parent.is_dir():
+        return []
+    respaldos = sorted(p for p in ruta.parent.iterdir()
+                       if formato.fullmatch(p.name) and p.is_file() and not p.is_symlink())
+    borrados = []
+    for viejo in respaldos[:max(len(respaldos) - conservar, 0)]:
+        try:
+            viejo.unlink()
+            borrados.append(viejo)
+        except OSError:
+            pass
+    return borrados
+
+
 def respaldar(ruta):
     sello = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     copia = Path("%s.bak-%s" % (ruta, sello))
@@ -274,6 +301,10 @@ def aplicar(base_ruta, destino_ruta, plataforma="unix", python_hooks=None,
     if destino is not None:
         copia = respaldar(destino_ruta)
         salida("    respaldo: %s" % copia)
+        podados = podar_respaldos(destino_ruta)
+        if podados:
+            salida("    respaldos viejos borrados: %d (se conservan los %d más recientes)"
+                   % (len(podados), CONSERVAR_RESPALDOS))
     escribir_json(destino_ruta, resultado)
     salida("    guardado: %s" % destino_ruta)
     return 0

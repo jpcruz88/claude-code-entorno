@@ -1,5 +1,6 @@
 // Las decisiones de Jev que dejan los hooks en decisiones.jsonl, como datos para pintar el tablero:
 // lectura por sesión, resumen, línea de log y marca de tarjeta. Sin red ni disco: recibe el texto.
+import { TOPE_LECTURA, limpio } from './core'
 
 export type TipoDecision = 'modelo' | 'esfuerzo' | 'reintento' | 'tope'
 /** Los tipos con fila de confianza: el tope no decide nada, solo limita lo que ya se decidió. */
@@ -19,14 +20,20 @@ export type DecisionJev = {
   motivo: string
 }
 
-export type FilaJev = { tipo: string; etiqueta: string; confianza: number | null; sharp: boolean | null }
+/**
+ * Qué pasó en la última decisión de un tipo: Jev cambió lo que pidió Claude, coincidió con Claude, eligió sin
+ * elección de Claude, o no llegó a la confianza mínima y se queda lo de Claude.
+ */
+export type EstadoJev = 'cambio' | 'igual' | 'eligio' | 'claude'
+
+export type FilaJev = { tipo: string; etiqueta: string; confianza: number | null; sharp: boolean | null; estado: EstadoJev | null }
 
 const TIPOS: TipoFila[] = ['modelo', 'esfuerzo', 'reintento']
 const TIPOS_VALIDOS: TipoDecision[] = [...TIPOS, 'tope']
 const ETIQUETAS: Record<TipoFila, string> = {
-  modelo: 'qué modelo',
-  esfuerzo: 'qué esfuerzo',
-  reintento: 'reintentar o parar',
+  modelo: 'Qué modelo',
+  esfuerzo: 'Qué esfuerzo',
+  reintento: 'Reintentar o parar',
 }
 /** Cuántas respuestas recientes de un mismo tipo entran en la media de confianza. */
 const MEDIA_MAX = 20
@@ -35,6 +42,7 @@ const RANGO = new Map<string, number>([
   ['haiku', 0],
   ['sonnet', 1],
   ['opus', 2],
+  ['fable', 3],
   ['low', 0],
   ['medium', 1],
   ['high', 2],
@@ -74,19 +82,61 @@ const aDecision = (linea: string, sessionId: string): DecisionJev | null => {
     sharp: o.sharp === true,
     claude: typeof o.claude === 'string' ? o.claude : null,
     aplicada: o.aplicada === true,
-    descripcion: typeof o.descripcion === 'string' ? o.descripcion : '',
-    motivo: typeof o.motivo === 'string' ? o.motivo : '',
+    descripcion: typeof o.descripcion === 'string' ? limpio(o.descripcion) : '',
+    motivo: typeof o.motivo === 'string' ? limpio(o.motivo) : '',
   }
 }
 
+// La última lectura: el archivo cambia poco entre un turno y otro, así que releer el mismo texto de la misma sesión
+// devuelve la misma lista, sin parsear de nuevo. La sesión va en la clave: una sesión nueva siempre se lee.
+let ultimaLectura: { sesion: string; texto: string; ds: DecisionJev[] } | null = null
+
 /** Las decisiones de una sesión, en el orden del archivo; las líneas rotas o ajenas se ignoran. */
 export const leerDecisiones = (texto: string, sessionId: string): DecisionJev[] => {
+  if (texto.length > TOPE_LECTURA) return []
+  if (ultimaLectura?.sesion === sessionId && ultimaLectura.texto === texto) return ultimaLectura.ds
   const ds: DecisionJev[] = []
   for (const linea of texto.split('\n')) {
     const d = aDecision(linea, sessionId)
     if (d) ds.push(d)
   }
+  ultimaLectura = { sesion: sessionId, texto, ds }
   return ds
+}
+
+/** Las familias que acepta guard-subagentes.py, de la más barata a la más capaz. */
+const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus', 'fable']
+
+/** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
+const familiaDe = (modelo: string): string => {
+  const m = modelo.toLowerCase()
+  for (const familia of FAMILIAS_MODELO) {
+    if (m === familia || m.startsWith(`claude-${familia}`)) return familia
+  }
+  return m
+}
+
+/** Qué pasó en una decisión; ver `EstadoJev`. Sin respuesta de Jev, decide Claude. */
+const estadoDe = (d: DecisionJev): EstadoJev => {
+  if (!d.sharp || d.opcion === null) return 'claude'
+  if (d.claude === null) return 'eligio'
+  return familiaDe(d.claude) === familiaDe(d.opcion) ? 'igual' : 'cambio'
+}
+
+/** Qué pasó, dicho en palabras: lo que muestra cada fila de la caja JEV. */
+export const ESTADO_TEXTO: Record<EstadoJev, string> = {
+  cambio: 'Lo cambió Jev',
+  igual: 'Igual a Claude',
+  eligio: 'Lo eligió Jev',
+  claude: 'Decide Claude',
+}
+
+const pct = (confianza: number) => `${Math.round(confianza * 100)}%`
+
+/** El texto de una fila de la caja JEV: `97% seguro · lo cambió Jev`, y su forma corta para paneles angostos. */
+export const textoFilaJev = (confianza: number, estado: EstadoJev | null): { largo: string; corto: string } => {
+  const que = estado ? ` · ${ESTADO_TEXTO[estado]}` : ''
+  return { largo: `${pct(confianza)} seguro${que}`, corto: `${pct(confianza)}${que}` }
 }
 
 /**
@@ -103,7 +153,7 @@ export const resumenJev = (ds: DecisionJev[]): { total: number; filas: FilaJev[]
       .map(d => d.confianza)
     const media = confianzas.length > 0 ? confianzas.reduce((a, b) => a + b, 0) / confianzas.length : null
     const ultima = del.at(-1)
-    return { tipo, etiqueta: ETIQUETAS[tipo], confianza: media, sharp: ultima ? ultima.sharp : null }
+    return { tipo, etiqueta: ETIQUETAS[tipo], confianza: media, sharp: ultima ? ultima.sharp : null, estado: ultima ? estadoDe(ultima) : null }
   })
   return { total: propias.length, filas }
 }
@@ -111,14 +161,17 @@ export const resumenJev = (ds: DecisionJev[]): { total: number; filas: FilaJev[]
 /**
  * El tope como línea de log: `tope → sonnet · semana +12 pts`, `tope → haiku · 5h 90%` o, si solo bajó el esfuerzo,
  * `tope → opus · semana +6 pts · esfuerzo medium`. Sale del motivo que guarda el guardián (`tope <causa> → <límite>`).
+ * Cuando ninguna ventana recorta pero el modelo pedido no pasa, el guardián escribe `tope: <pedido> → <límite>`:
+ * se lee `tope → opus · pedía <pedido>`.
  */
 const lineaTope = (d: DecisionJev): string => {
   const partes: string[] = []
   // El motivo trae partes separadas por «; »: `tope semana +12 pts → sonnet; esfuerzo high → medium`.
-  for (const parte of d.motivo.replace(/^tope[;\s]*/, '').split('; ')) {
+  for (const parte of d.motivo.replace(/^tope[:;\s]*/, '').split('; ')) {
     const [causa = '', ...cambios] = parte.split(' → ').map(x => x.trim())
     const final = cambios.at(-1)
     if (causa.startsWith('esfuerzo')) partes.push(final ? `esfuerzo ${final.replace(/^esfuerzo\s+/, '')}` : causa)
+    else if (FAMILIAS_MODELO.includes(familiaDe(causa))) partes.push(`pedía ${familiaDe(causa)}`)
     else {
       if (causa) partes.push(causa)
       if (final?.startsWith('esfuerzo')) partes.push(final)
@@ -127,25 +180,64 @@ const lineaTope = (d: DecisionJev): string => {
   return [`tope → ${d.opcion ?? 'sin modelo'}`, ...partes].join(' · ')
 }
 
-/** La línea de log de una decisión: `qué modelo → sonnet   p=0.91 sharp → código`, `… split → claude` o `sin respuesta`. */
+/** Cómo se nombra cada tipo en el registro. */
+const OBJETO: Record<TipoFila, string> = { modelo: 'modelo', esfuerzo: 'esfuerzo', reintento: 'reintentar' }
+
+/** El valor tal como se lee: la familia del modelo (`claude-haiku-5-5` → `haiku`) y sin guiones bajos. */
+const legible = (v: string) => familiaDe(v).replace(/_/g, ' ')
+
+/**
+ * La línea de registro de una decisión, en una frase que se entiende sola y en 40 columnas o menos:
+ * `Jev cambió esfuerzo low→medium (88%)`, `Jev dejó modelo haiku (98%)`, `Jev no tocó esfuerzo low (solo 62%)`.
+ */
 export const lineaLog = (d: DecisionJev): string => {
   if (d.tipo === 'tope') return lineaTope(d)
-  const etiqueta = ETIQUETAS[d.tipo]
-  if (d.opcion === null) return `${etiqueta} → sin respuesta`
-  const confianza = d.confianza === null ? '' : `   p=${d.confianza.toFixed(2)}`
-  return `${etiqueta} → ${d.opcion}${confianza} ${d.sharp ? 'sharp → código' : 'split → claude'}`
+  const objeto = OBJETO[d.tipo]
+  if (d.opcion === null) return `Jev no respondió sobre ${objeto}`
+  const seguro = d.confianza === null ? '' : ` (${pct(d.confianza)})`
+  const solo = d.confianza === null ? '' : ` (solo ${pct(d.confianza)})`
+  if (d.tipo === 'reintento') return d.sharp ? `Jev decidió: ${legible(d.opcion)}${seguro}` : `Jev no decidió si reintentar${solo}`
+  const estado = estadoDe(d)
+  if (estado === 'claude') return d.claude === null ? `Jev no tocó ${objeto}${solo}` : `Jev no tocó ${objeto} ${legible(d.claude)}${solo}`
+  if (estado === 'eligio') return `Jev eligió ${objeto} ${legible(d.opcion)}${seguro}`
+  if (estado === 'igual') return `Jev dejó ${objeto} ${legible(d.opcion)}${seguro}`
+  return `Jev cambió ${objeto} ${legible(d.claude ?? '')}→${legible(d.opcion)}${seguro}`
 }
 
-const FAMILIAS_MODELO = ['haiku', 'sonnet', 'opus']
+/** Los esfuerzos como se dicen en el mapa: `medium` → `medio`. */
+const ESFUERZO_ES: Record<string, string> = { low: 'bajo', medium: 'medio', high: 'alto', xhigh: 'extra', max: 'máximo' }
 
-/** Igual que `familia_de_modelo` del guardián: `claude-sonnet-5-5` y `sonnet` son la misma familia. */
-const familiaDe = (modelo: string): string => {
-  const m = modelo.toLowerCase()
-  for (const familia of FAMILIAS_MODELO) {
-    if (m === familia || m.startsWith(`claude-${familia}`)) return familia
+/** `21:52`, en la hora local. */
+const hhmm = (ms: number) => {
+  const f = new Date(ms)
+  return `${String(f.getHours()).padStart(2, '0')}:${String(f.getMinutes()).padStart(2, '0')}`
+}
+
+/** `modelo → sonnet`, `esfuerzo → medio`, `reintentar → sí`. */
+const queDecidio = (d: DecisionJev): string => {
+  const objeto = d.tipo === 'tope' ? 'tope' : OBJETO[d.tipo]
+  if (d.opcion === null) return `${objeto} → —`
+  const v = d.tipo === 'esfuerzo' ? (ESFUERZO_ES[d.opcion] ?? legible(d.opcion)) : legible(d.opcion)
+  return `${objeto} → ${v}`
+}
+
+/** Las tres últimas decisiones con confianza (sin topes), la más nueva primero, como filas de la caja JEV del mapa. */
+export const recientesJev = (ds: DecisionJev[]): { hora: string; txt: string; conf: number }[] => {
+  // Desde el final, hasta tener tres: el registro entero no hace falta.
+  const out: { hora: string; txt: string; conf: number }[] = []
+  for (let i = ds.length - 1; i >= 0 && out.length < 3; i--) {
+    const d = ds[i]
+    if (d && d.tipo !== 'tope' && d.confianza !== null) out.push({ hora: hhmm(d.hora), txt: queDecidio(d), conf: d.confianza })
   }
-  return m
+  return out
 }
+
+/** La línea del REGISTRO del mapa para una decisión: `{ hora: '21:52', rol: 'jev', txt: 'modelo → sonnet (0.91)' }`. */
+export const lineaRegistroJev = (d: DecisionJev): { hora: string; rol: 'jev'; txt: string } => ({
+  hora: hhmm(d.hora),
+  rol: 'jev',
+  txt: d.tipo === 'tope' ? lineaTope(d) : d.confianza === null ? queDecidio(d) : `${queDecidio(d)} (${d.confianza.toFixed(2)})`,
+})
 
 /** `jev ↑ sonnet` o `jev ↓ haiku` si Jev cambió lo que eligió Claude; null si no se aplicó o no se puede comparar. */
 export const marcaTarjeta = (d: DecisionJev | undefined): string | null => {
@@ -175,6 +267,7 @@ const ventanaDe = (v: unknown): VentanaLimite | undefined =>
 
 /** limites.json como datos; null si el texto está roto (por ejemplo a medio escribir) o no trae `actualizado`. */
 export const leerLimites = (texto: string): LimitesJev | null => {
+  if (texto.length > TOPE_LECTURA) return null
   let o: unknown
   try {
     o = JSON.parse(texto)
@@ -225,35 +318,115 @@ export const ritmoSemana = (limites: LimitesJev | null, ahora: number, cfg: Part
 export type NivelRitmo = 'verde' | 'ambar' | 'rojo'
 /** Con este margen bajo el ritmo (antes del corte), el tope deja pasar xhigh. */
 const MARGEN_XHIGH = -10
+/** Con este margen bajo el ritmo (antes del corte), el tope deja pasar Fable. */
+const MARGEN_FABLE = -20
 /** Después del corte, desde este uso de la semana el tope baja a haiku. */
 const FINAL_SEMANA = 97
 /** Con la ventana de 5 h por debajo de este uso, el tope deja pasar xhigh. */
 const H5_XHIGH = 60
+/** Con la ventana de 5 h por debajo de este uso, el tope deja pasar Fable. */
+const H5_FABLE = 40
 /** Si la ventana de 5 h se reinicia en menos de estos minutos, no pone tope. */
 const H5_GRACIA_MIN = 15
 
+type ModeloTope = 'haiku' | 'sonnet' | 'opus' | 'fable'
+type EsfuerzoTope = 'low' | 'medium' | 'high' | 'xhigh'
+const MODELOS_TOPE: ModeloTope[] = ['haiku', 'sonnet', 'opus', 'fable']
+const ESFUERZOS_TOPE: EsfuerzoTope[] = ['low', 'medium', 'high', 'xhigh']
+/** Lo que permite una ventana y por qué: `causa` es lo que se le dice a quien mira el panel. */
+type Candidato = { modelo: ModeloTope; esfuerzo: EsfuerzoTope; causa: string }
+/** Escalones de la semana por exceso sobre el ritmo (≤). Por encima del último: haiku medium. */
+const SEMANA_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [
+  [MARGEN_FABLE, 'fable', 'xhigh'], [MARGEN_XHIGH, 'opus', 'xhigh'], [5, 'opus', 'high'], [10, 'opus', 'medium'], [15, 'sonnet', 'high'], [25, 'sonnet', 'medium'],
+]
+/** Escalones de la ventana de 5 h por uso (<). Desde el último: haiku medium. */
+const H5_ESCALONES: [number, ModeloTope, EsfuerzoTope][] = [[H5_FABLE, 'fable', 'xhigh'], [H5_XHIGH, 'opus', 'xhigh'], [75, 'opus', 'medium'], [85, 'sonnet', 'medium']]
+
+const pts = (exceso: number): string => {
+  const n = Math.round(exceso)
+  return `${n < 0 ? `−${-n}` : `+${n}`} pts`
+}
+
+/** Lo que permite la semana; igual que `_tope_semana` de jev_limites.py con los valores por defecto. */
+const topeSemana = (r: RitmoSemana): Candidato => {
+  const uso = `semana ${Math.round(r.usado)}%`
+  if (r.despuesDelCorte) return r.usado >= FINAL_SEMANA ? { modelo: 'haiku', esfuerzo: 'medium', causa: uso } : { modelo: 'fable', esfuerzo: 'xhigh', causa: uso }
+  if (r.usado >= CFG_RITMO.metaCorte) return { modelo: 'haiku', esfuerzo: 'medium', causa: uso }
+  const [, modelo, esfuerzo] = SEMANA_ESCALONES.find(([umbral]) => r.exceso <= umbral) ?? [0, 'haiku' as const, 'medium' as const]
+  return { modelo, esfuerzo, causa: `semana ${pts(r.exceso)}` }
+}
+
+/** Lo que permite la ventana de 5 h; igual que `_tope_5h`. En gracia (reinicia en menos de 15 min) no recorta. */
+const tope5h = (cinco: VentanaLimite, ahora: number): Candidato => {
+  const causa = `5h ${Math.round(cinco.usado)}%`
+  if (cinco.reinicio - ahora < H5_GRACIA_MIN * 60) return { modelo: 'fable', esfuerzo: 'xhigh', causa }
+  const [, modelo, esfuerzo] = H5_ESCALONES.find(([umbral]) => cinco.usado < umbral) ?? [0, 'haiku' as const, 'medium' as const]
+  return { modelo, esfuerzo, causa }
+}
+
+/** La causa que pone `topeVigente` cuando no hay ningún dato de uso vigente. */
+const SIN_DATO = 'sin dato de uso'
+
 /**
- * ¿El tope de jev_limites.py devolvería xhigh? Con los valores por defecto (no lee config.json):
- * hay dato de la ventana de 5 h y sigue vigente (reinicio futuro); va bajo 60 % o está en gracia
- * (reinicia en menos de 15 min); y la semana va 10 puntos o más bajo el ritmo (antes del corte)
- * o bajo 97 % (después del corte).
+ * El tope vigente, igual que `calcular_tope` de jev_limites.py con los valores por defecto (no lee config.json):
+ * de cada ventana vigente sale un máximo y gana el más bajo. xhigh y Fable solo pasan si se conoce la semana y,
+ * cuando la cuenta trae ventana de 5 h, también esa; una cuenta sin ventana de 5 h decide solo con la semana.
+ * `r` es el ritmo de la semana (null sin dato vigente); `sinDato` dice que limites.json falta o es viejo.
  */
-const xhighOk = (r: RitmoSemana, cinco: VentanaLimite | undefined, ahora: number): boolean => {
-  if (!cinco || cinco.reinicio <= ahora) return false
-  const cincoOk = cinco.usado < H5_XHIGH || cinco.reinicio - ahora < H5_GRACIA_MIN * 60
-  const semanaOk = r.despuesDelCorte ? r.usado < FINAL_SEMANA : r.exceso <= MARGEN_XHIGH
-  return cincoOk && semanaOk
+const topeVigente = (r: RitmoSemana | null, cinco: VentanaLimite | undefined, ahora: number, sinDato = false): Candidato => {
+  const cincoVigente = !sinDato && cinco && cinco.reinicio > ahora ? cinco : undefined
+  const candidatos = [...(r ? [topeSemana(r)] : []), ...(cincoVigente ? [tope5h(cincoVigente, ahora)] : [])]
+  if (!candidatos.length) return { modelo: 'opus', esfuerzo: 'high', causa: SIN_DATO }
+  const rango = (c: Candidato) => MODELOS_TOPE.indexOf(c.modelo) * 10 + ESFUERZOS_TOPE.indexOf(c.esfuerzo)
+  const manda = candidatos.reduce((a, b) => (rango(b) < rango(a) ? b : a))
+  const modelo = candidatos.map(c => c.modelo).reduce((a, b) => (MODELOS_TOPE.indexOf(b) < MODELOS_TOPE.indexOf(a) ? b : a))
+  const esfuerzo = candidatos.map(c => c.esfuerzo).reduce((a, b) => (ESFUERZOS_TOPE.indexOf(b) < ESFUERZOS_TOPE.indexOf(a) ? b : a))
+  if (esfuerzo !== 'xhigh' && modelo !== 'fable') return { modelo, esfuerzo, causa: manda.causa }
+  const sinFable: ModeloTope = modelo === 'fable' ? 'opus' : modelo
+  const sinXhigh: EsfuerzoTope = esfuerzo === 'xhigh' ? 'high' : esfuerzo
+  if (!r) return { modelo: sinFable, esfuerzo: sinXhigh, causa: 'falta dato de semana' }
+  if (cinco && !cincoVigente) return { modelo: sinFable, esfuerzo: sinXhigh, causa: 'falta dato de 5h' }
+  // Solo Fable con xhigh es «sin recorte»: opus xhigh ya es un recorte y dice qué ventana lo pone.
+  return { modelo, esfuerzo, causa: modelo === 'fable' && esfuerzo === 'xhigh' ? 'sin recorte' : manda.causa }
+}
+
+/**
+ * El color de un tope: verde si deja pasar Opus o Fable con esfuerzo alto, ámbar si recorta, rojo si baja a Haiku.
+ * Sin dato de uso no se sabe si hay margen: ámbar, nunca verde.
+ */
+const nivelDeTope = (t: Candidato): NivelRitmo => {
+  if (t.causa === SIN_DATO) return 'ambar'
+  const libre = (t.modelo === 'opus' || t.modelo === 'fable') && (t.esfuerzo === 'high' || t.esfuerzo === 'xhigh')
+  return libre ? 'verde' : t.modelo === 'haiku' ? 'rojo' : 'ambar'
+}
+
+/**
+ * La línea del tope que rige ahora para los subagentes: `tope ahora: sonnet high · semana +12 pts`, con el color
+ * de `nivelDeTope`. `ahora` y los datos van en segundos epoch.
+ */
+export const topeAhora = (limites: LimitesJev | null, ahora: number, zona: Zona = zonaDelSistema): { texto: string; nivel: NivelRitmo } => {
+  const sinDato = !limites || ahora - limites.actualizado > CFG_RITMO.maxAntiguedadH * 3600
+  const t = topeVigente(ritmoSemana(limites, ahora, undefined, zona), limites?.five_hour, ahora, sinDato)
+  return { texto: `tope ahora: ${t.modelo} ${t.esfuerzo} · ${t.causa}`, nivel: nivelDeTope(t) }
 }
 
 /**
  * La fila de la caja JEV: `semana 52% · ritmo 40% · +12`, con su nivel de color; null si no hay ritmo.
- * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok`.
+ * `cinco` (la ventana de 5 h) y `ahora` (segundos epoch) deciden el `· xhigh ok` o el `· fable ok`. El color es el
+ * del tope que rige con estos datos, el mismo que el de la línea `tope ahora`: las dos filas nunca se contradicen.
  */
 export const filaRitmo = (r: RitmoSemana | null, cinco?: VentanaLimite, ahora = 0): { texto: string; nivel: NivelRitmo } | null => {
   if (!r) return null
   const exceso = Math.round(r.exceso)
   const signo = exceso < 0 ? `−${-exceso}` : `+${exceso}`
-  const margen = xhighOk(r, cinco, ahora) ? ' · xhigh ok' : ''
-  const nivel: NivelRitmo = r.exceso <= 5 ? 'verde' : r.exceso <= 15 ? 'ambar' : 'rojo'
-  return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel }
+  const t = topeVigente(r, cinco, ahora)
+  const margen = t.modelo === 'fable' ? ' · fable ok' : t.esfuerzo === 'xhigh' ? ' · xhigh ok' : ''
+  return { texto: `semana ${Math.round(r.usado)}% · ritmo ${Math.round(r.ritmo)}% · ${signo}${margen}`, nivel: nivelDeTope(t) }
+}
+
+/** La línea de ritmo del mapa: `rojo ⇡61%` si se gasta más rápido que el ritmo, `verde ⇣12%` si hay margen. */
+export const textoRitmoMapa = (exceso: number, nivel: NivelRitmo): string => {
+  const r = Math.round(exceso)
+  const palabra = nivel === 'verde' ? 'verde' : nivel === 'ambar' ? 'ámbar' : 'rojo'
+  return `${palabra} ${exceso < 0 ? '⇣' : '⇡'}${Math.abs(r)}%`
 }

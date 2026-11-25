@@ -1,29 +1,55 @@
-// La clave que decide si el reloj del panel pide un redibujo. Incluye el fotograma de marcha:
+// La clave que decide si el reloj del panel pide un redibujo, y el ritmo del reloj. Incluye el fotograma de marcha:
 // sin él, el glifo de un agente caminando saltaría solo cada minuto, no cada paso.
 import { fotogramaDeMarcha } from './agentes-anim'
 
 export type EntradaClave = {
   contextoPct: number | null
   limites: { pct: number }[]
-  pulso?: number
+  /** Fase del latido, si lo hay. */
+  pulso?: string
   ahora: number
   agentesActivos: number
   permisosPendientes: number
-  costoUsd: number
+  costoUsd: number | null
+  /** Marco de la animación del mapa: solo mientras el mapa se anima; sin él la clave no cambia con cada cuadro. */
+  marco?: number
+  /** El mapa enseña relojes con segundos: la clave cambia cada segundo en vez de cada minuto. */
+  segundos?: boolean
+  /** En reposo (sin trabajo) los relojes van por minuto aunque haya `segundos`: la clave cambia cada minuto. */
+  reposo?: boolean
 }
 
-/** Con animación, el reloj corre cada 120 ms. Sin ella, cada segundo: así un agente que termina
- * se ve al momento y no hasta 30 s después. Cada cuadro solo redibuja si la clave cambió. */
-export const PERIODO_RELOJ_MS = (animacion: boolean): number => (animacion ? 120 : 1000)
+/**
+ * Cómo corre el reloj del panel. `rapido`: hay trabajo en curso y animación, un cuadro cada 120 ms. `lento`: un cuadro
+ * por segundo, para que los relojes avancen y un agente que termina se vea al momento. El reloj se para del todo
+ * mientras el panel no se ve (ver register.tsx).
+ */
+export type ModoReloj = 'rapido' | 'lento'
+
+export const modoReloj = (e: { animacion: boolean; hayTrabajo: boolean }): ModoReloj => (e.animacion && e.hayTrabajo ? 'rapido' : 'lento')
+
+/** Milisegundos entre cuadros en cada modo. Cada cuadro solo redibuja si la clave cambió. */
+/**
+ * ¿Puede arrancar el reloj un dibujo que empezó en la generación `generacionDibujo`? Solo si el reloj está parado y no se
+ * paró después (`session.end`, `ui.close`): un dibujo tardío no lo vuelve a arrancar.
+ */
+export const puedeArrancarReloj = (e: { corriendo: boolean; generacionDibujo: number; generacionActual: number }): boolean =>
+  !e.corriendo && e.generacionDibujo === e.generacionActual
+
+export const PERIODO_RELOJ_MS: Record<ModoReloj, number> = { rapido: 120, lento: 1000 }
 
 export const claveDeRedibujo = (e: EntradaClave): string =>
   JSON.stringify([
     e.contextoPct,
     e.limites.map(l => l.pct),
     e.pulso,
-    Math.floor(e.ahora / 60_000),
+    Math.floor(e.ahora / (e.segundos && !e.reposo ? 1000 : 60_000)),
     e.agentesActivos,
     fotogramaDeMarcha(e.ahora, e.agentesActivos),
     e.permisosPendientes,
     e.costoUsd,
+    ...(e.marco === undefined ? [] : [e.marco]),
   ])
+
+/** Reposo: nada trabaja y nadie espera un permiso. Con un permiso pendiente, «TE ESPERA» sigue latiendo cada segundo. */
+export const enReposo = (e: { hayTrabajo: boolean; permisosPendientes: number }) => !e.hayTrabajo && e.permisosPendientes === 0

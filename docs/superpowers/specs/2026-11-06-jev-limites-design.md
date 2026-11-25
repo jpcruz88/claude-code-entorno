@@ -36,6 +36,7 @@ El usuario trabaja en varios proyectos a la vez. El uso es **de la cuenta**, no 
   - después del corte, mientras `uso_semana < 97` y la ventana de 5 h está bajo el 60 %.
 - En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón.
 - Si no hay dato de uso, el esfuerzo máximo es `high`.
+- Cuenta sin ventana de 5 h (2026-11-10): si `limites.json` no trae `five_hour`, decide solo la semana y `xhigh` pasa con las mismas condiciones de semana. Una ventana de 5 h presente pero vencida o rota sigue contando como sin dato (máximo `high`).
 - El guardián acepta `xhigh` solo si el tope de ese momento lo permite. Si no lo permite, no bloquea: baja el esfuerzo con `updatedInput`.
 
 **Ritmo semanal.**

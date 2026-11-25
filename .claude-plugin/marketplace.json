@@ -8,16 +8,10 @@
   },
   "plugins": [
     {
-      "name": "caveman-badge",
-      "source": "./mods/caveman-badge",
-      "description": "Muestra en la línea de estado el modo caveman (aproximado)",
-      "version": "0.1.0"
-    },
-    {
       "name": "ctx-budget",
       "source": "./mods/ctx-budget",
-      "description": "Avisa cuando el contexto cruza el 70 % y el 85 %",
-      "version": "0.1.0"
+      "description": "Avisa cuando el contexto cruza el 70 % y el 85 %, y pide a Claude guardar el handoff",
+      "version": "0.2.0"
     },
     {
       "name": "guard-kill-visible",
@@ -29,13 +23,13 @@
       "name": "secret-guard",
       "source": "./mods/secret-guard",
       "description": "Bloquea escribir secretos en archivos y comandos y pregunta antes de leer archivos sensibles",
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     {
       "name": "sound-notify",
       "source": "./mods/sound-notify",
       "description": "Avisa al terminar un turno largo y cuando Claude espera un permiso",
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     {
       "name": "spec-gate",
@@ -46,8 +40,8 @@
     {
       "name": "tablero",
       "source": "./mods/tablero",
-      "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
-      "version": "0.3.1"
+      "description": "Tablero: panel en español junto al chat con el estado de la sesión (costo, cupos, permisos, errores), el lead, las decisiones de Jev y los subagentes. Derivado de Flightdeck (scasella, MIT)",
+      "version": "1.4.4"
     },
     {
       "name": "tdd-gate",

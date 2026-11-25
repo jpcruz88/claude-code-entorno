@@ -47,6 +47,8 @@ DEFECTOS = {
             "haiku": "Tarea mecánica y de bajo riesgo: búsquedas, formatos, cambios pequeños.",
             "sonnet": "Funcionalidad o depuración con alcance acotado.",
             "opus": "Causa raíz poco clara, decisiones de arquitectura o riesgo alto.",
+            "fable": "Tarea muy pesada y larga: diseño o investigación de gran alcance, con muchas "
+                     "piezas a la vez, donde un error cuesta caro.",
         },
         "esfuerzo": {
             "low": "Tarea trivial o de respuesta directa.",
@@ -63,7 +65,7 @@ DEFECTOS = {
 }
 
 PREGUNTAS_FIJAS = {
-    "modelo": ["haiku", "sonnet", "opus"],
+    "modelo": ["haiku", "sonnet", "opus", "fable"],
     "esfuerzo": ["low", "medium", "high", "xhigh"],
     "reintento": ["reintentar", "cambiar_enfoque", "parar_y_preguntar"],
 }

@@ -34,6 +34,25 @@ class MarketplaceDeMods(unittest.TestCase):
                 datos = json.loads(manifiesto.read_text(encoding="utf-8"))
                 self.assertEqual(datos["name"], entrada["name"])
 
+    def test_version_del_marketplace_igual_a_la_del_plugin(self):
+        # Quien clona el repo ve la versión del marketplace; la caché de plugins
+        # se indexa por la de plugin.json. Si difieren, la instalación confunde.
+        for entrada in self.datos["plugins"]:
+            with self.subTest(mod=entrada["name"]):
+                manifiesto = RAIZ / entrada["source"] / ".claude-plugin" / "plugin.json"
+                datos = json.loads(manifiesto.read_text(encoding="utf-8"))
+                self.assertEqual(entrada.get("version"), datos.get("version"))
+
+
+class CiPruebaLosMods(unittest.TestCase):
+    def test_ci_corre_claude_plugin_test_en_cada_mod(self):
+        texto = (RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("mods/*/", texto)
+        self.assertIn('claude plugin test "$carpeta"', texto)
+        # Va después de instalar el CLI fijado y en el mismo trabajo (Linux).
+        self.assertLess(texto.index("npm install -g @anthropic-ai/claude-code@"),
+                        texto.index('claude plugin test "$carpeta"'))
+
 
 class ExportarPruebaLosMods(unittest.TestCase):
     def test_exportar_corre_las_pruebas_de_cada_mod(self):

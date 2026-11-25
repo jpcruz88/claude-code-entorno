@@ -1,12 +1,59 @@
 # Tablero
 
-Mod de Claude Code que dibuja sobre el prompt una banda en español con la carpeta actual, el modelo, el costo, el contexto, los subagentes, los permisos y el uso con su hora de reseteo, y deja una línea resumen en el footer.
+Mod de Claude Code que dibuja un panel en español junto al chat con todo el estado de la sesión, en un solo sitio y sin datos repetidos. Desde 1.3.0 absorbe los antiguos mods `barra-plan`, `aduana-panel` y `caveman-badge`.
 
-Es de observación: no bloquea ni retrasa nada. Por lo demás no usa red ni procesos, pero sí tiene dos excepciones de archivo: lee `~/.claude/jev/decisiones.jsonl` para mostrar las decisiones de Jev (ver «Jev»), y la instrucción de reportar pasos que recibe cada subagente `savvy-*` (ver «Progreso y agentes»).
+La vista por defecto es una lista de secciones con título, sin cajas:
+
+- **Cabecera:** estado (`⠹ Trabajando` / `○ En espera`), modo caveman, servicio de Claude, versión y tiempo. La rama y la hora solo salen fuera de herdr.
+- **Sesión:** Modelo, Contexto, Cache, Costo, Hoy, Cupo 5 h, Cupo 7 d, Proyecto, Git y Config.
+- **Planes:** los de la herramienta `mcp__tablero__plan_progress`.
+- **Agentes:** tarjetas animadas.
+- **Jev.**
+- **Aduana:** solo mientras corren las pruebas largas.
+- **Gasto:** plegada, se abre con `g`.
+- **Sesiones:** plegada, se abre con `v`.
+- **Conversaciones:** quién le habla a quién entre sesiones (`SendMessage` y `herdr agent prompt|send-keys|wait`, `herdr pane run`) y quién espera respuesta. Plegada, se abre con `c`; solo sale con mensajes de la última media hora o una espera abierta. Si el destino es una sesión sin este mod, no avisa cuando termina: su espera dura hasta 30 min. De `send-keys` no guarda lo tecleado.
+- **Permisos.**
+
+Con el panel sin colocar, un resumen de hasta 8 filas va sobre el prompt. El mapa de cajas de versiones anteriores sigue en `/tablero layout mapa`.
+
+Qué lee, qué lanza y qué escribe. Cada fuente se apaga con la opción `extras`, y un fallo oculta su fila, nunca el panel:
+
+- **Lee:**
+  - `~/.claude/jev/decisiones.jsonl` y `~/.claude/jev/limites.json` (Jev);
+  - `~/.claude/al-dia/resultado.json`;
+  - `.git/HEAD`;
+  - `~/.claude/tablero/linea/<sesión>.json`: lo que deja la statusline (cache, nombre de la sesión, thinking, PR);
+  - `~/.claude/tablero/sesiones/*.json`: las demás sesiones;
+  - `~/.claude/tablero/conversaciones/*.json`: lo que se mandan las sesiones;
+  - `~/.cache/detector-humo/en-curso.json` (Aduana);
+  - los mensajes de la propia sesión, para Gasto.
+
+  Cada lectura de archivo tiene un tope de 2 000 000 de caracteres.
+- **Lanza:** `git diff --shortstat` y `git rev-list` cada 10 s, `gh pr checks` cada minuto si hay PR, y `herdr agent get <destino>` cuando la sesión envía algo por herdr (tope de 2 s). Cada uno con tope de tiempo.
+- **Red:** `https://status.claude.com/api/v2/status.json` cada 5 min.
+- **Escribe:** su propio `~/.claude/tablero/sesiones/<sesión>.json`, con su estado y el fin de su último turno, para las demás sesiones y el presupuesto, y `~/.claude/tablero/conversaciones/<sesión>.json` con sus últimos 20 envíos a otras sesiones.
+
+## Instalar
+
+En Claude Code 2.1.275 o posterior:
+
+```
+/plugin install tablero --marketplace jpcruz88/claude-code-entorno
+```
+
+O desde la terminal:
+
+```
+claude plugin marketplace add jpcruz88/claude-code-entorno
+claude plugin install tablero@claude-code-entorno --scope user
+```
+
+Reinicia Claude. El panel sale junto al chat y su cabecera dice `v<versión>`. Para verlo en marcha, pide a Claude que lance dos o tres subagentes: la cabecera pasa a `● trabajando` y cada agente sale en la sección de agentes. La caja JEV solo se llena si usas los hooks de Jev de este repo (ver «Jev»), y la caja AL DÍA solo si usas el hook `al-dia.py`.
 
 ## Atribución
 
-Derivado de [Flightdeck](https://github.com/scasella/claude-flightdeck), de Stephen Casella (scasella), con licencia MIT. El panel de progreso y de agentes está adaptado de [savvy-progress](https://github.com/JohnnyVizz/claude-kit/tree/main/plugins/savvy-progress), de johnnyvizz, también MIT. Los avisos de copyright originales se conservan en `LICENSE`.
+Derivado de [Flightdeck](https://github.com/scasella/claude-flightdeck), de Stephen Casella (scasella), con licencia MIT. Hasta la 0.5.3 incluyó una adaptación de [savvy-progress](https://github.com/JohnnyVizz/claude-kit/tree/main/plugins/savvy-progress), de johnnyvizz, también MIT; desde la 0.6.0 esa parte la da el propio plugin savvy-progress. Los avisos de copyright originales se conservan en `LICENSE`.
 
 ## Jev
 
@@ -19,7 +66,7 @@ Jev responde tres preguntas, desde dos hooks de Python del repo:
 
 Las decisiones las toman esos hooks, no el mod. Cada decisión queda en `~/.claude/jev/decisiones.jsonl`, sin el encargo, y el archivo se recorta a sus últimas 2000 líneas.
 
-**El mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en el log (líneas `jev`), en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
+**Para Jev, el mod solo lee ese archivo.** Tablero no llama a Jev ni a ninguna otra red: solo muestra lo que los hooks ya registraron. Lo que ves en la caja JEV, en la barra (`jev [N decisiones]`) y en las tarjetas (`jev ↑ sonnet`) sale de ese archivo. La fila de ritmo semanal de la caja sale de otro archivo, `~/.claude/jev/limites.json` (ver «Tope por uso de la cuenta»).
 
 ### Dónde poner la clave
 
@@ -43,7 +90,7 @@ La consulta cuesta 0,042 USD por millón de tokens de entrada. Con el encargo co
 
 ### Sin clave, todo sigue igual
 
-Si no hay clave, Jev no se consulta y la decisión queda como «sin respuesta» en el log. Pasa lo que eligió Claude. Lo mismo ocurre si Jev no responde, responde algo que no entiende, o si OpenRouter devuelve error por falta de saldo (402) o por límite de peticiones (429). Ningún fallo de Jev frena un subagente ni una herramienta.
+Si no hay clave, Jev no se consulta y la decisión queda como «sin respuesta». Pasa lo que eligió Claude. Lo mismo ocurre si Jev no responde, responde algo que no entiende, o si OpenRouter devuelve error por falta de saldo (402) o por límite de peticiones (429). Ningún fallo de Jev frena un subagente ni una herramienta.
 
 ### Tiempo
 
@@ -72,6 +119,7 @@ Antes del corte, el exceso marca el escalón:
 
 | Exceso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
+| ≤ −20 | fable | xhigh |
 | ≤ −10 | opus | xhigh |
 | ≤ 5 | opus | high |
 | ≤ 10 | opus | medium |
@@ -79,13 +127,14 @@ Antes del corte, el exceso marca el escalón:
 | ≤ 25 | sonnet | medium |
 | > 25, o uso ≥ 90 % | haiku | medium |
 
-Después del corte, la semana no baja nada hasta llegar a 97 % de uso: queda opus con xhigh y decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
+Después del corte, la semana no baja nada hasta llegar a 97 % de uso: queda fable con xhigh y decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
 
 **Ventana de 5 horas.** El uso de la ventana marca el escalón:
 
 | Uso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
-| < 60 % | opus | xhigh |
+| < 40 % | fable | xhigh |
+| 40 % a 60 % | opus | xhigh |
 | 60 % a 75 % | opus | medium |
 | 75 % a 85 % | sonnet | medium |
 | ≥ 85 % | haiku | medium |
@@ -102,9 +151,11 @@ Si la ventana se reinicia en menos de 15 minutos, no pone ningún tope. Si su re
 
 En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si falta una de las dos ventanas, `xhigh` baja a `high`, porque `xhigh` exige conocer las dos. Sin ningún dato, el esfuerzo máximo es `high`. `max` sigue bloqueado siempre. Un Workflow con `xhigh` se bloquea, porque un Workflow no se puede bajar; el tope no lo toca.
 
-**Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. El log la muestra como `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de Jev.
+**Fable con mucho margen.** Un subagente de Agent o Task puede pedir `fable` para una tarea muy pesada. Solo pasa si se cumplen todas estas condiciones: hay dato de la semana y, si la cuenta trae ventana de 5 horas, también de esa; la ventana de 5 horas va por debajo de 40 % o está en gracia; y, antes del corte, la semana va al menos 20 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro caso baja a `opus` o a lo que marque su escalón, y la línea `tope` lo anota (`tope: fable → opus`). Sin ningún dato de uso baja a `opus`. En un Workflow, `fable` se bloquea, porque un Workflow no se puede bajar. Fuera de los subagentes sigue prohibido (regla `nunca-fable.md`).
 
-**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. Verde hasta +5, ámbar de +5 a +15 y rojo por encima de +15. Añade `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
+**Qué queda registrado.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`, con lo que quedó y lo que había. Los topes no cuentan en el total de decisiones de Jev.
+
+**Vista en la caja JEV.** Con dato, la caja muestra la fila `semana 52% · ritmo 40% · +12`: uso de la semana, ritmo ideal y diferencia. El color es el del tope que rige: verde hasta +5 (el tope deja pasar opus con high o xhigh), ámbar de +5 a +25 (el tope recorta) y rojo por encima de +25 (baja a haiku). La ventana de 5 horas también puede poner el color. Añade `· fable ok` cuando el tope dejaría pasar Fable, y `· xhigh ok` solo cuando el tope de Python devolvería `xhigh`, con la regla exacta de «`xhigh` con margen» (las dos ventanas con dato, la de 5 horas vigente y bajo 60 % o en gracia, y la semana a −10 o menos antes del corte, o bajo 97 % después). Sin dato de la semana, la fila no aparece; sin la ventana de 5 horas, aparece sin `xhigh ok`.
 
 **La fila usa los valores por defecto.** El mod no lee `~/.claude/jev/config.json`: calcula la fila con los valores de `DEFAULTS_LIMITES`. Si cambias `limites`, el tope real del guardián puede no coincidir con lo que muestra la fila (el ritmo, el corte y `xhigh ok`).
 
@@ -125,8 +176,8 @@ En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si 
 |---|---|---|
 | `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
 | `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
-| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. Por encima del último, haiku con medium. |
-| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. Desde el último, haiku con medium. |
+| `semana_escalones` | `[[-20,"fable","xhigh"],[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. Por encima del último, haiku con medium. |
+| `h5_escalones` | `[[40,"fable","xhigh"],[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. Desde el último, haiku con medium. |
 | `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana ya no pone tope. |
 | `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
 | `corte_hora` | `23` | Hora local del corte. |
@@ -134,27 +185,16 @@ En cualquier otro caso, `xhigh` baja a `high` o a lo que marque su escalón. Si 
 
 ## La barra de vida
 
-En el panel SESIÓN, una barra muestra la vida que te queda de contexto (`vida 50% ████████░░░░`).
+En la tarjeta principal, una barra muestra la vida que te queda de contexto (`vida 50% ████████░░░░`).
 
 - **Vida** = el contexto que te queda. La barra se vacía al usar contexto.
 - **Color**: verde con vida alta (60 % o más), ámbar a media (de 30 a 59 %) y rojo cuando queda poca (menos de 30 %). En la terminal son tres tonos; en la app de escritorio la barra es un SVG con degradado continuo de rojo a verde.
 - Sin lectura de contexto, la barra no se dibuja.
 
-## Progreso y agentes (de savvy-progress)
+## Subagentes
 
-- **Barra sobre el prompt**: el título del flujo, la fase, las tareas aceptadas frente a las planificadas, y un botón `×N` con el tamaño de la cuadrilla que abre el panel. Se muestra cuando la sesión principal reporta un flujo (`mcp__tablero__progreso`) o cuando arranca un subagente `savvy-*`.
-- **Agentes**: los subagentes en marcha y terminados se ven como tarjetas dentro del panel «Tablero», con nivel, modelo, esfuerzo, progreso de pasos, contexto, costo estimado y tiempo.
-- **Cangrejos**: cada subagente es un cangrejo que camina mientras trabaja. Cada nivel lleva un accesorio (`cuidadoso` gira una llave, `pesado` pasa la lupa, `medio` voltea la tortilla, `ligero` corre con bandera). En la app de escritorio, `prefers-reduced-motion` los deja quietos. En la terminal, la opción `animacion: false` fija el glifo de cada agente en marcha y hace que el reloj se redibuje cada 30 s.
-- **Costos**: son estimados con la tabla de precios de `hooks/savvy-core.ts`; Claude Code reporta tokens, no dinero.
+Cada subagente se ve en la caja AGENTES del panel con su nombre, modelo, estado (en curso, listo, 🛑 detenido, ❌ falló) y los pasos que lleva. La barra de avance y la cuenta `n/n` salen solo si alguien reporta un plan de pasos; si no, se muestran los pasos dados. Para el progreso de `savvy-flow`, usa el plugin savvy-progress.
 
-### Cambio de comportamiento: encargos de `savvy-*`
+## El asesor
 
-Cada subagente `savvy-*` que no traiga la instrucción recibe al final de su encargo una línea que le pide reportar sus pasos con `mcp__tablero__paso`. Sin esa línea, los trabajadores suelen omitir el reporte aunque la herramienta exista. Los demás subagentes no cambian. Si no usas `savvy-flow`, este cambio no afecta nada.
-
-### Opciones
-
-
-### Lo que no se portó
-
-- Los niveles `fable` (el astronauta y su precio) no están: el mod no usa ese modelo. Un subagente `savvy-fable` cuenta como `otro`.
-- Las traducciones a inglés, ruso y hebreo: el mod va solo en español, sin disposición de derecha a izquierda.
+La caja ASESOR aparece solo cuando Claude consulta a un asesor: un subagente cuyo tipo coincide con `architectPattern` (por omisión `advisor|architect`) o la herramienta de servidor `advisor`. Sin consultas no ocupa sitio.

@@ -22,9 +22,9 @@ SOFTWARE.
 
 ---
 
-Partes del panel de progreso y de agentes (`hooks/savvy-core.ts`, `hooks/savvy-dibujo.ts`,
-`hooks/savvy-registro.tsx`) están adaptadas de savvy-progress, de johnnyvizz/claude-kit,
-con la misma licencia MIT:
+Los nombres en español de los tipos de subagente (`hooks/nombres.ts`) vienen de savvy-progress,
+de johnnyvizz/claude-kit, con la misma licencia MIT. Hasta la 0.5.3, el tablero incluía también
+su panel de progreso y de agentes:
 
 MIT License
 

@@ -2,15 +2,11 @@
 // `since` and `now` come from the hooks module's $.clock; between redraws it adds its own ticks.
 import type { ClientModule } from 'claude-code'
 
+import { fmtTimer } from './core'
+
 type Props = { since: number; now: number; endAt: number | null; color: string }
 type Ref = { base: number; ticks: number; lastNow: number; isRunning: boolean }
 type State = { ref: Ref }
-
-const fmt = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(s / 60)
-  return m < 60 ? `${m}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`
-}
 
 const Elapsed: ClientModule<Props, State> = (props, surface) => {
   const { Text } = surface.elements
@@ -31,7 +27,7 @@ const Elapsed: ClientModule<Props, State> = (props, surface) => {
       }
     })
   }
-  return <Text color={props.color}>{fmt(ref.base + ref.ticks * 1000)}</Text>
+  return <Text color={props.color}>{fmtTimer(ref.base + ref.ticks * 1000)}</Text>
 }
 
 export default Elapsed

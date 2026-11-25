@@ -30,10 +30,10 @@ test('los textos auxiliares salen en español', () => {
   expect(momentLabel('before a plan')).toBe('antes de un plan')
   expect(momentLabel('error repeats')).toBe('errores repetidos')
   expect(momentLabel('before done')).toBe('antes de terminar')
-  expect(statusLabel('running')).toBe('en curso')
-  expect(statusLabel('done')).toBe('listo')
-  expect(statusLabel('failed')).toBe('fallido')
-  expect(statusLabel('stopped')).toBe('detenido')
+  expect(statusLabel('running')).toBe('En curso')
+  expect(statusLabel('done')).toBe('Hecho')
+  expect(statusLabel('failed')).toBe('Falló')
+  expect(statusLabel('stopped')).toBe('Detenido')
   expect(limitLabel('spend_limit')).toBe('gasto')
 })
 
@@ -62,7 +62,7 @@ const motor = (on: On, cwd: string | Promise<string> = 'C:\\Proyectos\\mods\\mi-
   return reloj
 }
 
-test('el panel principal muestra la carpeta actual, solo el nombre final', async ($, on) => {
+test('el panel principal muestra la carpeta actual, solo el nombre final', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   for (const cols of [40, 64, 120]) {
     const ui = await $.ui.mount(pane(cols))
@@ -73,7 +73,7 @@ test('el panel principal muestra la carpeta actual, solo el nombre final', async
   }
 })
 
-test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', async ($, on) => {
+test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on, 'C:\\p\\una-carpeta-con-un-nombre-larguisimo-que-no-cabe')
   const ui = await $.ui.mount(pane(40))
   expect(await ui.find({ text: /una-carpeta-con-un-nombre-larguisimo-que-no-cabe/ })).toBeUndefined()
@@ -81,7 +81,7 @@ test('una carpeta de nombre largo se trunca y no rompe el ancho del panel', asyn
   await ui.unmount()
 })
 
-test('sin carpeta conocida el panel se dibuja igual', async ($, on) => {
+test('sin carpeta conocida el panel se dibuja igual', { options: { layout: 'diagrama' } }, async ($, on) => {
   const reloj = mock.clock(on)
   void reloj
   on('ui.status', () => ({ value: undefined }))
@@ -90,7 +90,7 @@ test('sin carpeta conocida el panel se dibuja igual', async ($, on) => {
   await ui.unmount()
 })
 
-test('el panel principal junta costo, contexto, subagentes, permisos y uso con su reseteo', async ($, on) => {
+test('el panel principal junta costo, contexto, subagentes, permisos y uso con su reseteo', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   on('agent.spawn', () => ({ model: 'claude-sonnet-5-5', agentId: 'p1' }))
   on('tool.check', () => ({ decision: 'ask' }))
@@ -117,15 +117,15 @@ test('el panel principal junta costo, contexto, subagentes, permisos y uso con s
   expect(await ui.find({ text: /contexto/ })).toBeDefined()
   expect(await ui.find({ text: /agentes 1\/1/ })).toBeDefined()
   expect(await ui.find({ text: /permisos 1/ })).toBeDefined()
-  expect(await ui.find({ text: /19% ↻3h10m/ })).toBeDefined()
+  expect(await ui.find({ text: /19% +(⇣\d+%)? *↻ (hoy|mañana|[a-záéíóú]{3}) \d\d:\d\d/ })).toBeDefined()
   await ui.unmount()
 })
 
-test('las etiquetas del panel principal están en español', async ($, on) => {
+test('las etiquetas del panel principal están en español', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   const ui = await $.ui.mount(pane(120))
   expect(await ui.find({ text: /esfuerzo/ })).toBeDefined()
-  expect(await ui.find({ text: /○ en espera/ })).toBeDefined()
+  expect(await ui.find({ text: /[○●] en espera/ })).toBeDefined()
   expect(await ui.find({ text: /0 respuestas/ })).toBeDefined()
   expect(await ui.find({ text: /\bsol\./ })).toBeUndefined()
   expect(await ui.find({ text: /\beffort\b/ })).toBeUndefined()
@@ -180,4 +180,30 @@ test('con openOnStart apagado el primer prompt no abre el panel', { options: { o
   await $.session.start({ cwd: '/w', surface: 'terminal', isInteractive: true })
   await $.prompt.submit({ text: 'hola' })
   expect(abiertos).toBe(0)
+})
+
+test('la cabecera muestra el tiempo de la sesión y la hora local', { options: { layout: 'diagrama' } }, async ($, on) => {
+  motor(on)
+  const ui = await $.ui.mount(pane(120))
+  expect(await ui.find({ text: /⏱/ })).toBeDefined()
+  expect(await ui.find({ text: /🕐 (\d\d:\d\d|--:--)/ })).toBeDefined()
+  await ui.unmount()
+})
+
+// El cupo de 5 h con 70 % cuando ya ha pasado la mitad de la ventana: va 20 puntos por delante, ⇡20%.
+test('el cupo muestra su ritmo frente al tiempo de la ventana: ⇡ si va por delante', { options: { layout: 'diagrama' } }, async ($, on) => {
+  motor(on)
+  await $.session.measure({
+    context: { window: 200_000, tokens: 100_000, percent: 50 },
+    rateLimits: [{ kind: 'five_hour', percentUsed: 70, resetsAt: new Date(2.5 * 3_600_000).toISOString() }],
+    cost: { usd: 1.2 },
+    changed: ['context', 'rateLimits'],
+  } as never)
+  const ui = await $.ui.mount(pane(120))
+  expect(await ui.find({ text: /70% +⇡20%/ })).toBeDefined()
+  await ui.unmount()
+  // En un panel de 64 columnas no cabe: el ritmo se oculta antes que partir la línea.
+  const estrecho = await $.ui.mount(pane(64))
+  expect(await estrecho.find({ text: /⇡20%/ })).toBeUndefined()
+  await estrecho.unmount()
 })

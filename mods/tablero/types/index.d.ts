@@ -73,6 +73,8 @@ export type Check = {
   bucket: Bucket
   verdict: Verdict
   inSubagent: boolean
+  /** El subagente en cuyo bucle se decidió la llamada; ausente en el lead. */
+  agente?: string
   detail: string
   at: number
 }
@@ -106,14 +108,6 @@ export type AgentCard = {
 /** A model loop whose id matches no card: a workflow agent, a compaction or a memory fork. */
 export type Loop = { id: string; steps: number; firstAt: number; lastAt: number; isDone: boolean }
 
-export type LogLine = {
-  at: number
-  who: string
-  text: string
-  agentId: string | null
-  kind: 'info' | 'error' | 'consult' | 'done'
-}
-
 export type Turn = {
   edits: number
   errorStreak: number
@@ -132,26 +126,88 @@ export type Receipt = {
   reason: string
 }
 
-export type Layout = 'auto' | 'compact' | 'wide' | 'mini' | 'diagrama'
+export type Layout = 'auto' | 'compact' | 'wide' | 'mini' | 'diagrama' | 'mapa'
 
 export type View = { expanded: string | null; gateOpen: Bucket | null; layout: Layout | null }
 
 export type Roster = { architectTypes: string[] }
 
-/** What the session has done, counted for the SESIÓN panel. Every map is keyed by name; counts are the values. */
-export type Sesion = {
-  /** Tool calls by tool (MCP tools and the Skill tool are not here). */
-  tools: Record<string, number>
-  /** The last files an edit touched, the most recent last. */
-  files: string[]
-  /** MCP servers the session has called, with their calls and errors. */
-  mcp: Record<string, { calls: number; errors: number }>
-  /** Skills used (`skill.prompt`), by name. */
-  skills: Record<string, number>
-  /** The task list as TodoWrite / TaskCreate / TaskUpdate left it: an approximation for the Task tools. */
-  todos: { total: number; done: number; current: string | null }
-  /** The git branch (or short commit) read from `.git/HEAD`; null outside a repository. */
-  branch: string | null
+/** Cuántas veces la sesión usó cada habilidad (herramienta Skill) y cada servidor MCP. */
+export type Usos = { skills: Record<string, number>; mcp: Record<string, number> }
+
+/** Los planes de trabajo (antes barra-plan): pasos planos, estado, la nota a leer y su reloj. */
+export type EstadoPlan = 'running' | 'needs_input' | 'error' | 'done'
+export type EstadoPaso = 'pending' | 'active' | 'done' | 'failed'
+export type Paso = { title: string; status: EstadoPaso }
+export type Plan = {
+  id: string
+  title: string
+  pasos: Paso[]
+  estado: EstadoPlan
+  note: string | null
+  startedAt: number
+  endedAt: number | null
+}
+
+/** Lo que escribe herramientas/estado_en_curso.py de Aduana (antes el mod aduana-panel). */
+export type CorridaViva = { lado: string; ronda: number; tarea: string; modelo: string; seg: number }
+export type EstadoAduana = {
+  titulo: string
+  hechas: number
+  total: number
+  invalidas: number
+  costo_usd: number
+  fase: number
+  fases: number
+  terminado: boolean
+  en_curso: CorridaViva[]
+  actualizado: number
+}
+
+/** Lo que cada tablero deja en ~/.claude/tablero/sesiones/<id>.json para las demás sesiones y el presupuesto. */
+export type RegistroSesion = {
+  id: string
+  nombre: string | null
+  carpeta: string
+  estado: 'trabajando' | 'espera' | 'inactiva'
+  /** Desde cuándo está en ese estado (ms epoch). */
+  desde: number
+  costo: number
+  /** El costo que tenía la sesión al empezar el día `dia`. */
+  base: number
+  /** El día local (AAAA-MM-DD) al que se refiere `base`. */
+  dia: string
+  actualizado: number
+  /** Cuándo terminó su último turno (ms epoch); lo usan las demás para saber si ya respondió. */
+  turnoFin?: number
+  /** Cuándo empezó su último turno (ms epoch): un turno que ya corría al recibir un mensaje no es su respuesta. */
+  turnoInicio?: number
+}
+
+export type Extra = {
+  linea: {
+    actualizado: number
+    session_id: string
+    session_name: string | null
+    thinking: boolean | null
+    prompt_cache: { warm: boolean; ttl: string | null; expires_at: number | null; hit_ratio: number | null } | null
+    pr: { number: number; url: string | null; review_state: string | null } | null
+  } | null
+  /** Milisegundos de turnos del lead terminados. */
+  trabajoMs: number
+  /** Tokens que las respuestas del lead leyeron de la cache. */
+  cacheLeida: number
+  /** El día local (AAAA-MM-DD) y el costo de la sesión al empezarlo, para el presupuesto. */
+  dia: string
+  base: number
+}
+
+/** Lo que leen los temporizadores externos (git, gh, página de estado, configuración); null = sin dato. */
+export type Fuentes = {
+  git: { archivos: number; mas: number; menos: number; sinSubir: number | null } | null
+  ci: 'corriendo' | 'pasa' | 'falla' | null
+  servicio: { ok: boolean; texto: string } | null
+  config: string | null
 }
 
 declare module 'claude-code' {
@@ -164,14 +220,45 @@ declare module 'claude-code' {
       gate: Gate
       agents: AgentCard[]
       loops: Loop[]
-      log: LogLine[]
       turn: Turn
       receipt: Receipt | null
       view: View
       roster: Roster
-      sesion: Sesion
-      /** Las decisiones de Jev de la sesión y el cursor del log (ver JevEstado). */
+      /** Habilidades y servidores MCP usados en la sesión. */
+      usos: Usos
+      /** The git branch (or short commit) of the working folder; null outside a repository. */
+      branch: string | null
+      /** Las decisiones de Jev de la sesión y el último limites.json (ver JevEstado). */
       jev: JevEstado
+      /** Los planes abiertos y los terminados hace menos de 30 s (herramienta plan_progress). */
+      planes: Plan[]
+      /** Las pruebas largas de Aduana en curso; null sin archivo o con uno ilegible. */
+      aduana: EstadoAduana | null
+      /** Lo que deja la statusline para esta sesión (linea-sesion.ts), el trabajo del lead y la cache leída. */
+      extra: Extra
+      /** Git, CI, servicio de Claude y config cargada (ver Fuentes). */
+      fuentes: Fuentes
+      /** Las demás sesiones de la máquina (sesiones.ts). */
+      otras: RegistroSesion[]
+      /** Lo que más contexto consume y su consejo (gasto.ts), calculado al final de cada turno del lead. */
+      gasto: { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null }
+      /** Secciones plegadas del panel: Gasto (g), Sesiones (v) y Conversaciones (c). */
+      plegado: { gasto: boolean; sesiones: boolean; conversaciones: boolean }
+      /** Los mensajes de todas las sesiones y cuándo empezó y terminó el último turno del lead. */
+      conversaciones: { todas: {
+          id: string
+          de: string
+          deNombre: string
+          a: string | null
+          aNombre: string
+          canal: 'herdr' | 'claude'
+          resumen: string
+          enviado: number
+          esperaFin: number | null
+          espera: boolean
+        }[]; turnoFin: number | null; turnoInicio: number | null }
+      /** El modo caveman que dicen los prompts de la sesión. */
+      caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */
       'savvy-flujo': {
         title: string
@@ -209,8 +296,8 @@ declare module 'claude-code' {
 }
 
 /**
- * Las decisiones de Jev de la sesión y el cursor del log: la hora de la última logueada y las claves (hora, tipo,
- * opción, descripción) de las últimas 50 logueadas, para no repetir ninguna con la misma hora. `limites` es el último
- * limites.json válido (null sin archivo o roto); un valor guardado antes de existir se lee como null.
+ * Las decisiones de Jev de la sesión y el último limites.json. `limites` es el último limites.json válido: null sin
+ * archivo; un archivo roto (a medio escribir) deja el anterior. Un valor guardado antes de existir se lee como null.
+ * `alDia` es el texto de ~/.claude/al-dia/resultado.json tal como se leyó (null sin archivo). Se interpreta al dibujar.
  */
-export type JevEstado = { decisiones: DecisionJev[]; ultima: number | null; claves: string[]; limites: LimitesJev | null }
+export type JevEstado = { decisiones: DecisionJev[]; limites: LimitesJev | null; alDia?: string | null }

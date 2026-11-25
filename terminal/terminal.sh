@@ -9,6 +9,9 @@
 #   alt+c          entra a una subcarpeta (fzf)
 #   ctrl+r         busca en el historial de todas tus terminales (atuin; en bash, fzf)
 #   bat <archivo>  muestra un archivo con colores, con el tema de VS Code
+#   claude         con CLAUDE_RESUME_SALTAR_PERMISOS=1, `claude --resume/-r/--continue/-c`
+#                  añade --dangerously-skip-permissions (herdr reanuda así tus sesiones).
+#                  Apagada por omisión; una sesión nueva y -p no se tocan.
 #
 # No cambia ls ni cat: Claude Code y los scripts los usan y esperan su salida de siempre.
 
@@ -42,6 +45,27 @@ fi
 # Solo en zsh: en bash, atuin necesita bash-preexec.
 if [ "$_cce_shell" = zsh ] && command -v atuin >/dev/null 2>&1; then
   eval "$(atuin init zsh --disable-up-arrow)"
+fi
+
+# herdr reanuda cada sesión escribiendo `claude --resume <id>` en la terminal del panel, sin
+# opciones. Con la variable activa, la función añade --dangerously-skip-permissions a esas
+# reanudaciones. No añade nada si ya pasaste --dangerously-skip-permissions, --permission-mode
+# o -p/--print.
+if [ "${CLAUDE_RESUME_SALTAR_PERMISOS:-}" = 1 ]; then
+  claude() {
+    local _a _reanuda=0 _ya=0
+    for _a in "$@"; do
+      case "$_a" in
+        --resume|--resume=*|-r|--continue|-c) _reanuda=1 ;;
+        --dangerously-skip-permissions|--permission-mode|--permission-mode=*|-p|--print) _ya=1 ;;
+      esac
+    done
+    if [ "$_reanuda" = 1 ] && [ "$_ya" = 0 ]; then
+      command claude --dangerously-skip-permissions "$@"
+    else
+      command claude "$@"
+    fi
+  }
 fi
 
 unset _cce_shell

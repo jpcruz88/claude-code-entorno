@@ -1,7 +1,22 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, LogLine, Loop, Main, Roster, Sesion, Turn, Usage, View } from '../types'
+import type { AgentCard, Architect, Bucket, Check, Gate, JevEstado, Layout, Loop, Main, Plan, Receipt, Roster, Turn, Usage, View } from '../types'
+import { CAIDA_MS, aplicar, filaPlan, resumen as resumenPlan, visibles as planesVisibles } from './planes'
+import { etiquetaCaveman } from './caveman'
+import { filasAduana, vigente as aduanaVigente } from './aduana'
+import { textoCache } from './cache'
+import { gastoDelDia, porHora } from './gasto-dia'
+import { siguienteModo, type Modo } from './caveman'
+import { leerLinea } from './linea-sesion'
+import type { EstadoAduana, Extra, Fuentes } from '../types'
+import { estadoCi, parseShortstat, parseSinSubir } from './git-ci'
+import { URL_SERVICIO, leerServicio } from './servicio'
+import { contarConfig, contarHooks, servidoresMcp, soloImporta } from './config-cargada'
+import { consejoGasto, topGasto } from './gasto'
+import { abiertas, estadoSesion, leerSesiones } from './sesiones'
+import { anotar, destinoHerdr, envioDe, filasConversaciones, leerConversaciones, resumenConversaciones, type Envio, type Mensaje, type Turno } from './conversaciones'
+import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
   addCard,
@@ -10,20 +25,29 @@ import {
   DEFAULT_MAIN,
   DEFAULT_ROSTER,
   DEFAULT_TURN,
+  DEFAULT_USOS,
+  noteUso,
+  resumenUsos,
+  usoDe,
   DEFAULT_USAGE,
   DEFAULT_VIEW,
   EDIT_TOOLS,
+  MOD_VERSION,
   SCHEMA_VERSION,
   afterCall,
   applyStep,
   bucketOf,
-  cellWidth,
   piecesThatFit,
   cardTitle,
   afterCompactRead,
   claimCompactRead,
   contextFill,
   faultKey,
+  anotarFallo,
+  anotarTipoAsesor,
+  consejoNuevo,
+  esTipoAsesor,
+  llamadaConAutomatica,
   forgetCompactRead,
   titleLines,
   consultTimeline,
@@ -46,47 +70,53 @@ import {
   lanes,
   limitLabel,
   limitOf,
-  fmtResetIn,
+  fmtReinicio,
   fmtSpeed,
   listOf,
-  logRows,
   marksIn,
   momentOf,
   normalize,
   normalizeCard,
   normalizeGate,
-  normalizeLog,
   noteTool,
   PALETTES,
-  SVG_COLORS,
   parseConfig,
   prettyModel,
-  promptLine,
   handbackOf,
   adviceLine,
   receiptOf,
   recordCheck,
+  retireAsks,
+  retireAsksDe,
+  esperaPersona,
   settleCheck,
   shorten,
+  limpio,
+  TOPE_LECTURA,
   startConsult,
+  cerrarConsultas,
   stepSpeed,
   stepLoop,
 } from './core'
 import type { Config, Panel } from './core'
-import { avanzar, necesitaRedibujo, pulso } from './animacion'
-import { barraAvance, barraIndeterminada, emojiDe, glifoAgente, pistaCarril, posicionMarcha } from './agentes-anim'
-import { PERIODO_RELOJ_MS, claveDeRedibujo } from './clave-redibujo'
-import { nombreDeTipo } from './savvy-core'
-import { filasVida, svgVida, vidaDe } from './vida'
-import { COLOR_DE } from './banda'
+import { celdasUso, pronosticoCupo, ritmoCupo, tonoUso } from './uso'
+import { avanzar, necesitaRedibujo, puntoEspera, pulsoActivo } from './animacion'
+import { CARRILES_VISIBLES, barraIndeterminada, emojiDeEstado, pistaCarril } from './agentes-anim'
+import { PERIODO_RELOJ_MS, claveDeRedibujo, enReposo, modoReloj, puedeArrancarReloj, type ModoReloj } from './clave-redibujo'
+import { nombreDeTipo } from './nombres'
+import { COLOR_DE, filasVida, svgVida, vidaDe } from './vida'
 import type { BandaEntrada } from './banda-modelo'
 import { lineasDeEdicion } from './resumen-modelo'
-import { DEFAULT_SESION, gitdirDe, notarLlamada, notarSkill, ramaDeHead, sesionFilas } from './sesion-modelo'
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from './jev-modelo'
+import { gitdirDe, ramaDeHead } from './rama'
+import { filaRitmo, textoRitmoMapa, leerDecisiones, leerLimites, marcaTarjeta, resumenJev, ritmoSemana, topeAhora } from './jev-modelo'
+import { anotarCosto, type MuestraCosto } from './costo-min'
 import type { DecisionJev } from './jev-modelo'
 import { panelJev } from './panel-jev'
 import { DIAGRAMA_MIN, anchosDiagrama, disposicionDiagrama } from './diagrama'
-import { finDeTurno, iniciarAgentes, lanzarAgente, pasoDeSubagente, pasosDeAgentes, registrarAgentes } from './savvy-registro'
+import { MAPA_ANCHO, MAPA_MIN, SPARK_ANCHO } from './mapa'
+import { datosDelMapa, tintaDeNivel, vistaMapa } from './mapa-vista'
+import { carrilesSvg } from './carriles-svg'
+import { anchoDe, filaDeMarcas, linea, type Piece } from './linea'
 
 const PANE = 'tablero'
 const TITLE = 'Tablero'
@@ -101,13 +131,226 @@ const architect = atom({ plugin: 'tablero', key: 'architect' } as const, DEFAULT
 const gate = atom({ plugin: 'tablero', key: 'gate' } as const, DEFAULT_GATE)
 const agents = atom({ plugin: 'tablero', key: 'agents' } as const, [])
 const loops = atom({ plugin: 'tablero', key: 'loops' } as const, [])
-const log = atom({ plugin: 'tablero', key: 'log' } as const, [])
 const turn = atom({ plugin: 'tablero', key: 'turn' } as const, DEFAULT_TURN)
 const receipt = atom({ plugin: 'tablero', key: 'receipt' } as const, null)
 const view = atom({ plugin: 'tablero', key: 'view' } as const, DEFAULT_VIEW)
 const roster = atom({ plugin: 'tablero', key: 'roster' } as const, DEFAULT_ROSTER)
-const sesion = atom({ plugin: 'tablero', key: 'sesion' } as const, DEFAULT_SESION)
-const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], ultima: null, claves: [], limites: null } as JevEstado)
+// Los planes de trabajo: la herramienta plan_progress (antes el mod barra-plan) los crea y los mueve.
+const PLAN_TOOL = 'mcp__tablero__plan_progress'
+const planes = atom({ plugin: 'tablero', key: 'planes' } as const, [] as Plan[])
+const REGLAS_PLANES = `# Barras de progreso
+Las tareas de más de unos 3 pasos llevan una barra: créala una vez con ${PLAN_TOOL} (id, title y stages: 2 a 7 etapas con steps {title}; o steps como lista plana). Los títulos de 4 palabras como mucho, en el idioma del usuario; el primer paso abierto queda activo. Avanza con {id, next:true} cuando termina el paso activo, o con {id, done:[...], active:"..."}. Si un paso falla: {id, failed:"...", note}. Antes de pedir una decisión al usuario: {id, state:"needs_input", note}. No describas las barras al usuario.`
+// Aduana (antes aduana-panel): su escritor deja este archivo cada pocos segundos mientras corren pruebas largas.
+const ARCHIVO_ADUANA = '.cache/detector-humo/en-curso.json'
+const aduana = atom({ plugin: 'tablero', key: 'aduana' } as const, null as EstadoAduana | null)
+let relojAduana: { cancel: () => void } | null = null
+let aduanaAvisada = 0
+// El modo caveman (antes caveman-badge): lo cambian «/caveman lite|full|ultra», «stop caveman» y «modo normal».
+const caveman = atom({ plugin: 'tablero', key: 'caveman' } as const, 'full' as Modo)
+// Las fuentes externas: git cada 10 s, el CI del PR cada 60 s y la página de estado y la config cada 5 min.
+const DEFAULT_FUENTES: Fuentes = { git: null, ci: null, servicio: null, config: null }
+const fuentes = atom({ plugin: 'tablero', key: 'fuentes' } as const, DEFAULT_FUENTES)
+let relojFuentes: { cancel: () => void } | null = null
+// Las demás sesiones, lo que más gasta y lo plegado del panel.
+const otras = atom({ plugin: 'tablero', key: 'otras' } as const, [] as RegistroSesion[])
+const gasto = atom({ plugin: 'tablero', key: 'gasto' } as const, { filas: [], consejo: null } as { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null })
+const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true, conversaciones: true })
+// Quién le habla a quién (conversaciones.ts): lo que envió esta sesión, lo de todas y su último fin de turno.
+const DEFAULT_CONV = { todas: [] as Mensaje[], turnoFin: null as number | null, turnoInicio: null as number | null }
+// Lo que envió esta sesión vive en memoria del módulo y se anota en fila: cada evento lee su propia copia del
+// estado, así que dos envíos a la vez se pisarían si la lista saliera de ahí.
+let misMensajes: Mensaje[] = []
+let colaConversaciones: Promise<unknown> = Promise.resolve()
+const conv = atom({ plugin: 'tablero', key: 'conversaciones' } as const, DEFAULT_CONV)
+const carpetaConversaciones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/conversaciones`
+/** Anota (o cambia) un mensaje de esta sesión y reescribe su archivo para las demás. */
+const guardarMensaje = ($: EngineInterface, m: Mensaje) => {
+  const paso = colaConversaciones.then(async () => {
+    const ahora = await $.clock.now()
+    misMensajes = anotar(misMensajes, m, ahora)
+    const mias = misMensajes
+    await $.fs.write(`${await carpetaConversaciones($)}/${m.de}.json`, JSON.stringify(mias)).catch(() => undefined)
+  })
+  colaConversaciones = paso.catch(() => undefined)
+  return paso
+}
+/** A qué sesión va un envío: herdr lo sabe por `agent get` (como mucho 2 s); SendMessage, por el registro de Sesiones. */
+const resolverDestino = async ($: EngineInterface, canal: 'herdr' | 'claude', destino: string): Promise<{ id: string | null; nombre: string }> => {
+  if (canal === 'claude') {
+    const s = listOf<RegistroSesion>(await read($, otras)).find(o => o.nombre === destino)
+    return { id: s?.id ?? null, nombre: destino }
+  }
+  const r = await conTope($, 2000, $.process.run(['herdr', 'agent', 'get', destino], { timeoutMs: 2000 }))
+  const d = r && r.exitCode === 0 ? destinoHerdr(r.stdout) : null
+  return d ?? { id: null, nombre: destino }
+}
+/** Anota lo que envía esta sesión. `agent wait` no crea mensaje: vuelve a abrir la espera del último a ese destino.
+ *  Un envío a la propia sesión no se anota. Devuelve el mensaje anotado, o null. */
+const anotarEnvio = async ($: EngineInterface, envio: Envio, id: string): Promise<Mensaje | null> => {
+  const [propia, ahora, ex, cwd] = await Promise.all([$.session.id().catch(() => ''), $.clock.now(), read($, extra), $.session.cwd().catch(() => '')])
+  if (!propia) return null
+  const destino = await resolverDestino($, envio.canal, envio.destino)
+  if (destino.id === propia) return null
+  if (envio.soloEspera) {
+    await colaConversaciones
+    const previos = misMensajes.filter(m => (destino.id !== null && m.a === destino.id) || m.aNombre === destino.nombre || m.aNombre === envio.destino)
+    const ultimo = previos[previos.length - 1]
+    if (!ultimo) return null
+    // La espera cuenta desde ahora: una respuesta anterior no la cierra.
+    const m = { ...ultimo, espera: true, esperaFin: null, enviado: ahora }
+    await guardarMensaje($, m)
+    return m
+  }
+  const nombrePropio = normalize(DEFAULT_EXTRA, ex).linea?.session_name ?? (cwd.split('/').filter(Boolean).pop() || propia)
+  const m: Mensaje = {
+    id,
+    de: propia,
+    deNombre: nombrePropio,
+    a: destino.id,
+    aNombre: destino.nombre,
+    canal: envio.canal,
+    resumen: envio.resumen,
+    enviado: ahora,
+    esperaFin: null,
+    espera: envio.espera,
+  }
+  await guardarMensaje($, m)
+  return m
+}
+const leerTodasConversaciones = async ($: EngineInterface) => {
+  const [carpeta, ahora] = await Promise.all([carpetaConversaciones($), $.clock.now()])
+  const lista = await $.fs.list(carpeta).catch(() => [])
+  const textos = await Promise.all(
+    lista
+      .filter(f => f.kind === 'file' && f.name.endsWith('.json'))
+      .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
+  )
+  const todas = leerConversaciones(textos, ahora)
+  // Sin cambios no se toca el estado: cada escritura pide un redibujo.
+  if (JSON.stringify(todas) === JSON.stringify(normalize(DEFAULT_CONV, await read($, conv)).todas)) return
+  await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), todas }))
+}
+// Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
+let estadoPropio: { estado: RegistroSesion['estado']; desde: number } | null = null
+const carpetaSesiones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/sesiones`
+/** Escribe el registro de esta sesión para las demás y para el presupuesto. Sin rename en la API: quien lee
+ *  ignora un archivo a medio escribir. */
+const escribirRegistro = async ($: EngineInterface) => {
+  const [id, ahora, m, g, ps, ex, costo, cwd, cv] = await Promise.all([
+    $.session.id().catch(() => ''),
+    $.clock.now(),
+    getMain($),
+    read($, gate),
+    read($, planes),
+    read($, extra),
+    costNow($),
+    $.session.cwd().catch(() => ''),
+    read($, conv),
+  ])
+  if (!/^[A-Za-z0-9_-]+$/.test(id)) return
+  const c = normalize(DEFAULT_CONV, cv)
+  const x = normalize(DEFAULT_EXTRA, ex)
+  const estado = estadoSesion({
+    trabajando: m.isRunning,
+    permisosPendientes: gateSummary(normalizeGate(g)).ask,
+    planEspera: listOf<Plan>(ps).some(p => p.estado === 'needs_input'),
+  })
+  if (estadoPropio?.estado !== estado) estadoPropio = { estado, desde: ahora }
+  const registro: RegistroSesion = {
+    id,
+    nombre: x.linea?.session_name ?? null,
+    carpeta: cwd.split('/').filter(Boolean).pop() ?? cwd,
+    estado,
+    desde: estadoPropio.desde,
+    costo: costo ?? 0,
+    base: x.base,
+    dia: x.dia,
+    actualizado: ahora,
+    ...(c.turnoFin !== null ? { turnoFin: c.turnoFin } : {}),
+    ...(c.turnoInicio !== null ? { turnoInicio: c.turnoInicio } : {}),
+  }
+  await $.fs.write(`${await carpetaSesiones($)}/${id}.json`, JSON.stringify(registro))
+}
+const leerOtras = async ($: EngineInterface) => {
+  const [carpeta, id, ahora] = await Promise.all([carpetaSesiones($), $.session.id().catch(() => ''), $.clock.now()])
+  const lista = await $.fs.list(carpeta).catch(() => [])
+  const textos = await Promise.all(
+    lista
+      .filter(f => f.kind === 'file' && f.name.endsWith('.json'))
+      .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
+  )
+  await update($, otras, () => leerSesiones(textos, id, ahora))
+}
+let vueltaFuentes = 0
+// El último intento de leer el CI: con qué PR y cuándo (ms), para no lanzar gh más de una vez por minuto.
+let ciIntento: { pr: number | null; en: number } = { pr: null, en: 0 }
+/** Lo que tarde más que `ms` se da por perdido: el panel no espera a una red lenta. */
+const conTope = <T,>($: EngineInterface, ms: number, p: Promise<T>): Promise<T | null> =>
+  Promise.race([p.catch(() => null), $.clock.sleep(ms).then(() => null)])
+const ponerFuente = ($: EngineInterface, parte: Partial<Fuentes>) => update($, fuentes, f => ({ ...normalize(DEFAULT_FUENTES, f), ...parte }))
+const leerGit = async ($: EngineInterface) => {
+  const cwd = await $.session.cwd().catch(() => '')
+  const stat = await conTope($, 5000, $.process.run(['git', 'diff', '--shortstat', 'HEAD'], { cwd, timeoutMs: 5000 }))
+  if (!stat || stat.exitCode !== 0) return ponerFuente($, { git: null })
+  const sub = await conTope($, 5000, $.process.run(['git', 'rev-list', '--count', '@{u}..HEAD'], { cwd, timeoutMs: 5000 }))
+  return ponerFuente($, { git: { ...parseShortstat(stat.stdout), sinSubir: sub && sub.exitCode === 0 ? parseSinSubir(sub.stdout) : null } })
+}
+const leerCi = async ($: EngineInterface) => {
+  const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr
+  if (!pr) return ponerFuente($, { ci: null })
+  const cwd = await $.session.cwd().catch(() => '')
+  const r = await conTope($, 10_000, $.process.run(['gh', 'pr', 'checks', String(pr.number), '--json', 'bucket'], { cwd, timeoutMs: 10_000 }))
+  // gh sale con 8 mientras hay comprobaciones pendientes: su JSON sigue valiendo.
+  return ponerFuente($, { ci: r && r.stdout ? estadoCi(r.stdout) : null })
+}
+const leerServicioClaude = async ($: EngineInterface) => {
+  const r = await conTope($, 5000, $.http.fetch(URL_SERVICIO))
+  return ponerFuente($, { servicio: r ? leerServicio(r.status, r.text) : null })
+}
+const leerConfig = async ($: EngineInterface) => {
+  const [casa, raiz, ajustes, herramientas] = await Promise.all([
+    $.env.get('HOME'),
+    $.session.root().catch(() => ''),
+    $.settings.read().catch(() => ({}) as Record<string, unknown>),
+    $.tool.list().catch(() => []),
+  ])
+  const existe = (ruta: string) => $.fs.stat(ruta).then(() => 1).catch(() => 0)
+  const mds = (carpeta: string) => $.fs.list(carpeta).then(l => l.filter(x => x.name.endsWith('.md')).length).catch(() => 0)
+  const cuentas = await Promise.all([
+    ...[`${casa}/.claude/CLAUDE.md`, `${raiz}/CLAUDE.md`, `${raiz}/AGENTS.md`, `${raiz}/.claude/CLAUDE.md`].map(existe),
+    mds(`${casa}/.claude/rules`),
+    mds(`${raiz}/.claude/rules`),
+  ])
+  // El CLAUDE.md del proyecto que solo hace `@AGENTS.md` es el mismo archivo de instrucciones: cuenta uno.
+  const soloAgents = cuentas[1] && cuentas[2] ? await $.fs.read(`${raiz}/CLAUDE.md`).then(t => soloImporta(String(t))).catch(() => false) : false
+  const claudeMd = cuentas.slice(0, 4).reduce((a, b) => a + b, 0) - (soloAgents ? 1 : 0)
+  const reglas = (cuentas[4] ?? 0) + (cuentas[5] ?? 0)
+  const hooks = contarHooks((ajustes as { hooks?: unknown }).hooks)
+  const mcp = servidoresMcp(herramientas.map(h => h.name))
+  return ponerFuente($, { config: contarConfig({ claudeMd, reglas, hooks, mcp }) })
+}
+// Lo que solo tiene la statusline, el tiempo de trabajo del lead, la cache leída y el arranque del día.
+const DEFAULT_EXTRA: Extra = { linea: null, trabajoMs: 0, cacheLeida: 0, dia: '', base: 0 }
+const extra = atom({ plugin: 'tablero', key: 'extra' } as const, DEFAULT_EXTRA)
+const diaLocal = (ms: number) => {
+  const d = new Date(ms)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+/** Lee el archivo de la statusline de esta sesión y apunta el costo con que empezó el día. */
+const refrescarExtra = async ($: EngineInterface) => {
+  const [casa, id, ahora, costo] = await Promise.all([$.env.get('HOME'), $.session.id().catch(() => ''), $.clock.now(), costNow($)])
+  const texto = casa && id && /^[A-Za-z0-9_-]+$/.test(id) ? await $.fs.read(`${casa}/.claude/tablero/linea/${id}.json`).catch(() => null) : null
+  const linea = typeof texto === 'string' ? leerLinea(texto, ahora / 1000) : null
+  const hoy = diaLocal(ahora)
+  await update($, extra, x => {
+    const v = normalize(DEFAULT_EXTRA, x)
+    return { ...v, linea, ...(v.dia === hoy ? {} : { dia: hoy, base: costo ?? 0 }) }
+  })
+}
+
+const jev = atom({ plugin: 'tablero', key: 'jev' } as const, { decisiones: [], limites: null, alDia: null } as JevEstado)
+const usos = atom({ plugin: 'tablero', key: 'usos' } as const, DEFAULT_USOS)
+const gitBranch = atom({ plugin: 'tablero', key: 'branch' } as const, null as string | null)
 
 type ServerBlock = { type: string; id?: string; name?: string; tool_use_id?: string }
 
@@ -131,9 +374,18 @@ async function getCards($: EngineInterface): Promise<AgentCard[]> {
 async function getLoops($: EngineInterface): Promise<Loop[]> {
   return listOf<Loop>(await read($, loops))
 }
-async function getLog($: EngineInterface): Promise<LogLine[]> {
-  return normalizeLog(await read($, log))
+/** Un valor guardado de cualquier forma: lo que no se entiende queda en su valor vacío, sin romperse. */
+function normalizeJev(stored: unknown): JevEstado {
+  const j = normalize<JevEstado>({ decisiones: [], limites: null, alDia: null }, stored)
+  // `limites` pasa por leerLimites: un valor guardado con otra forma (o sin la clave) queda en null.
+  const limites = j.limites ? leerLimites(JSON.stringify(j.limites)) : null
+  return { decisiones: listOf<DecisionJev>(j.decisiones), limites, alDia: typeof j.alDia === 'string' ? j.alDia : null }
 }
+
+async function getJev($: EngineInterface): Promise<JevEstado> {
+  return normalizeJev(await read($, jev))
+}
+
 async function getTurn($: EngineInterface): Promise<Turn> {
   return normalize(DEFAULT_TURN, await read($, turn))
 }
@@ -145,40 +397,11 @@ async function getRoster($: EngineInterface): Promise<Roster> {
   return { architectTypes: listOf(r.architectTypes) }
 }
 
-async function getSesion($: EngineInterface): Promise<Sesion> {
-  return normalize(DEFAULT_SESION, await read($, sesion))
-}
-
-/** Writes through `normalize`, so a value saved before a key existed still takes the change. */
-async function cambiarSesion($: EngineInterface, cambio: (s: Sesion) => Sesion) {
-  await update($, sesion, s => cambio(normalize(DEFAULT_SESION, s)))
-}
-
-/** Un valor guardado de cualquier forma: el de antes (`vistas`) se lee como cursor vacío, sin romperse. */
-function normalizeJev(stored: unknown): JevEstado {
-  const j = normalize<JevEstado>({ decisiones: [], ultima: null, claves: [], limites: null }, stored)
-  // `limites` pasa por leerLimites: un valor guardado con otra forma (o sin la clave) queda en null.
-  const limites = j.limites ? leerLimites(JSON.stringify(j.limites)) : null
-  return { decisiones: listOf<DecisionJev>(j.decisiones), ultima: typeof j.ultima === 'number' ? j.ultima : null, claves: listOf<string>(j.claves), limites }
-}
-
-async function getJev($: EngineInterface): Promise<JevEstado> {
-  return normalizeJev(await read($, jev))
-}
-
-/** Cuántas claves recientes se guardan para no repetir decisiones con la misma hora. */
-const CLAVES_JEV = 50
-
-const claveDeDecision = (d: DecisionJev) => `${d.hora}|${d.tipo}|${d.opcion}|${d.descripcion}`
-
-/** Las decisiones que aún no están en el log: no más viejas que la última logueada y con clave no vista. */
-const sinLoguear = (ds: DecisionJev[], estado: JevEstado): DecisionJev[] => {
-  const vistas = new Set(estado.claves)
-  return ds.filter(d => !vistas.has(claveDeDecision(d)) && (estado.ultima === null || d.hora >= estado.ultima))
-}
+// Lo último que releerJev dejó en el estado: si la nueva lectura da lo mismo, no hay nada que comparar ni escribir.
+let ultimoJev: JevEstado | null = null
 
 /**
- * Relee las decisiones de Jev de esta sesión y pasa al log solo las nuevas. Sin id de sesión, sin carpeta
+ * Relee las decisiones de Jev de esta sesión y las guarda en su estado. Sin id de sesión, sin carpeta
  * personal o sin archivo, no hay ninguna: el tablero no muestra nada de Jev.
  */
 async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
@@ -186,25 +409,21 @@ async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
   const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
-  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Roto o ausente es «sin dato».
+  // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Ausente es «sin dato»; roto (por ejemplo,
+  // a medio escribir) deja el último válido.
   const textoLimites = home ? await $.fs.read(`${home}/.claude/jev/limites.json`).catch(() => null) : null
-  const limites = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const leidos = typeof textoLimites === 'string' ? leerLimites(textoLimites) : null
+  const limites = typeof textoLimites === 'string' && leidos === null ? (await getJev($)).limites : leidos
+  // Lo que actualizó la revisión «Al día»; ausente o roto es «sin dato» (la caja no se dibuja).
+  const textoAlDia = home ? await $.fs.read(`${home}/.claude/al-dia/resultado.json`).catch(() => null) : null
+  const alDia = typeof textoAlDia === 'string' && textoAlDia.length <= TOPE_LECTURA ? textoAlDia : null
   const ds = sesionId && texto !== null && texto !== undefined ? leerDecisiones(texto, sesionId) : []
-  // Las nuevas se calculan dentro de la escritura, sobre el cursor que ya dejó la lectura anterior: dos lecturas
-  // a la vez no logean la misma decisión dos veces.
-  let nuevas: DecisionJev[] = []
-  await update($, jev, x => {
-    const previo = normalizeJev(x)
-    nuevas = sinLoguear(ds, previo)
-    const ultima = nuevas.reduce((m, d) => Math.max(m, d.hora), previo.ultima ?? -Infinity)
-    return {
-      decisiones: ds,
-      ultima: Number.isFinite(ultima) ? ultima : null,
-      claves: [...previo.claves, ...nuevas.map(claveDeDecision)].slice(-CLAVES_JEV),
-      limites,
-    }
-  })
-  for (const d of nuevas) await say($, 'jev', lineaLog(d), 'info')
+  // Escribir el estado redibuja el panel: solo se escribe si algo cambió.
+  const nuevo: JevEstado = { decisiones: ds, limites, alDia }
+  // `ds` es el mismo objeto cuando el archivo no cambió (ver leerDecisiones): sin cambios, no se compara.
+  if (ultimoJev && ultimoJev.decisiones === ds && ultimoJev.alDia === alDia && JSON.stringify(ultimoJev.limites) === JSON.stringify(limites)) return ds
+  if (JSON.stringify(await getJev($)) !== JSON.stringify(normalizeJev(nuevo))) await update($, jev, () => nuevo)
+  ultimoJev = nuevo
   return ds
 }
 
@@ -224,7 +443,7 @@ async function leerRama($: EngineInterface): Promise<string | null> {
     const head = await $.fs.read(`${dir}/.git/HEAD`).catch(() => null)
     if (head !== null) return ramaDeHead(head)
     const archivo = await $.fs.read(`${dir}/.git`).catch(() => null)
-    const gitdir = archivo === null ? null : gitdirDe(archivo)
+    const gitdir = archivo === null ? null : gitdirDe(archivo, dir)
     if (gitdir) return ramaDeHead(await $.fs.read(`${gitdir}/HEAD`).catch(() => ''))
     const padre = dir.replace(/[\\/][^\\/]*$/, '')
     if (padre === dir) break
@@ -235,34 +454,16 @@ async function leerRama($: EngineInterface): Promise<string | null> {
 
 async function refrescarRama($: EngineInterface) {
   const branch = await leerRama($)
-  const actual = await getSesion($)
-  if (actual.branch !== branch) await cambiarSesion($, s => ({ ...s, branch }))
+  if ((await read($, gitBranch)) !== branch) await update($, gitBranch, () => branch)
 }
 
 /** A stored shape older than this build's: drop what cannot be read, keep the rest. */
 async function migrate($: EngineInterface) {
   const m = await read($, meta)
   if ((m?.schemaVersion ?? 0) >= SCHEMA_VERSION) return
-  await update($, log, list => normalizeLog(list))
   await update($, agents, list => listOf<unknown>(list).map(normalizeCard))
   await update($, gate, g => normalizeGate(g))
   await update($, meta, () => ({ schemaVersion: SCHEMA_VERSION }))
-}
-
-async function say($: EngineInterface, who: string, text: string, kind: LogLine['kind'] = 'info', agentId: string | null = null) {
-  const line: LogLine = { at: await $.clock.now(), who, text, kind, agentId }
-  await update($, log, list => [...normalizeLog(list), line].slice(-60))
-}
-
-// El footer nativo ya no lleva nada del mod: sus datos viven en el panel SESIÓN, a la derecha.
-async function refreshStatus($: EngineInterface) {
-  $.ui.status(undefined)
-}
-
-async function whoIs($: EngineInterface, agentId: string | undefined) {
-  if (!agentId) return 'main'
-  const card = (await getCards($)).find(c => c.id === agentId)
-  return card ? shorten(cardTitle(card), 14) : 'agente'
 }
 
 async function consultStarted($: EngineInterface, cfg: Config, id: string, via: string) {
@@ -271,8 +472,6 @@ async function consultStarted($: EngineInterface, cfg: Config, id: string, via: 
   const at = await $.clock.now()
   await update($, architect, a => startConsult(normalize(DEFAULT_ARCHITECT, a), { id, at, moment, via }))
   if (moment === 'before done') await update($, turn, x => ({ ...normalize(DEFAULT_TURN, x), isReviewing: true }))
-  await say($, cfg.architectLabel.toLowerCase(), cfg.moments ? `${momentLabel(moment)} · ${via}` : `consultado · ${via}`, 'consult')
-  await refreshStatus($)
 }
 
 async function consultEnded($: EngineInterface, cfg: Config, advice: string | null, id?: string) {
@@ -281,22 +480,24 @@ async function consultEnded($: EngineInterface, cfg: Config, advice: string | nu
   const text = first ? shorten(first.replace(/^[#>*\s-]+/, ''), 160) : null
   await update($, architect, a => endConsult(normalize(DEFAULT_ARCHITECT, a), at, text, id))
   await update($, turn, t => ({ ...normalize(DEFAULT_TURN, t), isReviewing: false }))
-  await say($, cfg.architectLabel.toLowerCase(), text ? `consejo: ${shorten(text, 60)}` : 'consejo recibido', 'consult')
-  await refreshStatus($)
 }
 
 async function noteAdvice($: EngineInterface, cfg: Config, advice: string) {
   await update($, architect, x => ({ ...normalize(DEFAULT_ARCHITECT, x), lastAdvice: advice }))
-  await say($, cfg.architectLabel.toLowerCase(), `consejo: ${shorten(advice, 60)}`, 'consult')
 }
 
 async function isArchitectType($: EngineInterface, cfg: Config, type: string) {
   return cfg.architect.test(type) || (await getRoster($)).architectTypes.includes(type)
 }
 
+// Si el panel está a la vista: sin él, el resumen va sobre el prompt (ver el hook de AbovePrompt).
+let panelColocado = false
+
 async function openPane($: EngineInterface, cfg: Config) {
   // columns apply when docked beside the transcript, rows when seated inline above the prompt.
-  return $.ui.open({ id: PANE, title: TITLE, columns: cfg.paneColumns, rows: 8 })
+  const r = await $.ui.open({ id: PANE, title: TITLE, columns: cfg.paneColumns, rows: 8 })
+  panelColocado = r?.isPlaced === true
+  return r
 }
 
 async function resetAll($: EngineInterface) {
@@ -305,14 +506,14 @@ async function resetAll($: EngineInterface) {
   await update($, gate, () => DEFAULT_GATE)
   await update($, agents, () => [])
   await update($, loops, () => [])
-  await update($, log, () => [])
+  await update($, usos, () => DEFAULT_USOS)
   await update($, turn, () => DEFAULT_TURN)
   await update($, receipt, () => null)
   await update($, view, () => DEFAULT_VIEW)
-  // What the session did starts over; the branch is the project's, not the session's.
-  await cambiarSesion($, s => ({ ...DEFAULT_SESION, branch: s.branch }))
   // The context gauge waits for the next measurement rather than showing the pre-clear fill.
   // /clear starts the session over: its edits and its clock count from here.
+  mostrado.contexto = null
+  muestrasCosto.length = 0
   const startedAt = await $.clock.now()
   await update($, usage, x => ({ ...normalize(DEFAULT_USAGE, x), pct: null, tokens: null, linesAdded: 0, linesRemoved: 0, startedAt }))
 }
@@ -336,37 +537,37 @@ async function noteMode($: EngineInterface, mode: string | undefined) {
   if (mode) await update($, main, m => (normalize(DEFAULT_MAIN, m).mode === mode ? normalize(DEFAULT_MAIN, m) : { ...normalize(DEFAULT_MAIN, m), mode }))
 }
 
-// ---------------------------------------------------------------- banda de Tablero
+// ---------------------------------------------------------------- reloj del panel
 
 
-// Lo que la banda muestra ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
+// Lo que el reloj ve ahora (con animación, el valor a medio camino) y el último cuadro dibujado.
 const mostrado = { contexto: null as number | null, usos: new Map<string, number>() }
 let fase = 0
+// Verdadero mientras el último dibujo fue el mapa: sus relojes tienen segundos y, con trabajo, se anima con cada marco.
+let mapaVisible = false
+/** El costo de la sesión a lo largo del tiempo, para la gráfica costo/min del mapa. */
+const muestrasCosto: MuestraCosto[] = []
 let ultimaClave = ''
+// El reloj del panel: corre solo mientras el panel se dibuja (lo arranca su `ui.render`, lo paran `ui.close` y
+// `session.end`), rápido con trabajo en curso y lento en reposo.
 let reloj: { cancel: () => void } | null = null
+let modoActual: ModoReloj = 'lento'
+// Sube cada vez que el reloj se para: un dibujo que empezó antes de parar no lo vuelve a arrancar al terminar.
+let generacionReloj = 0
 const redondeo = (n: number) => Math.round(n * 10) / 10
+/** «último turno» con su duración, agentes, ediciones y errores: la línea del recibo y la del modo compacto. */
+const textoUltimoTurno = (r: Receipt) =>
+  `último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}`
 
-async function entradaDe($: EngineInterface, columnas: number): Promise<BandaEntrada> {
-  const [u, g, cards, ahora, cwd, modelo] = await Promise.all([
-    getUsage($),
-    getGate($),
-    getCards($),
-    $.clock.now(),
-    $.session.cwd().catch(() => ''),
-    $.session.model().catch(() => ''),
-  ])
+async function entradaDe($: EngineInterface): Promise<BandaEntrada> {
+  const [u, g, cards, ahora] = await Promise.all([getUsage($), getGate($), getCards($), $.clock.now()])
   return {
-    cwd,
-    modelo: prettyModel(modelo),
     costoUsd: u.costUsd,
     contextoPct: contextFill(u).pct,
     agentesActivos: cards.filter(c => c.status === 'running').length,
-    agentesTotal: cards.length,
     permisosPendientes: g.recent.filter(c => c.verdict === 'ask').length,
-    permisosDenegados: gateSummary(g).deny,
-    limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct, resetsAt: l.resetsAt ?? null })),
+    limites: u.limits.map(l => ({ kind: l.kind, pct: l.pct })),
     ahora,
-    columnas,
   }
 }
 
@@ -376,34 +577,41 @@ function suavizar(cfg: Config, e: BandaEntrada): BandaEntrada {
     actual === undefined || !cfg.animacion ? objetivo : avanzar(actual, objetivo)
   if (e.contextoPct !== null) mostrado.contexto = paso(mostrado.contexto ?? undefined, e.contextoPct)
   for (const l of e.limites) mostrado.usos.set(l.kind, paso(mostrado.usos.get(l.kind), l.pct))
-  const hayActividad = e.agentesActivos > 0 || e.permisosPendientes > 0
   return {
     ...e,
     contextoPct: e.contextoPct === null ? null : redondeo(mostrado.contexto ?? e.contextoPct),
     limites: e.limites.map(l => ({ ...l, pct: redondeo(mostrado.usos.get(l.kind) ?? l.pct) })),
-    ...(cfg.animacion && hayActividad ? { pulso: pulso(fase) } : {}),
+    ...(cfg.animacion ? { pulso: pulsoActivo(e.agentesActivos > 0 || e.permisosPendientes > 0, fase) } : {}),
   }
 }
 
 async function cuadroDeReloj($: EngineInterface, cfg: Config) {
   fase += 1
-  const e = suavizar(cfg, await entradaDe($, 0))
-  const clave = claveDeRedibujo(e)
+  const [e, m] = await Promise.all([entradaDe($), getMain($)])
+  if (!reloj) return
+  const hayTrabajo = m.isRunning || e.agentesActivos > 0
+  const modo = modoReloj({ animacion: cfg.animacion, hayTrabajo })
+  const s = suavizar(cfg, e)
+  const clave = claveDeRedibujo({ ...s, marco: mapaVisible && modo === 'rapido' ? fase : undefined, segundos: mapaVisible, reposo: enReposo({ hayTrabajo, permisosPendientes: e.permisosPendientes }) })
   if (necesitaRedibujo(ultimaClave, clave)) {
     ultimaClave = clave
     $.ui.invalidate('ui.render')
   }
+  // Empezó o terminó el trabajo: el reloj cambia de ritmo.
+  if (modo !== modoActual) iniciarReloj($, cfg, modo)
 }
 
 function detenerReloj() {
+  generacionReloj += 1
   reloj?.cancel()
   reloj = null
 }
 
-function iniciarReloj($: EngineInterface, cfg: Config) {
+function iniciarReloj($: EngineInterface, cfg: Config, modo: ModoReloj) {
   detenerReloj()
+  modoActual = modo
   // Un cuadro por periodo; solo redibuja si la clave cambió (ver PERIODO_RELOJ_MS).
-  reloj = $.clock.every(PERIODO_RELOJ_MS(cfg.animacion), () => void cuadroDeReloj($, cfg).catch(() => undefined))
+  reloj = $.clock.every(PERIODO_RELOJ_MS[modo], () => void cuadroDeReloj($, cfg).catch(() => undefined))
 }
 
 // ---------------------------------------------------------------- hooks
@@ -413,18 +621,92 @@ export const register: Register = (on, options) => {
   const C = PALETTES[cfg.palette]
   // tool.check carries no loop id; the tool.call around it does, keyed by the call's id.
   const callLoop = new Map<string, string | null>()
-  // Panel de progreso y de agentes (savvy-progress, adaptado): barra sobre el prompt y panel «Agentes».
-  registrarAgentes(on)
+  // Las `ask` que en modo automático decide el clasificador: no esperan a la persona, así que no se anotan como
+  // pendientes. Se anotan al terminar su llamada, con lo que pasó.
+  const autoAsks = new Map<string, Check>()
 
   on('session.start', async ($, e, next) => {
-    // Un host sin herramientas o comandos arranca sin el panel de agentes, como la banda sin uso.
-    await iniciarAgentes($).catch(() => undefined)
     await $.command.register({
       name: 'tablero',
       description: 'Tablero: abre, cierra, reinicia o cambia la distribución del panel completo',
-      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama]',
+      argumentHint: '[abrir|cerrar|reiniciar|layout auto|compact|wide|mini|diagrama|mapa]',
     })
     await migrate($)
+    // Un host sin herramientas de plugin (o que la rechaza) no impide que el panel arranque.
+    await $.tool.register({
+      name: 'plan_progress',
+      description: 'Plan con barra de progreso en el tablero, uno por id. Créalo con title y stages; avanza con next, done, active, failed o state.',
+      inputSchema: {
+        type: 'object',
+        required: ['id'],
+        properties: {
+          id: { type: 'string' },
+          title: { type: 'string' },
+          kind: { enum: ['plan', 'todo'] },
+          stages: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, steps: { type: 'array' } } } },
+          steps: { type: 'array' },
+          next: { type: 'boolean' },
+          done: { type: 'array', items: { type: 'string' } },
+          active: { type: 'string' },
+          failed: { type: 'string' },
+          note: { type: 'string' },
+          state: { enum: ['running', 'needs_input', 'error', 'done'] },
+        },
+      },
+    }).catch(() => undefined)
+    if (relojFuentes === null) {
+      vueltaFuentes = 0
+      // Una vuelta nunca lanza: una fuente que falla deja su dato como estaba y el resto sigue.
+      const vuelta = () => vueltaSegura().catch(() => undefined)
+      const vueltaSegura = async () => {
+        const n = vueltaFuentes++
+        const tareas: Promise<unknown>[] = []
+        if (cfg.extras.has('git')) tareas.push(leerGit($))
+        // El CI se mira en cuanto aparece un PR nuevo y después como mucho una vez por minuto, aunque gh falle.
+        const pr = normalize(DEFAULT_EXTRA, await read($, extra)).linea?.pr?.number ?? null
+        const ahoraCi = await $.clock.now()
+        if (cfg.extras.has('ci') && pr !== null && (pr !== ciIntento.pr || ahoraCi - ciIntento.en >= 60_000)) {
+          ciIntento = { pr, en: ahoraCi }
+          tareas.push(leerCi($))
+        }
+        if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
+        if (n % 30 === 0) tareas.push(leerConfig($))
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) tareas.push(leerOtras($))
+        if (cfg.extras.has('sesiones')) tareas.push(leerTodasConversaciones($))
+        await Promise.all(tareas.map(t => t.catch(() => undefined)))
+      }
+      void vuelta()
+      relojFuentes = $.clock.every(10_000, vuelta)
+    }
+    if (relojAduana === null) {
+      relojAduana = $.clock.every(5000, async () => {
+        await refrescarExtra($).catch(() => undefined)
+        if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) await escribirRegistro($).catch(() => undefined)
+        try {
+          const casa = await $.env.get('HOME')
+          const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
+          await update($, aduana, () => leido)
+          if (leido.terminado && leido.actualizado !== aduanaAvisada) {
+            aduanaAvisada = leido.actualizado
+            $.ui.toast(`Aduana: pruebas terminadas, ${leido.hechas}/${leido.total}`)
+          }
+        } catch {
+          await update($, aduana, () => null)
+        }
+      })
+    }
+    // Lo guardado puede venir de un proceso que se cerró de golpe o de una sesión reanudada: su turno, sus agentes «en
+    // curso» y sus permisos pendientes ya no siguen. Se dan por terminados para que el panel no los enseñe vivos.
+    const inicio = await $.clock.now()
+    await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
+    await update($, agents, list =>
+      listOf<unknown>(list)
+        .map(normalizeCard)
+        .map(c => (c.status === 'running' ? { ...c, status: 'stopped' as const, endedAt: c.endedAt ?? inicio } : c)),
+    )
+    await update($, gate, g => retireAsks(normalizeGate(g), false))
+    // Lo mismo con las consultas al asesor: no habrá respuesta para ellas.
+    await update($, architect, a => cerrarConsultas(normalize(DEFAULT_ARCHITECT, a), inicio, true))
     // A host without usage (headless, an SDK host, a session not yet bound) just starts without it.
     const u = await $.session.usage().catch(() => null)
     // A resumed session has a fill to draw already: its compaction window is read now, not at its first
@@ -445,22 +727,24 @@ export const register: Register = (on, options) => {
     }
     // The git branch: a host without a repository just starts without it.
     await refrescarRama($).catch(() => undefined)
+    // Lo que actualizó la revisión «Al día» ya está en disco al abrir la sesión: la caja sale desde el primer cuadro.
+    await releerJev($).catch(() => undefined)
     if (cfg.openOnStart) void openPane($, cfg).catch(() => undefined)
-    if (cfg.banda) iniciarReloj($, cfg)
-    await refreshStatus($)
     const done = await next(e)
     if (resumedWindow > 0) {
       await readCompactWindow($, resumedWindow)
-      await refreshStatus($)
     }
     return done
   })
 
   on('session.end', async ($, e, next) => {
     detenerReloj()
+    relojAduana?.cancel()
+    relojAduana = null
+    relojFuentes?.cancel()
+    relojFuentes = null
     if (e.reason === 'clear') {
       await resetAll($)
-      await refreshStatus($)
     }
     return next(e)
   })
@@ -473,25 +757,25 @@ export const register: Register = (on, options) => {
     }
     if (verb === 'reset' || verb === 'reiniciar') {
       await resetAll($)
-      await refreshStatus($)
       return { text: 'Tablero reiniciado.' }
     }
     if (verb === 'layout') {
-      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' || arg === 'diagrama' ? arg : null
-      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini|diagrama' }
+      const layout: Layout | null = arg === 'compact' || arg === 'wide' || arg === 'auto' || arg === 'mini' || arg === 'diagrama' || arg === 'mapa' ? arg : null
+      if (!layout) return { text: 'Uso: /tablero layout auto|compact|wide|mini|diagrama|mapa' }
       await update($, view, v => ({ ...normalize(DEFAULT_VIEW, v), layout }))
       const opened = await openPane($, cfg)
       return { text: opened.isPlaced ? `Distribución de Tablero: ${layout}.` : `Distribución ${layout} guardada; el panel aún no se muestra: ${opened.reason}` }
     }
     const opened = await openPane($, cfg)
     if (!opened.isPlaced) return { text: `Tablero aún no se muestra: ${opened.reason}` }
-    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab; 1-6 abren tarjetas, a/s/o abren las filas de permisos (archivo, shell, otro).' }
+    return { text: 'Tablero abierto. Enfócalo con ctrl+x tab.' }
   })
 
   // Un panel que el mod abre solo, al iniciar, espera sin dibujar por debajo de 144 columnas. El primer
   // prompt de la sesión sí cuenta como pedido de la persona y se coloca a cualquier ancho.
   let openedOnPrompt = false
   on('prompt.submit', async ($, e, next) => {
+    await update($, caveman, m => siguienteModo(m === 'lite' || m === 'ultra' || m === 'normal' ? m : 'full', e.text))
     // A branch switched since the last prompt shows now; a failed read leaves the last one.
     void refrescarRama($).catch(() => undefined)
     if (cfg.openOnStart && !openedOnPrompt) {
@@ -506,19 +790,9 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  on('skill.prompt', async ($, e, next) => {
-    await cambiarSesion($, s => notarSkill(s, e.skill))
-    return next(e)
-  })
-
   on('agent.offer', async ($, e, next) => {
     const offered = await next(e)
-    if (cfg.architect.test(e.agent) || (cfg.matchDescriptions && cfg.architect.test(e.description))) {
-      await update($, roster, r => {
-        const x = normalize(DEFAULT_ROSTER, r)
-        return x.architectTypes.includes(e.agent) ? x : { architectTypes: [...listOf<string>(x.architectTypes), e.agent].slice(-20) }
-      })
-    }
+    if (esTipoAsesor(cfg.architect, cfg.matchDescriptions, e)) await update($, roster, r => anotarTipoAsesor(normalize(DEFAULT_ROSTER, r), e.agent))
     return offered
   })
 
@@ -527,6 +801,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return next(e)
     const [now, cost] = await Promise.all([$.clock.now(), costNow($)])
     await update($, turn, () => ({ ...DEFAULT_TURN, startedAt: now, costAtStart: cost }))
+    await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), turnoInicio: now }))
     await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: true }))
     // A background architect's report reaches the main loop as the text opening this turn. The
     // SubagentHandback tool call (in tool.call) normally carries it first; this is the fallback.
@@ -535,9 +810,6 @@ export const register: Register = (on, options) => {
     if (back && a && a.ids.includes(back.from)) {
       const advice = adviceLine(back.body)
       if (advice && advice !== a.lastAdvice) await noteAdvice($, cfg, advice)
-    } else if (e.text) {
-      const p = promptLine(e.text)
-      await say($, p.who, p.text)
     }
     return next(e)
   })
@@ -564,35 +836,25 @@ export const register: Register = (on, options) => {
       const result = await s.result
       const speed = result.usage ? stepSpeed(sentAt, firstAt) : null
       if (speed) await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), speed }))
+      const leidos = result.usage?.cache_read_input_tokens ?? 0
+      if (leidos > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), cacheLeida: normalize(DEFAULT_EXTRA, x).cacheLeida + leidos }))
       return result
     }
     const id = e.agentId
     // A step from an agent whose card finished means it was resumed (SendMessage): it runs again.
     const before = (await getCards($)).find(c => c.id === id)
     if (before && before.status !== 'running') {
-      // Flipped in the write: a resume its agent.spawn already logged is not logged again.
-      let isResumed = false
       await update($, agents, list =>
         listOf<unknown>(list)
           .map(normalizeCard)
-          .map(c => {
-            if (c.id !== id || c.status === 'running') return c
-            isResumed = true
-            return resumeCard(c)
-          }),
+          .map(c => (c.id !== id || c.status === 'running' ? c : resumeCard(c))),
       )
-      if (isResumed) {
-        await say($, await whoIs($, id), 'reanudado', 'info', id)
-        await refreshStatus($)
-      }
     }
     const result = yield* next(e)
-    await pasoDeSubagente($, e, result)
     const [cards, a] = await Promise.all([getCards($), getArchitect($)])
     if (cards.some(c => c.id === id)) {
       const step = { model: e.model, usage: result.usage, stopReason: result.stopReason }
       await update($, agents, list => listOf<unknown>(list).map(normalizeCard).map(c => (c.id === id ? applyStep(c, step) : c)))
-      if (result.stopReason === 'max_tokens') await say($, await whoIs($, id), 'llegó al tope de tokens', 'error', id)
     } else if (!a.ids.includes(id)) {
       const now = await $.clock.now()
       await update($, loops, l => stepLoop(listOf<Loop>(l), id, now))
@@ -616,11 +878,9 @@ export const register: Register = (on, options) => {
         limits: e.rateLimits.map(limitOf),
       }
     })
-    if (e.changed.includes('context')) await refreshStatus($)
     const done = await next(e)
     if (isStale) {
       await readCompactWindow($, e.context.window)
-      await refreshStatus($)
     }
     return done
   })
@@ -633,7 +893,6 @@ export const register: Register = (on, options) => {
         const u = normalize(DEFAULT_USAGE, x)
         return { ...u, compactions: u.compactions + 1, lastCompactAt: now }
       })
-      await say($, 'main', `contexto compactado (${e.trigger})`)
     }
     return done
   })
@@ -641,79 +900,106 @@ export const register: Register = (on, options) => {
   on('tool.check', async ($, e, next) => {
     const verdict = await next(e)
     if (e.tool_use_id) {
+      const agente = e.agentId ?? callLoop.get(e.tool_use_id) ?? undefined
       const check: Check = {
         id: e.tool_use_id,
         tool: e.tool,
         bucket: bucketOf(e.tool),
         verdict: verdict.decision === 'allow' ? 'rule' : verdict.decision,
-        inSubagent: Boolean(callLoop.get(e.tool_use_id)),
+        inSubagent: Boolean(agente),
+        ...(agente ? { agente } : {}),
         detail: shorten(describeInput(e.tool, e.input), 90),
         at: await $.clock.now(),
       }
-      await update($, gate, g => recordCheck(normalizeGate(g), check))
-      // The status line updates when the call settles; only a refusal ends here.
-      if (verdict.decision === 'deny') {
-        await say($, 'gate', `denegado por regla · ${check.detail}`, 'error')
-        await refreshStatus($)
-      }
+      if (verdict.decision === 'ask' && !esperaPersona((await getMain($)).mode, verdict)) autoAsks.set(e.tool_use_id, check)
+      else await update($, gate, g => recordCheck(normalizeGate(g), check))
     }
     return verdict
   })
 
+  on('prompt.compose', async ($, e, next) => {
+    const result = await next(e)
+    return { sections: [...result.sections, { id: 'tablero:planes', text: REGLAS_PLANES, scope: 'session' as const }] }
+  })
+
+  on('tool.call', { tool: PLAN_TOOL }, async ($, e) => {
+    const raw = e as unknown as Record<string, unknown>
+    const id = typeof raw.id === 'string' ? raw.id.trim() : ''
+    if (!id) return { result: `${PLAN_TOOL}: el id es obligatorio, por ejemplo "arreglar-login".` }
+    const ahora = await $.clock.now()
+    const hecho = aplicar((await read($, planes)).find(p => p.id === id), raw, ahora)
+    if (typeof hecho === 'string') return { result: hecho }
+    await update($, planes, lista =>
+      [...listOf<Plan>(lista).filter(p => p.id !== id && (p.estado !== 'done' || ahora - (p.endedAt ?? ahora) < CAIDA_MS)), hecho],
+    )
+    return { result: resumenPlan(hecho) }
+  })
+
   on('tool.call', async ($, e, next) => {
     callLoop.set(e.tool_use_id, e.agentId ?? null)
-    const ran = await next(e).finally(() => callLoop.delete(e.tool_use_id))
-    const didRun = ran.deny === undefined
-    // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
-    const g0 = await getGate($)
-    const isSettled = settleCheck(g0, e.tool_use_id, didRun) !== g0
-    if (isSettled) await update($, gate, g => settleCheck(normalizeGate(g), e.tool_use_id, didRun))
-    // A background agent hands its report back through this tool; an architect's report is its advice.
-    if (String(e.tool) === 'SubagentHandback') {
-      const message = (e as unknown as { message?: unknown }).message
-      const a = e.agentId ? await getArchitect($) : null
-      if (a && e.agentId && a.ids.includes(e.agentId) && typeof message === 'string') {
-        const advice = adviceLine(message)
-        if (advice && advice !== a.lastAdvice) await noteAdvice($, cfg, advice)
+    // Lo que la sesión principal envía a otra sesión se anota antes de correr, para que se vea mientras espera.
+    const envio = !e.agentId && cfg.extras.has('sesiones') ? envioDe(String(e.tool), e) : null
+    const anotado = envio ? await anotarEnvio($, envio, e.tool_use_id).catch(() => null) : null
+    const correr = async () => {
+      // La `ask` del clasificador se lee al terminar la llamada, y se borra aunque la llamada lance: no queda para siempre.
+      const { ran, auto } = await llamadaConAutomatica(autoAsks, e.tool_use_id, () => next(e)).finally(() => callLoop.delete(e.tool_use_id))
+      const didRun = ran.deny === undefined
+      // Una `ask` que decidió el clasificador se anota ahora, ya resuelta: corrió o fue rechazada.
+      if (auto) {
+        await update($, gate, g => recordCheck(normalizeGate(g), { ...auto, verdict: didRun ? 'cleared' : 'deny' }))
       }
+      // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
+      const g0 = await getGate($)
+      const isSettled = settleCheck(g0, e.tool_use_id, didRun) !== g0
+      if (isSettled) await update($, gate, g => settleCheck(normalizeGate(g), e.tool_use_id, didRun))
+      // A background agent hands its report back through this tool; an architect's report is its advice.
+      if (String(e.tool) === 'SubagentHandback') {
+        const consejo = consejoNuevo(e.agentId ? await getArchitect($) : null, e.agentId, (e as unknown as { message?: unknown }).message)
+        if (consejo) await noteAdvice($, cfg, consejo)
+        return ran
+      }
+      if (e.tool === 'Agent') return ran
+      const uso = didRun ? usoDe(String(e.tool), e) : null
+      if (uso) await update($, usos, x => noteUso(normalize(DEFAULT_USOS, x), uso))
+      const hasFailed = didRun && ran.isError === true
+      const isEdit = !hasFailed && didRun && EDIT_TOOLS.has(e.tool)
+      if (isEdit) {
+        const cambio = lineasDeEdicion(e.tool, e)
+        if (cambio.agregadas > 0 || cambio.quitadas > 0) {
+          await update($, usage, x => {
+            const u0 = normalize(DEFAULT_USAGE, x)
+            return { ...u0, linesAdded: (u0.linesAdded ?? 0) + cambio.agregadas, linesRemoved: (u0.linesRemoved ?? 0) + cambio.quitadas }
+          })
+        }
+      }
+      const t0 = await getTurn($)
+      if (isEdit || hasFailed || (!e.agentId && t0.errorStreak > 0)) {
+        await update($, turn, t => afterCall(normalize(DEFAULT_TURN, t), { inSubagent: Boolean(e.agentId), hasFailed, isEdit }))
+      }
+      const text = shorten(describeInput(e.tool, e), 64)
+      if (e.agentId) {
+        const id = e.agentId
+        await update($, agents, list =>
+          listOf<unknown>(list)
+            .map(normalizeCard)
+            .map(c => (c.id === id ? noteTool(c, { tool: e.tool, text, isError: hasFailed || ran.deny !== undefined }) : c)),
+        )
+      }
+      if (hasFailed) await releerJev($)
       return ran
     }
-    if (didRun) await cambiarSesion($, s => notarLlamada(s, e.tool, e, ran.isError === true))
-    if (e.tool === 'Agent') {
-      if (isSettled) await refreshStatus($)
-      return ran
+    if (!anotado?.espera) return correr()
+    // Con --wait (o agent wait) la llamada dura lo que tarda la respuesta: si acaba bien, la espera se cierra.
+    // Si falla (tiempo agotado, rechazo, error) no hay respuesta: deja de esperar en la llamada y cuenta el turno.
+    let bien = false
+    try {
+      const r = await correr()
+      bien = r?.deny === undefined && r?.isError !== true
+      return r
+    } finally {
+      const fin = await $.clock.now()
+      await guardarMensaje($, bien ? { ...anotado, esperaFin: fin } : { ...anotado, espera: false }).catch(() => undefined)
     }
-    const hasFailed = didRun && ran.isError === true
-    const isEdit = !hasFailed && didRun && EDIT_TOOLS.has(e.tool)
-    if (isEdit) {
-      const cambio = lineasDeEdicion(e.tool, e)
-      if (cambio.agregadas > 0 || cambio.quitadas > 0) {
-        await update($, usage, x => {
-          const u0 = normalize(DEFAULT_USAGE, x)
-          return { ...u0, linesAdded: (u0.linesAdded ?? 0) + cambio.agregadas, linesRemoved: (u0.linesRemoved ?? 0) + cambio.quitadas }
-        })
-      }
-    }
-    const t0 = await getTurn($)
-    if (isEdit || hasFailed || (!e.agentId && t0.errorStreak > 0)) {
-      await update($, turn, t => afterCall(normalize(DEFAULT_TURN, t), { inSubagent: Boolean(e.agentId), hasFailed, isEdit }))
-    }
-    const text = shorten(describeInput(e.tool, e), 64)
-    if (e.agentId) {
-      const id = e.agentId
-      await update($, agents, list =>
-        listOf<unknown>(list)
-          .map(normalizeCard)
-          .map(c => (c.id === id ? noteTool(c, { tool: e.tool, text, isError: hasFailed || ran.deny !== undefined }) : c)),
-      )
-    }
-    // The log keeps what is worth a glance: refusals, errors and edits; the rest is on the cards.
-    if (ran.deny !== undefined) await say($, await whoIs($, e.agentId), `${text}  denegado`, 'error', e.agentId ?? null)
-    else if (hasFailed) await say($, await whoIs($, e.agentId), `${text}  ✗`, 'error', e.agentId ?? null)
-    else if (isEdit) await say($, await whoIs($, e.agentId), text, 'info', e.agentId ?? null)
-    if (hasFailed) await releerJev($)
-    if (isSettled || !didRun) await refreshStatus($)
-    return ran
   })
 
   // A server-side review tool never reaches tool.call: it shows only in the assistant's rows.
@@ -743,7 +1029,7 @@ export const register: Register = (on, options) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    const started = await lanzarAgente($, e, next)
+    const started = await next(e)
     const decisiones = await releerJev($)
     if (!e.parentAgentId) await noteMode($, e.permissionMode)
     if (started.deny !== undefined || !started.agentId) return started
@@ -751,44 +1037,37 @@ export const register: Register = (on, options) => {
     if (await isArchitectType($, cfg, e.subagentType)) {
       await update($, architect, a => {
         const x = normalize(DEFAULT_ARCHITECT, a)
-        return { ...x, ids: [...listOf<string>(x.ids), id].slice(-40) }
+        const ids = listOf<string>(x.ids)
+        return { ...x, ids: ids.includes(id) ? ids : [...ids, id].slice(-40) }
       })
       await update($, loops, l => listOf<Loop>(l).filter(x => x.id !== id))
       await consultStarted($, cfg, id, e.subagentType.split(':').pop() ?? 'agente')
       return started
     }
+    const descripcion = limpio(e.description)
     const card: AgentCard = {
       ...normalizeCard({}),
       id,
       type: e.name ?? e.subagentType,
       model: started.model,
-      description: e.description,
-      jev: marcaDeSpawn(decisiones, e.description),
+      description: descripcion,
+      jev: marcaDeSpawn(decisiones, descripcion),
       spawnedAt: await $.clock.now(),
     }
     // Decided in the write: a resume whose first step already put its card back to running is not logged again.
-    let isNew = true
-    let isResumed = false
-    await update($, agents, list => {
-      const cards = listOf<unknown>(list).map(normalizeCard)
-      const known = cards.find(c => c.id === id)
-      isNew = known === undefined
-      isResumed = known !== undefined && known.status !== 'running'
-      return addCard(cards, card)
-    })
+    await update($, agents, list => addCard(listOf<unknown>(list).map(normalizeCard), card))
     await update($, loops, l => listOf<Loop>(l).filter(x => x.id !== id))
-    if (isNew || isResumed) await say($, shorten(cardTitle(card), 12), isNew ? `iniciado · ${card.type}` : 'reanudado', 'info', id)
-    await refreshStatus($)
     return started
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    await finDeTurno($, e)
     await releerJev($)
     const id = e.agentId
     const now = await $.clock.now()
     if (!id) {
+      // Las demás sesiones saben así si ya respondió a lo que le mandaron.
+      await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), turnoFin: now }))
       const [t, cards, cost] = await Promise.all([getTurn($), getCards($), costNow($)])
       const r = receiptOf(t, {
         durationMs: e.durationMs,
@@ -798,9 +1077,24 @@ export const register: Register = (on, options) => {
       })
       await update($, receipt, () => r)
       await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: false }))
-      await refreshStatus($)
+      if (cfg.extras.has('gasto')) {
+        const mensajes = await $.session.messages({ last: 400 }).catch(() => null)
+        if (Array.isArray(mensajes)) {
+          const filas = topGasto(mensajes)
+          await update($, gasto, () => ({ filas, consejo: consejoGasto(filas) }))
+        }
+      }
+      if (e.durationMs > 0) await update($, extra, x => ({ ...normalize(DEFAULT_EXTRA, x), trabajoMs: normalize(DEFAULT_EXTRA, x).trabajoMs + e.durationMs }))
+      // Un permiso del lead que sigue pendiente al cerrar su turno ya no se va a responder.
+      await update($, gate, g => retireAsks(normalizeGate(g), true))
+      // Una consulta al asesor que sigue abierta al cerrar el turno del lead ya no tendrá respuesta. Si el turno
+      // terminó normal, un subagente asesor en segundo plano sigue vivo: solo con Esc (isAborted) se cierran todas.
+      await update($, architect, a => cerrarConsultas(normalize(DEFAULT_ARCHITECT, a), now, e.isAborted === true))
       return done
     }
+    // Un permiso de este subagente que sigue pendiente al terminar ya no se va a responder.
+    const g0 = await getGate($)
+    if (retireAsksDe(g0, id) !== g0) await update($, gate, g => retireAsksDe(normalizeGate(g), id))
     if ((await getArchitect($)).ids.includes(id)) {
       await consultEnded($, cfg, e.answer, id)
       return done
@@ -813,62 +1107,104 @@ export const register: Register = (on, options) => {
           .map(normalizeCard)
           .map(c => (c.id === id ? { ...c, status, endedAt: now, answer: shorten(e.answer, 400) } : c)),
       )
-      // This run's own length: a resumed agent's card clock also spans the idle time between runs.
-      const took = fmtDuration(e.durationMs)
-      await say($, await whoIs($, id), status === 'done' ? `listo · ${took}` : statusLabel(status), status === 'done' ? 'done' : 'error', id)
     } else {
       await update($, loops, l => listOf<Loop>(l).map(x => (x.id === id ? { ...x, isDone: true, lastAt: now } : x)))
     }
-    await refreshStatus($)
     return done
   })
 
   // ---------------------------------------------------------------- drawing
 
+  // Un panel cerrado no se ve: el reloj se para hasta que vuelva a dibujarse.
+  on('ui.close', async ($, e, next) => {
+    const r = await next(e)
+    if (e.id === PANE) {
+      detenerReloj()
+      mapaVisible = false
+      panelColocado = false
+    }
+    return r
+  })
+
   // After a surface module faults on a surface, this load draws it there as plain text; the other
   // module, and other surfaces, keep theirs. Keyed by faultKey: `desktop:rail.tsx`.
   const faulted = new Set<string>()
   on('ui.fault', async ($, e, next) => {
-    const key = faultKey(e.surface, e.module)
-    if (e.requestId === PANE && !faulted.has(key)) {
-      faulted.add(key)
+    if (anotarFallo(faulted, PANE, e)) {
       $.ui.log(`tablero: ${e.module} faulted on ${e.surface} (${e.phase}: ${e.reason}); drawing it without animation`)
       $.ui.invalidate('ui.render')
     }
     return next(e)
   })
 
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+  // Un solo hook dibuja el panel (Pane) y, con el panel sin colocar, su resumen sobre el prompt (AbovePrompt):
+  // el motor no deja pasar `$` a una función interna, así que el dibujo es una clausura de este hook.
+  on('ui.render', async ($, entrada, next) => {
+    const esPanel = entrada.component === 'Pane' && entrada.requestId === PANE
+    if (!esPanel && entrada.component !== 'AbovePrompt') return next(entrada)
+    const debajo = esPanel ? null : await next(entrada)
+    if (!esPanel && (panelColocado || entrada.props.isCollapsed || entrada.props.hasSurvey)) return debajo
+    // Sobre el prompt se dibuja lo mismo que en un Pane colocado ahí (inline): el resumen de hasta 8 filas.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e: any = esPanel
+      ? entrada
+      : {
+          ...entrada,
+          component: 'Pane',
+          requestId: PANE,
+          props: { title: TITLE, isFocused: false, bodyColumns: entrada.props.bodyColumns, placement: 'inline', scroll: entrada.props.scroll, view: {} },
+        }
+    const pintar = async () => {
+    const generacion = generacionReloj
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
     const hasClient = 'Client' in els
     const hasRail = hasClient && !faulted.has(faultKey(e.surface, 'rail.tsx'))
     const hasClock = hasClient && !faulted.has(faultKey(e.surface, 'elapsed.tsx'))
-    const [m, u, a, g, cards, lp, lines, t, r, v, now, cwd, se, pasos, jevs] = await Promise.all([
+    const [m, u, a, g, cards, lp, t, r, v, now, cwd, jevs, branchNow, usosNow] = await Promise.all([
       getMain($),
       getUsage($),
       getArchitect($),
       getGate($),
       getCards($),
       getLoops($),
-      getLog($),
       getTurn($),
       read($, receipt),
       getView($),
       $.clock.now(),
       $.session.cwd().catch(() => ''),
-      getSesion($),
-      pasosDeAgentes($),
       getJev($),
+      read($, gitBranch),
+      read($, usos).then(x => normalize(DEFAULT_USOS, x)),
     ])
-    const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRitmo(ritmoSemana(jevs.limites, now / 1000), jevs.limites?.five_hour, now / 1000) }
+    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr, convNow, idPropio] = await Promise.all([
+      read($, planes).then(x => listOf<Plan>(x)),
+      read($, aduana),
+      read($, caveman),
+      read($, extra).then(x => normalize(DEFAULT_EXTRA, x)),
+      read($, fuentes).then(x => normalize(DEFAULT_FUENTES, x)),
+      read($, otras).then(x => listOf<RegistroSesion>(x)),
+      read($, gasto),
+      read($, plegado).then(x => normalize({ gasto: true, sesiones: true, conversaciones: true }, x)),
+      $.env.get('HERDR_ENV').then(x => x === '1').catch(() => false),
+      read($, conv).then(x => normalize(DEFAULT_CONV, x)),
+      $.session.id().catch(() => ''),
+    ])
+    const rit = ritmoSemana(jevs.limites, now / 1000)
+    const filaRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)
+    const resumenJevs = { ...resumenJev(jevs.decisiones), ritmo: filaRit }
     const jevN = resumenJevs.total
-    const sesionRows = sesionFilas(se)
     // The body's own width, down to the narrowest dock Claude Code seats (24): a wider drawing is cut off at the frame.
     const W = Math.max(24, e.props.bodyColumns)
     const layout = v.layout ?? cfg.layout
-    // El diagrama: `auto` y `diagrama` desde 66 columnas; por debajo, la columna de siempre.
-    const enDiagrama = W >= DIAGRAMA_MIN && (layout === 'auto' || layout === 'diagrama')
+    // El diagrama: `diagrama` desde 66 columnas; por debajo, la columna de siempre.
+    const enDiagramaPosible = W >= DIAGRAMA_MIN && layout === 'diagrama'
+    // `mapa` acoplado dibuja el mapa de cajas desde 40 columnas y se adapta al ancho (ver mapa.ts): dos columnas
+    // desde 100, apilado por debajo. Sobre el prompt (inline) el mapa es demasiado alto: ahí sigue la columna.
+    const enMapa = layout === 'mapa' && W >= MAPA_MIN && (W >= MAPA_ANCHO || e.props.placement !== 'inline')
+    // `auto` (1.2.0): la lista de secciones con título, sin cajas ni conectores.
+    const esLista = layout === 'auto'
+    const enDiagrama = enDiagramaPosible && !enMapa
     const isWide = layout === 'wide'
     const colW = isWide ? Math.floor((W - 2) / 2) : W
     const jevVisible = cfg.panels.includes('jev') && (jevN > 0 || enDiagrama)
@@ -876,12 +1212,13 @@ export const register: Register = (on, options) => {
     const viewed = e.props.view?.agentId ?? null
     const advising = isAdvising(a)
     const running = cards.filter(c => c.status === 'running')
+    // El panel se está dibujando: si el reloj no corre (recién abierto o reabierto), arranca al ritmo que toca.
+    mapaVisible = enMapa
+    // Si el reloj se paró mientras este dibujo esperaba datos (cierre o fin de sesión), no lo arranca.
+    if (puedeArrancarReloj({ corriendo: reloj !== null, generacionDibujo: generacion, generacionActual: generacionReloj })) iniciarReloj($, cfg, modoReloj({ animacion: cfg.animacion, hayTrabajo: m.isRunning || running.length > 0 }))
     const showArchitect = a.consults.length > 0 || a.ids.length > 0
     const motion = cfg.motion && hasRail
     // A panel with nothing to show yet takes no room: most sessions never spawn an agent.
-    // La barra de vida vive dentro del panel SESIÓN: con contexto medido, ese panel existe aunque no haya herramientas.
-    // Misma regla que filasVida: NaN e Infinity no son vida, así que no reservan fila vacía.
-    const vidaVisible = vidaDe(contextFill(u).pct) !== null
     const isEmpty: Record<Panel, boolean> = {
       main: false,
       jev: jevN === 0,
@@ -890,8 +1227,8 @@ export const register: Register = (on, options) => {
       agents: cards.length === 0,
       loops: lp.length === 0,
       receipt: !m.isRunning && !r,
-      sesion: sesionRows.length === 0 && !vidaVisible,
-      log: false,
+      // La caja AL DÍA se dibuja dentro del mapa, no como un panel de la columna.
+      aldia: true,
     }
     const panels = cfg.panels.filter(p => !isEmpty[p])
     const decider = m.mode === 'auto' ? 'auto' : 'tú'
@@ -923,49 +1260,13 @@ export const register: Register = (on, options) => {
       )
 
     const isTerminal = e.surface === 'terminal'
-    // A row of marks (gate checks, loop dots), sized by `marksIn`. Should a surface draw them wider
-    // still, the row is cut at its box rather than running past it.
-    const markRow = (marks: RenderChildren, lead = 0) => (
-      <Box overflow="hidden" {...(lead ? { marginLeft: lead } : {})}>
-        <Text wrap="truncate-start">{marks}</Text>
-      </Box>
-    )
     // A terminal's border row stands apart from the text above it; a graphical surface draws the
     // border flush against it, so the legend keeps one row of air there.
     const legendGap = isTerminal ? 0 : 1
 
-    // A line of coloured pieces, drawn as a row of boxes the way the log draws its lines. A Text nesting
-    // coloured Texts truncates as one line in a terminal, but the desktop app wraps each nested piece on its
-    // own, lays truncating ones out as blocks of their own, and collapses runs of spaces. So pieces sit `gap`
-    // cells apart (a piece's `lead` adds more), each keeps its width, and pieces that don't fit in `room` are
-    // left out from the end; or a piece marked `fill` (one span) truncates to what the others leave.
-    type Span = { text: string; color?: string; dim?: boolean; bold?: boolean }
-    type Piece = { spans: Span[]; lead?: number; fill?: boolean }
-    const styleOf = (s: Span) => ({ ...(s.color ? { color: s.color } : {}), ...(s.dim ? { dimColor: true } : {}), ...(s.bold ? { bold: true } : {}) })
-    const widthOf = (p: Piece) => p.spans.reduce((n, s) => n + cellWidth(s.text), 0)
-    const line = (pieces: (Piece | null)[], room: number, gap = 1, justify?: 'center') => {
-      const all = pieces.filter((p): p is Piece => p !== null)
-      const shown = all.some(p => p.fill) ? all : all.slice(0, piecesThatFit(all.map(p => ({ width: widthOf(p), lead: p.lead })), room, gap))
-      return (
-        <Box width={room} columnGap={gap} overflow="hidden" {...(justify ? { justifyContent: justify } : {})}>
-          {shown.map(p => {
-            const lead = p.lead ? { marginLeft: p.lead } : {}
-            if (p.fill && p.spans[0]) {
-              return (
-                <Text {...styleOf(p.spans[0])} wrap="truncate">
-                  {p.spans[0].text}
-                </Text>
-              )
-            }
-            return (
-              <Box flexShrink={0} {...lead}>
-                {p.spans.length === 1 && p.spans[0] ? <Text {...styleOf(p.spans[0])}>{p.spans[0].text}</Text> : <Text>{p.spans.map(s => <Text {...styleOf(s)}>{s.text}</Text>)}</Text>}
-              </Box>
-            )
-          })}
-        </Box>
-      )
-    }
+    // Las piezas de una línea y las filas de marcas: linea.tsx.
+    const line = (pieces: (Piece | null)[], room: number, gap = 1, justify?: 'center') => linea(els, pieces, room, gap, justify)
+    const markRow = (marks: RenderChildren, lead = 0) => filaDeMarcas(els, marks, lead)
 
     // ---- main
     const effortN = { low: 1, medium: 2, high: 3, xhigh: 4, max: 4 }[m.effort] ?? 0
@@ -974,14 +1275,407 @@ export const register: Register = (on, options) => {
     // Solo el nombre de la carpeta, cortado para que la línea conserve agentes y permisos.
     const carpeta = carpetaDe(cwd, Math.max(8, Math.floor((colW - 4) / 3)))
     const ctxGauge = ctxFill.pct !== null ? gauge(ctxFill.pct, 10) : null
+
+    // ---- Sesión: la sección principal de la lista (layout auto). Una fila por dato, etiqueta a la izquierda,
+    // barras del mismo ancho y porcentajes alineados; el color solo marca el umbral (65 % aviso, 85 % alerta).
+    const ETIQUETA = 11
+    const tinta = (pct: number) => {
+      const t = tonoUso(pct)
+      return t === 'alerta' ? C.warn : t === 'aviso' ? C.amber : C.main
+    }
+    const filaBarra = (k: string, etiqueta: string, pct: number, ancho: number, extra: string, extraColor?: string, cola = '') => {
+      const llenas = celdasUso(pct, ancho)
+      return (
+        <Text key={k} wrap="truncate">
+          <Text dimColor>{etiqueta.padEnd(ETIQUETA)}</Text>
+          <Text color={tinta(pct)}>{'█'.repeat(llenas)}</Text>
+          <Text color={C.faint}>{'░'.repeat(ancho - llenas)}</Text>
+          <Text tabular>{`  ${String(Math.round(pct)).padStart(3)} %`}</Text>
+          {extra ? <Text color={extraColor}>{`  ${extra}`}</Text> : null}
+          {cola ? <Text dimColor>{`  ${cola}`}</Text> : null}
+        </Text>
+      )
+    }
+    const nombreCupo = (kind: string) => (/five/i.test(kind) ? 'Cupo 5 h' : /seven/i.test(kind) ? 'Cupo 7 d' : `Cupo ${limitLabel(kind)}`)
+    // Lo que solo dice la statusline (cache, thinking, nombre, PR), lo que leen las fuentes y el dinero del día.
+    const lineaNow = extraNow.linea
+    const cacheNow = cfg.extras.has('cache') ? textoCache(lineaNow?.prompt_cache ?? null, now / 1000) : null
+    const trabajoMs = extraNow.trabajoMs + (m.isRunning && t.startedAt > 0 ? Math.max(0, now - t.startedAt) : 0)
+    const porHoraNow = u.costUsd !== null ? porHora(u.costUsd, trabajoMs) : null
+    const hoyNow = cfg.extras.has('presupuesto') && cfg.presupuestoDiario > 0 && u.costUsd !== null && extraNow.dia
+      ? gastoDelDia({ id: lineaNow?.session_id ?? '', costo: u.costUsd, base: extraNow.base, dia: extraNow.dia }, otrasNow, extraNow.dia)
+      : null
+    const REVISION: Record<string, string> = { approved: 'aprobado', pending: 'en revisión', changes_requested: 'con cambios pedidos', draft: 'borrador' }
+    const etq = (x: string) => <Text dimColor>{x.padEnd(ETIQUETA)}</Text>
+    // Una fila en trozos: entran por orden mientras caben en `room`; lo opcional va al final y es lo primero que cae.
+    type Trozo = { t: string; c?: string; dim?: boolean }
+    const caben = (xs: (Trozo | null | false)[], room: number): Trozo[] => {
+      const out: Trozo[] = []
+      let n = 0
+      for (const x of xs) {
+        if (!x) continue
+        if (n + [...x.t].length > room) break
+        out.push(x)
+        n += [...x.t].length
+      }
+      return out
+    }
+    const trozos = (xs: Trozo[]) => xs.map((x, k) => (
+      <Text key={`t${k}`} color={x.c} dimColor={x.dim}>
+        {x.t}
+      </Text>
+    ))
+    const sesionPanel = (w: number) => {
+      const ancho = Math.max(6, Math.min(20, w - ETIQUETA - 26))
+      const room = w - 2 - ETIQUETA
+      const pr = lineaNow?.pr ?? null
+      const git = fuentesNow.git
+      return (
+        <Box flexDirection="column" width={w}>
+          <Text weight="semibold">Sesión</Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            <Text wrap="truncate">
+              {etq('Modelo')}
+              {trozos(
+                caben(
+                  [
+                    { t: modelName },
+                    !!m.effort && { t: ` · ${m.effort}`, dim: true },
+                    lineaNow?.thinking != null && { t: ` · thinking ${lineaNow.thinking ? 'on' : 'off'}`, dim: true },
+                    !!m.speed && { t: ` · ${fmtSpeed(m.speed!)}`, dim: true },
+                  ],
+                  room,
+                ),
+              )}
+            </Text>
+            {ctxFill.pct !== null
+              ? filaBarra(
+                  'ctx',
+                  'Contexto',
+                  ctxFill.pct,
+                  ancho,
+                  u.compactions > 0 ? `⟲${u.compactions}` : '',
+                  C.amber,
+                  u.tokens !== null ? `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}` : '',
+                )
+              : null}
+            {cacheNow && lineaNow?.prompt_cache ? (
+              <Text wrap="truncate">
+                {etq('Cache')}
+                {trozos(
+                  caben(
+                    [
+                      { t: cacheNow.caliente ? '● Caliente' : '○ Fría', c: cacheNow.caliente ? C.gate : C.amber },
+                      !!cacheNow.queda && { t: `  Caduca en ${cacheNow.queda}`, c: cacheNow.aviso ? C.amber : undefined, dim: !cacheNow.aviso },
+                      cacheNow.aciertos !== null && { t: `  · ${cacheNow.aciertos} % aciertos`, dim: true },
+                      extraNow.cacheLeida > 0 && { t: `  · ${kTokens(extraNow.cacheLeida)} leídos`, dim: true },
+                    ],
+                    room,
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {u.costUsd !== null ? (
+              <Text wrap="truncate">
+                {etq('Costo')}
+                {trozos(
+                  caben(
+                    [
+                      { t: fmtUsd(u.costUsd) },
+                      { t: `  · ${plural(m.steps, 'respuesta', 'respuestas')}`, dim: true },
+                      porHoraNow !== null && { t: ` · ${fmtUsd(porHoraNow)}/h trabajando`, dim: true },
+                    ],
+                    room,
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {hoyNow !== null
+              ? filaBarra('hoy', 'Hoy', (hoyNow / cfg.presupuestoDiario) * 100, ancho, '', undefined, `${fmtUsd(hoyNow)} de ${fmtUsd(cfg.presupuestoDiario)}`)
+              : null}
+            {u.limits.slice(0, 2).map(l => {
+              const ventana = /five/i.test(l.kind) ? 5 * 3_600_000 : 7 * 86_400_000
+              const fraccion = l.resetsAt == null ? null : Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / ventana))
+              const ritmo = ritmoCupo(l.pct, fraccion)
+              const reinicio = w >= 56 ? fmtReinicio(l.resetsAt, now) : ''
+              const pronostico = w >= 90 ? pronosticoCupo(l.pct, fraccion, l.resetsAt ?? null, now) : ''
+              const cola = [reinicio ? `↻ ${reinicio}` : '', pronostico].filter(Boolean).join(' · ')
+              return filaBarra(`cupo-${l.kind}`, nombreCupo(l.kind), l.pct, ancho, ritmo, ritmo.startsWith('⇡') ? C.amber : C.gate, cola)
+            })}
+            <Text wrap="truncate">
+              {etq('Proyecto')}
+              <Text>{carpeta || '—'}</Text>
+              {lineaNow?.session_name && room - (carpeta || '—').length - 5 >= 6 ? (
+                <Text dimColor>{` · «${shorten(lineaNow.session_name, room - (carpeta || '—').length - 5)}»`}</Text>
+              ) : null}
+            </Text>
+            {cfg.extras.has('git') && (git || pr) ? (
+              <Text wrap="truncate">
+                {etq('Git')}
+                {trozos(
+                  caben(
+                    [
+                      ...(git && git.archivos > 0
+                        ? [{ t: `${plural(git.archivos, 'archivo', 'archivos')} ` }, { t: `+${git.mas}`, c: C.gate }, { t: ` −${git.menos}`, c: C.warn }]
+                        : git
+                          ? [{ t: 'Sin cambios', dim: true }]
+                          : []),
+                      !!git?.sinSubir && { t: `  · ↑${git!.sinSubir} sin subir`, dim: true },
+                      !!pr && { t: `  · PR #${pr!.number}${pr!.review_state && REVISION[pr!.review_state] ? ` ${REVISION[pr!.review_state]}` : ''}`, dim: true },
+                      fuentesNow.ci === 'corriendo' && { t: ` · ${emojiDeEstado(now, 'running', 6, cfg.animacion)} CI corriendo`, c: C.main },
+                      fuentesNow.ci === 'pasa' && { t: ' · ✓ CI pasa', c: C.gate },
+                      fuentesNow.ci === 'falla' && { t: ' · ✗ CI falla', c: C.warn },
+                    ],
+                    room,
+                  ),
+                )}
+              </Text>
+            ) : null}
+            {fuentesNow.config ? (
+              <Text wrap="truncate">
+                {etq('Config')}
+                <Text dimColor>{shorten(fuentesNow.config, room)}</Text>
+              </Text>
+            ) : null}
+            {resumenUsos(usosNow) ? <Text dimColor wrap="truncate">{resumenUsos(usosNow)}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
+    // ---- Planes: los de plan_progress, con símbolo y palabra de su estado; la pregunta va debajo con ↳.
+    const planesAhora = planesVisibles(planesNow, now)
+    const planesPanel = (w: number) => {
+      const abiertos = planesAhora.filter(p => p.estado !== 'done').length
+      const filas = planesAhora.slice(0, 3).map(p => filaPlan(p, now))
+      const tw = Math.min(26, Math.max(8, ...filas.map(f => f.titulo.length)))
+      const ancho = Math.max(6, Math.min(20, w - tw - 40))
+      const tinta = (f: { palabra: string }) => (f.palabra === 'Te espera' ? C.amber : f.palabra === 'Falló' ? C.warn : f.palabra === 'Hecho' ? C.gate : C.main)
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text weight="semibold">Planes</Text>
+            <Text dimColor>{abiertos === 0 ? 'ninguno abierto' : plural(abiertos, 'abierto', 'abiertos')}</Text>
+          </Box>
+          <Box flexDirection="column" paddingLeft={2}>
+            {filas.map((f, i) => {
+              const glifo = f.palabra === 'En curso' ? emojiDeEstado(now, 'running', 3 + i, cfg.animacion) : f.glifo
+              const llenas = celdasUso(f.total > 0 ? (f.hechos / f.total) * 100 : 0, ancho)
+              return (
+                <Box key={`plan-${i}`} flexDirection="column">
+                  <Text wrap="truncate">
+                    {trozos(
+                      caben(
+                        [
+                          { t: `${glifo} ${f.palabra.padEnd(10)}`, c: tinta(f) },
+                          { t: `${shorten(f.titulo, Math.min(tw, w - 16)).padEnd(Math.min(tw, w - 16))} ` },
+                          f.palabra !== 'Hecho' && w >= 60 && { t: '█'.repeat(llenas), c: tinta(f) },
+                          f.palabra !== 'Hecho' && w >= 60 && { t: '░'.repeat(ancho - llenas), c: C.faint },
+                          { t: `  ${f.hechos}/${f.total}` },
+                          !!f.paso && f.palabra !== 'Hecho' && { t: `  Paso: ${f.paso}`, dim: true },
+                          { t: `  ${f.tiempo}`, dim: true },
+                        ],
+                        w - 2,
+                      ),
+                    )}
+                  </Text>
+                  {f.nota ? <Text color={f.palabra === 'Falló' ? C.warn : C.amber} wrap="truncate">{`  ${shorten(`↳ ${f.nota}`, w - 4)}`}</Text> : null}
+                </Box>
+              )
+            })}
+            {planesAhora.length > 3 ? <Text dimColor>{`+${planesAhora.length - 3} más`}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
+    // ---- Aduana: solo mientras corren las pruebas largas (o 10 min tras terminar).
+    const aduanaAhora = aduanaNow && aduanaVigente(aduanaNow, now) ? filasAduana(aduanaNow) : null
+    const aduanaPanel = (w: number) => {
+      if (!aduanaAhora) return null
+      const ancho = Math.max(6, Math.min(20, w - 50))
+      const llenas = celdasUso(aduanaAhora.total > 0 ? (aduanaAhora.hechas / aduanaAhora.total) * 100 : 0, ancho)
+      const estado = aduanaAhora.terminado ? '✓ Hecho    ' : `${emojiDeEstado(now, 'running', 5, cfg.animacion)} En curso   `
+      return (
+        <Box flexDirection="column" width={w}>
+          <Text>
+            <Text weight="semibold">Aduana</Text>
+            <Text dimColor>  Pruebas largas</Text>
+          </Text>
+          <Box flexDirection="column" paddingLeft={2}>
+            <Text wrap="truncate">
+              <Text color={aduanaAhora.terminado ? C.gate : C.main}>{estado}</Text>
+              <Text>{`${aduanaAhora.titulo} `}</Text>
+              <Text color={C.main}>{'█'.repeat(llenas)}</Text>
+              <Text color={C.faint}>{'░'.repeat(ancho - llenas)}</Text>
+              <Text tabular>{`  ${aduanaAhora.hechas}/${aduanaAhora.total}`}</Text>
+              <Text dimColor>{`  · ${aduanaAhora.costo}${aduanaAhora.invalidas > 0 ? ` · ${plural(aduanaAhora.invalidas, 'inválida', 'inválidas')}` : ''}`}</Text>
+            </Text>
+            {aduanaAhora.enCurso ? <Text dimColor wrap="truncate">{`  ${aduanaAhora.enCurso}`}</Text> : null}
+          </Box>
+        </Box>
+      )
+    }
+
+    // ---- Gasto y Sesiones: plegadas en una línea; g y s las abren.
+    const plegar = (k: 'gasto' | 'sesiones' | 'conversaciones') => () => update($, plegado, x => {
+      const v = normalize({ gasto: true, sesiones: true, conversaciones: true }, x)
+      return { ...v, [k]: !v[k] }
+    })
+    const gastoFilas = cfg.extras.has('gasto') ? (gastoNow?.filas ?? []) : []
+    const gastoPanel = (w: number) => {
+      if (gastoFilas.length === 0) return null
+      const abierto = !plegadoNow.gasto
+      const primera = gastoFilas[0]!
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Gasto</Text>
+              <Text dimColor>
+                {`  ${shorten(abierto ? 'Lo que más contexto consume' : `Lo que más gasta: ${primera.llamada}, ${primera.motivo} · ${kTokens(primera.tokens)}`, w - 16)}`}
+              </Text>
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="gasto-plegar" plain hotkey="g" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('gasto')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {gastoFilas.map((f, i) => {
+                // Ancho completo desde 80 columnas; por debajo, la llamada y los tokens.
+                const ancho = w >= 80
+                const llamadaW = ancho ? 32 : Math.max(8, w - 10)
+                const llenas = celdasUso((f.tokens / Math.max(1, primera.tokens)) * 100, 12)
+                return (
+                  <Text key={`gasto-${i}`} wrap="truncate">
+                    <Text>{`${shorten(f.llamada, llamadaW).padEnd(llamadaW)} `}</Text>
+                    {ancho ? <Text dimColor>{`${f.motivo.padEnd(24)} `}</Text> : null}
+                    {ancho ? <Text color={C.main}>{'█'.repeat(llenas)}</Text> : null}
+                    {ancho ? <Text color={C.faint}>{'░'.repeat(12 - llenas)}</Text> : null}
+                    <Text tabular>{`${ancho ? '  ' : ''}${kTokens(f.tokens)}`}</Text>
+                  </Text>
+                )
+              })}
+              {gastoNow?.consejo ? <Text dimColor wrap="truncate">{shorten(gastoNow.consejo, w - 2)}</Text> : null}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+    const otrasVivas = cfg.extras.has('sesiones') ? abiertas(otrasNow, now) : []
+    const sesionesPanel = (w: number) => {
+      if (otrasVivas.length === 0) return null
+      const abierto = !plegadoNow.sesiones
+      const esperan = otrasVivas.filter(o => o.estado === 'espera')
+      const trabajan = otrasVivas.filter(o => o.estado === 'trabajando').length
+      const nombre = (o: RegistroSesion) => o.nombre ?? o.carpeta
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Sesiones</Text>
+              {abierto ? (
+                <Text dimColor>{`  ${shorten('Otras sesiones de esta máquina', Math.max(4, w - 21))}`}</Text>
+              ) : (
+                <Text>
+                  {trozos(
+                    caben(
+                      [
+                        { t: `  ${plural(otrasVivas.length, 'más abierta', 'más abiertas')}`, dim: true },
+                        !!esperan[0] && { t: ` · ◆ ${nombre(esperan[0]!)} te espera`, c: C.amber },
+                        trabajan > 0 && { t: ` · ${trabajan} trabajando`, dim: true },
+                      ],
+                      w - 17,
+                    ),
+                  )}
+                </Text>
+              )}
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="sesiones-plegar" plain hotkey="v" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('sesiones')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {otrasVivas.slice(0, 6).map((o, i) => (
+                <Text key={`ses-${o.id}`} wrap="truncate">
+                  <Text color={o.estado === 'espera' ? C.amber : o.estado === 'trabajando' ? C.main : C.dim}>
+                    {o.estado === 'espera' ? '◆ Te espera  ' : o.estado === 'trabajando' ? `${emojiDeEstado(now, 'running', i, cfg.animacion)} Trabajando ` : '○ Inactiva   '}
+                  </Text>
+                  <Text>{`${shorten(`${nombre(o)}${o.nombre ? ` · ${o.carpeta}` : ''}`, Math.min(34, w - 24)).padEnd(Math.min(34, w - 24))} `}</Text>
+                  <Text dimColor>{fmtDuration(Math.max(0, now - o.desde))}</Text>
+                </Text>
+              ))}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+
+    // Conversaciones: quién le habla a quién y quién espera respuesta (conversaciones.ts).
+    const turnos = new Map<string, Turno>(otrasNow.map(o => [o.id, { inicio: o.turnoInicio, fin: o.turnoFin }]))
+    if (idPropio) turnos.set(idPropio, { inicio: convNow.turnoInicio ?? undefined, fin: convNow.turnoFin ?? undefined })
+    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnos.get(id), now, id => otrasNow.find(o => o.id === id)?.nombre ?? undefined) : []
+    const conversacionesPanel = (w: number) => {
+      if (filasConv.length === 0) return null
+      const abierto = !plegadoNow.conversaciones
+      const ESTADO: Record<string, { t: string; c?: string; dim?: boolean }> = {
+        teToca: { t: '◆ Te pidió algo   ', c: C.amber },
+        espera: { t: '◆ Espera respuesta', c: C.amber },
+        respondio: { t: '✓ Respondió       ', c: C.gate },
+        enviado: { t: '○ Enviado         ', dim: true },
+      }
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Conversaciones</Text>
+              <Text dimColor>{`  ${shorten(abierto ? 'Quién le habla a quién' : resumenConversaciones(filasConv), Math.max(4, w - 27))}`}</Text>
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="conversaciones-plegar" plain hotkey="c" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('conversaciones')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {filasConv.slice(0, 6).map((f, i) => {
+                const est = ESTADO[f.teToca ? 'teToca' : f.estado]!
+                const quien = shorten(`${f.de} → ${f.a}`, Math.max(4, Math.min(24, w - 2 - 19 - 9)))
+                const cuando = f.estado === 'espera' ? fmtDuration(Math.max(0, now - f.desde)) : `hace ${fmtDuration(Math.max(0, now - f.desde))}`
+                const resto = w - 2 - [...quien].length - 2 - 19 - [...cuando].length - 2
+                return (
+                  <Text key={`conv-${i}`} wrap="truncate">
+                    {trozos(
+                      caben(
+                        [
+                          { t: `${quien}  ` },
+                          { t: `${est.t} `, c: est.c, dim: est.dim },
+                          { t: cuando, dim: true },
+                          resto > 6 && f.resumen ? { t: `  «${shorten(f.resumen, resto - 2)}»`, dim: true } : null,
+                        ],
+                        w - 2,
+                      ),
+                    )}
+                  </Text>
+                )
+              })}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+
     const mainPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.main} paddingX={1} width={w}>
+      <Box flexDirection="column" paddingX={1} width={w}>
         <Box justifyContent="space-between">
-          <Text color={C.main} bold wrap="truncate">
+          <Text color={C.main} weight="semibold" wrap="truncate">
             {modelName} · principal
           </Text>
           <Box flexShrink={0}>
-            <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? '● trabajando' : '○ en espera'}</Text>
+            <Text color={m.isRunning ? C.main : C.dim}>
+              {m.isRunning ? '● trabajando' : `${puntoEspera(undefined)} en espera`}
+            </Text>
           </Box>
         </Box>
         {line(
@@ -990,7 +1684,7 @@ export const register: Register = (on, options) => {
               spans: [
                 { text: 'esfuerzo ', dim: true },
                 { text: `${'▮'.repeat(effortN) + '▯'.repeat(4 - effortN)} `, color: C.main },
-                { text: m.effort || '—', color: C.main, bold: true },
+                { text: m.effort || '—', color: C.main, weight: 'semibold' },
               ],
             },
             m.mode ? { spans: [{ text: `modo ${m.mode}`, dim: true }] } : null,
@@ -1014,6 +1708,8 @@ export const register: Register = (on, options) => {
           w - 4,
           3,
         )}
+        {branchNow ? <Text dimColor wrap="truncate">{`⎇ ${branchNow}`}</Text> : null}
+        {resumenUsos(usosNow) ? <Text dimColor wrap="truncate">{resumenUsos(usosNow)}</Text> : null}
         {ctxGauge
           ? line(
               [
@@ -1022,7 +1718,7 @@ export const register: Register = (on, options) => {
                     { text: 'contexto ', dim: true },
                     { text: ctxGauge.on, color: ctxFill.pct !== null && ctxFill.pct >= 80 ? C.warn : C.main },
                     { text: ctxGauge.off, color: C.faint },
-                    { text: ` ${Math.round(ctxFill.pct ?? 0)}%`, bold: true },
+                    { text: ` ${Math.round(ctxFill.pct ?? 0)}%`, weight: 'semibold' },
                   ],
                 },
                 u.tokens !== null ? { spans: [{ text: `${kTokens(u.tokens)}/${kTokens(ctxFill.window)}`, dim: true }] } : null,
@@ -1037,16 +1733,26 @@ export const register: Register = (on, options) => {
                 u.costUsd !== null ? { spans: [{ text: 'costo ', dim: true }, { text: fmtUsd(u.costUsd), color: C.text }] } : null,
                 ...u.limits.slice(0, 2).map((l, i): Piece => {
                   const lg = gauge(l.pct, 5)
+                  // El color marca el umbral (aviso 65 %, alerta 85 %); el ritmo compara el uso con el tiempo de la ventana.
+                  const tono = tonoUso(l.pct)
+                  const ventana = l.kind.includes('five_hour') ? 5 * 3_600_000 : 7 * 86_400_000
+                  const fraccion = l.resetsAt == null ? null : Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / ventana))
+                  // Con menos de 72 columnas no cabe junto al reinicio: se oculta antes que partir la línea.
+                  const ritmo = w >= 72 ? ritmoCupo(l.pct, fraccion) : ''
                   // The time to each reset where the line has room for it: both windows fit from 56 columns,
                   // so a wide pane's half column (59 at 120) has them; a window that doesn't fit is left out.
-                  const resetIn = w >= 56 ? fmtResetIn(l.resetsAt, now) : ''
+                  // The hour the window resets (`↻ vie 06:00`): two windows share this line, so only the hour fits.
+                  const resetAt = w >= 56 ? fmtReinicio(l.resetsAt, now) : ''
+                  const reset = resetAt ? ` ↻ ${resetAt}` : ''
                   return {
                     lead: i > 0 ? 1 : u.costUsd !== null ? 2 : 0,
                     spans: [
                       { text: `${limitLabel(l.kind)} `, dim: true },
-                      { text: lg.on, color: l.pct >= 80 ? C.warn : C.main },
+                      { text: lg.on, color: tono === 'alerta' ? C.warn : tono === 'aviso' ? C.amber : C.main },
                       { text: lg.off, color: C.faint },
-                      { text: ` ${Math.round(l.pct)}%${resetIn ? ` ↻${resetIn}` : ''}`, dim: true },
+                      { text: ` ${Math.round(l.pct)}%`, dim: true },
+                      ...(ritmo ? [{ text: `  ${ritmo}`, color: ritmo.startsWith('⇡') ? C.amber : C.gate }] : []),
+                      { text: reset, dim: true },
                     ],
                   }
                 }),
@@ -1055,6 +1761,7 @@ export const register: Register = (on, options) => {
             )
           : null}
         {m.speed ? <Text dimColor wrap="truncate">{`última respuesta  ${fmtSpeed(m.speed)}`}</Text> : null}
+        {vidaEscritorio(w) ?? vidaSesion(w)}
       </Box>
     )
 
@@ -1064,15 +1771,15 @@ export const register: Register = (on, options) => {
       // Both ends are anchors (the first consult, now): should it run past its box, it asks to lose the middle.
       const tl = consultTimeline(a, now, Math.max(8, w - 4))
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.arch} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           <Box justifyContent="space-between">
-            <Text color={C.arch} bold wrap="truncate">
-              {cfg.architectLabel} · {advising ? 'asesorando' : 'de guardia'}
+            <Text color={C.faint} weight="semibold" wrap="truncate">
+              {cfg.architectLabel} · {advising ? 'asesorando' : `${a.consults.length} ${a.consults.length === 1 ? 'consulta' : 'consultas'}`}
             </Text>
             <Box flexShrink={0}>
               <Text>
                 <Text dimColor>consultas </Text>
-                <Text color={C.arch} bold>
+                <Text color={C.arch} weight="semibold">
                   {a.consults.length}
                 </Text>
               </Text>
@@ -1095,7 +1802,7 @@ export const register: Register = (on, options) => {
               {(['before a plan', 'error repeats', 'before done'] as const).map(mo => {
                 const isOn = lastConsult?.moment === mo
                 return (
-                  <Text color={isOn ? C.arch : C.dim} bold={isOn}>
+                  <Text color={isOn ? C.arch : C.dim} weight={isOn ? 'semibold' : 'regular'}>
                     {isOn ? '◆' : '◇'} {momentLabel(mo)}
                   </Text>
                 )
@@ -1116,7 +1823,7 @@ export const register: Register = (on, options) => {
     const verdictColor = (c: Check) =>
       c.verdict === 'rule' ? C.gate : c.verdict === 'cleared' ? C.cleared : c.verdict === 'ask' ? C.amber : C.warn
     const checkMark = (c: Check) => (
-      <Text color={verdictColor(c)} dimColor={c.inSubagent}>
+      <Text key={c.id} color={verdictColor(c)} dimColor={c.inSubagent}>
         {c.verdict === 'deny' ? '✗' : '■'}
       </Text>
     )
@@ -1131,16 +1838,20 @@ export const register: Register = (on, options) => {
         { spans: [{ text: isShort ? `✗ ${s.deny}` : `✗ ${plural(s.deny, 'denegado', 'denegados')}`, color: s.deny > 0 ? C.warn : C.dim }] },
       ]
       const words = totalsOf(false)
-      const isShort = piecesThatFit(words.map(p => ({ width: widthOf(p) })), w - 4, 2) < words.length
+      const isShort = piecesThatFit(words.map(p => ({ width: anchoDe(p) })), w - 4, 2) < words.length
       const totals = isShort ? totalsOf(true) : words
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.gate} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           <Box justifyContent="space-between">
-            <Text color={C.gate} bold wrap="truncate">
-              {cfg.gateLabel} · revisión
-            </Text>
+            {esLista ? (
+              <Text weight="semibold">Permisos</Text>
+            ) : (
+              <Text color={C.faint} weight="semibold" wrap="truncate">
+                {cfg.gateLabel} · revisión
+              </Text>
+            )}
             <Box flexShrink={0}>
-              <Text dimColor>{`${s.total} revisiones`}</Text>
+              <Text dimColor>{plural(s.total, 'revisión', 'revisiones')}</Text>
             </Box>
           </Box>
           {strip.length === 0 ? <Text color={C.faint}>sin revisiones aún</Text> : markRow(strip.map(checkMark))}
@@ -1188,23 +1899,16 @@ export const register: Register = (on, options) => {
 
     // ---- agents: cards up to the limit, swimlanes beyond it
     const statusColor = (c: AgentCard) => (c.status === 'failed' ? C.warn : c.status === 'done' ? C.gate : C.agent)
-    const glyph = (c: AgentCard) => glifoAgente(now, c.status, cfg.animacion)
-    // El emoji del agente en su pista: va de un lado a otro mientras trabaja y se queda quieto al terminar.
-    // `g` son las celdas de la pista (antes, barra, después); `i` desfasa a cada agente para que no vayan a la vez.
-    const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }, i: number) => {
-      const total = g.before + g.bar + g.after
-      const quieto = Math.max(0, Math.min(total - 2, g.before + g.bar - 2))
-      const p = total < 2 ? null : c.status === 'running' && cfg.animacion ? posicionMarcha(now, total, i * 3) : quieto
-      const { antes, despues } = pistaCarril(g, p)
+    // El símbolo de estado: un giro mientras el agente trabaja (cada uno en su fase) y ✓, ✗ o ○ al acabar.
+    const glyph = (c: AgentCard, i: number) => emojiDeEstado(now, c.status, i, cfg.animacion)
+    // La pista del agente: la barra en su color. El emoji va al principio de la fila, no en la pista.
+    const pistaDe = (c: AgentCard, g: { before: number; bar: number; after: number }) => {
+      const { antes, despues } = pistaCarril(g, null)
       const color = (t: { barra: boolean }) => (t.barra ? statusColor(c) : C.faint)
       return (
         <Text>
-          {antes.map((t, k) => (
-            <Text key={`a${k}`} color={color(t)}>{t.texto}</Text>
-          ))}
-          {p === null ? null : <Text>{emojiDe(c.id)}</Text>}
-          {despues.map((t, k) => (
-            <Text key={`d${k}`} color={color(t)}>{t.texto}</Text>
+          {[...antes, ...despues].map((t, k) => (
+            <Text key={String(k)} color={color(t)}>{t.texto}</Text>
           ))}
         </Text>
       )
@@ -1219,12 +1923,15 @@ export const register: Register = (on, options) => {
       const isNarrow = w < 40
       const header = (
         <Box justifyContent="space-between" width={w}>
-          <Text bold wrap="truncate">
-            {isNarrow ? `agentes · ${running.length}/${cards.length}` : `agentes · ${running.length} activos · ${cards.length} total`}
-          </Text>
+          <Box columnGap={2} flexShrink={1} overflow="hidden">
+            <Text weight="semibold">Agentes</Text>
+            <Text dimColor wrap="truncate">
+              {isNarrow ? `${running.length}/${cards.length}` : `${plural(running.length, 'activo', 'activos')} · ${cards.length} en total`}
+            </Text>
+          </Box>
           {cards.length > 0 ? (
             <Box flexShrink={0}>
-              <Text color={C.faint}>{`1-${Math.min(cards.length, useLanes ? 6 : fit)}${isNarrow ? '' : ' abrir'}`}</Text>
+              <Text color={C.faint}>{`1-${Math.min(cards.length, useLanes ? CARRILES_VISIBLES : fit)}${isNarrow ? '' : ' abrir'}`}</Text>
             </Box>
           ) : null}
         </Box>
@@ -1233,16 +1940,16 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" width={w}>
             {header}
-            <Text color={C.faint}>aún sin subagentes</Text>
+            <Text color={C.faint}>Aún sin subagentes</Text>
           </Box>
         )
       }
       if (useLanes) {
-        const shown = cards.slice(-6)
-        // A lane is its glyph, a label, the bar and a clock: below 34 columns the label narrows, below
-        // 36 the bar, so a 24-column pane still holds it. From 40 they are as they always were.
-        const labelW = Math.min(17, Math.max(7, w - 17))
-        const barW = Math.max(4, w - 11 - labelW)
+        const shown = cards.slice(-CARRILES_VISIBLES)
+        // A lane is its glyph (an emoji, two columns), a label, the bar and a clock: below 34 columns the label
+        // narrows, below 36 the bar, so a 24-column pane still holds it. From 40 they are as they always were.
+        const labelW = Math.min(17, Math.max(7, w - 18))
+        const barW = Math.max(4, w - 12 - labelW)
         const geo = lanes(shown, now, barW)
         return (
           <Box flexDirection="column" width={w}>
@@ -1252,15 +1959,15 @@ export const register: Register = (on, options) => {
               const gm = geo[i]
               const isViewed = viewed === c.id
               return (
-                <Box columnGap={1}>
-                  <Text color={statusColor(c)} bold={isViewed}>
-                    {isViewed ? '▶' : glyph(c)}
+                <Box key={c.id} columnGap={1}>
+                  <Text color={statusColor(c)} weight={isViewed ? 'semibold' : 'regular'}>
+                    {isViewed ? '▶ ' : glyph(c, i)}
                   </Text>
                   <Box width={labelW} flexShrink={0}>
                     <Button key={`card-${c.id}`} plain hotkey={String(i + 1)} label={shorten(cardTitle(c), labelW - 3)} onPress={expandOnPress(c.id)} />
                   </Box>
                   <Box flexShrink={0}>
-                    {pistaDe(c, gm ?? { before: 0, bar: barW, after: 0 }, i)}
+                    {pistaDe(c, gm ?? { before: 0, bar: barW, after: 0 })}
                   </Box>
                   {clock(`lane-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}
                 </Box>
@@ -1281,37 +1988,26 @@ export const register: Register = (on, options) => {
               const isViewed = viewed === c.id
               const sameModel = !c.model || prettyModel(c.model) === modelName
               return (
-                <Box
-                  flexDirection="column"
-                  borderStyle={isViewed ? 'double' : 'round'}
-                  borderColor={c.lastStop === 'max_tokens' ? C.warn : C.agent}
-                  borderDimColor={c.status !== 'running' && !isViewed}
-                  width={cardW}
-                  paddingX={1}
-                >
+                <Box key={c.id} flexDirection="column" width={cardW} paddingX={1}>
                   <Button key={`card-${c.id}`} plain hotkey={String(i + 1)} label={titleLines(cardTitle(c), cardW - 7, cardW - 4)[0]} onPress={expandOnPress(c.id)} />
-                  <Text bold wrap="truncate">
+                  <Text weight={isViewed ? 'semibold' : 'regular'} wrap="truncate">
                     {titleLines(cardTitle(c), cardW - 7, cardW - 4)[1]}
                   </Text>
                   <Text color={C.dim} wrap="truncate">
                     {`${sameModel ? nombreDeTipo(c.type) : `${nombreDeTipo(c.type)} · ${prettyModel(c.model)}`}${c.jev ? ` · ${c.jev}` : ''}`}
                   </Text>
                   <Text dimColor wrap="truncate">
-                    {pasos.has(c.id)
-                      ? `${pasos.get(c.id)!.done}/${pasos.get(c.id)!.total}${pasos.get(c.id)!.note ? ` ${pasos.get(c.id)!.note}` : ''}`
-                      : c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : 'iniciando…'}
+                    {c.steps > 0 ? `ctx ${kTokens(c.ctx)} · sal ${kTokens(c.out)} · ${c.steps} pas.` : c.status === 'running' ? 'iniciando…' : statusLabel(c.status)}
                   </Text>
-                  {cardW >= 14 && (pasos.has(c.id) || c.status === 'running') ? (
-                    <Text color={c.status === 'running' ? C.agent : C.dim} wrap="truncate">
-                      {pasos.has(c.id)
-                        ? barraAvance(pasos.get(c.id)!.done, pasos.get(c.id)!.total, cardW - 4)
-                        : barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
+                  {cardW >= 14 && c.status === 'running' ? (
+                    <Text color={C.agent} wrap="truncate">
+                      {barraIndeterminada(cfg.animacion ? now : 0, cardW - 4)}
                     </Text>
                   ) : null}
-                  {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 }, i)}
+                  {pistaDe(c, { before: Math.max(2, cardW - 4), bar: 0, after: 0 })}
                   <Box columnGap={1}>
                     <Text color={c.lastStop === 'max_tokens' ? C.warn : statusColor(c)}>
-                      {cardW >= 26 ? `${glyph(c)} ${c.lastStop === 'max_tokens' ? 'tope de tokens' : statusLabel(c.status)}` : glyph(c)}
+                      {cardW >= 26 ? `${glyph(c, i)} ${c.lastStop === 'max_tokens' ? 'tope de tokens' : statusLabel(c.status)}` : glyph(c, i)}
                     </Text>
                     <Box flexShrink={0}>{clock(`card-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}</Box>
                   </Box>
@@ -1327,14 +2023,14 @@ export const register: Register = (on, options) => {
     const expandedCard = cards.find(c => c.id === v.expanded)
     const expandedPanel = (w: number) =>
       expandedCard ? (
-        <Box flexDirection="column" borderStyle="single" borderColor={C.agent} paddingX={1} width={w}>
-          <Text bold wrap="wrap">
+        <Box flexDirection="column" paddingX={1} width={w}>
+          <Text weight="semibold" wrap="wrap">
             {expandedCard.description || nombreDeTipo(expandedCard.type)}
           </Text>
           <Text dimColor wrap="truncate">{`${nombreDeTipo(expandedCard.type)} · ${prettyModel(expandedCard.model)} · ${statusLabel(expandedCard.status)} · ${expandedCard.steps} pasos`}</Text>
           {expandedCard.tools.length === 0 ? <Text color={C.faint}>sin llamadas aún</Text> : null}
-          {expandedCard.tools.map(n => (
-            <Text color={n.isError ? C.warn : C.text} wrap="truncate">
+          {expandedCard.tools.map((n, i) => (
+            <Text key={String(i)} color={n.isError ? C.warn : C.text} wrap="truncate">
               {`${n.isError ? '✗' : '·'} ${n.text}`}
             </Text>
           ))}
@@ -1354,11 +2050,11 @@ export const register: Register = (on, options) => {
       const isNarrow = w < 40
       return (
         <Box width={w} columnGap={1}>
-          <Text bold>{isNarrow ? 'loops' : 'otros loops'}</Text>
+          <Text color={C.faint} weight="semibold">{isNarrow ? 'loops' : 'otros loops'}</Text>
           <Text dimColor>{isNarrow ? `${lp.length} · ${active} activos` : `${lp.length} vistos · ${active} activos`}</Text>
           {markRow(
             dots.map(l => (
-              <Text color={isLoopActive(l, now) ? C.agent : l.isDone ? C.dim : C.faint}>{isLoopActive(l, now) ? '●' : l.isDone ? '✓' : '○'}</Text>
+              <Text key={l.id} color={isLoopActive(l, now) ? C.agent : l.isDone ? C.dim : C.faint}>{isLoopActive(l, now) ? '●' : l.isDone ? '✓' : '○'}</Text>
             )),
             1,
           )}
@@ -1370,7 +2066,7 @@ export const register: Register = (on, options) => {
     const receiptPanel = (w: number) => {
       const isReview = t.isReviewing
       return (
-        <Box flexDirection="column" borderStyle="round" borderColor={C.main} borderDimColor={!m.isRunning && !isReview} paddingX={1} width={w}>
+        <Box flexDirection="column" paddingX={1} width={w}>
           {m.isRunning ? (
             <Box width={w - 4} columnGap={1} overflow="hidden">
               <Text color={C.main} wrap="truncate">{`◐ turno de ${modelName.toLowerCase()}`}</Text>
@@ -1382,7 +2078,7 @@ export const register: Register = (on, options) => {
               [
                 { spans: [{ text: r.reason === 'answer' ? '✓' : '✗', color: r.reason === 'answer' ? C.gate : C.warn }] },
                 {
-                  spans: [{ text: `último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}` }],
+                  spans: [{ text: textoUltimoTurno(r) }],
                   fill: true,
                 },
                 r.costDelta !== null ? { spans: [{ text: `· +${fmtUsd(r.costDelta)}`, color: C.main }] } : null,
@@ -1401,8 +2097,6 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // ---- sesión: lo que la sesión ha hecho (herramientas, archivos, tareas, MCP, skills, hooks)
-    // Un panel ancho pone la etiqueta en su columna; uno angosto la deja en la misma línea, que se parte.
     // La barra de vida: una fila dentro del panel, con la vida que le queda de contexto.
     // Una fila por línea, con cada trozo en su Text y los espacios de los bordes en cajas: el gap va en la Box.
     const vidaSesion = (w: number) => {
@@ -1416,7 +2110,7 @@ export const register: Register = (on, options) => {
             const trail = tr.texto.length - tr.texto.trimEnd().length
             return [
               lead > 0 ? <Box key={`l${j}`} width={lead} flexShrink={0} /> : null,
-              <Text key={`t${j}`} color={C[COLOR_DE[tr.tono]]} bold={tr.tono === 'peligro'}>
+              <Text key={`t${j}`} color={C[COLOR_DE[tr.tono]]} weight={tr.tono === 'peligro' ? 'semibold' : 'regular'}>
                 {core}
               </Text>,
               trail > 0 ? <Box key={`r${j}`} width={trail} flexShrink={0} /> : null,
@@ -1428,78 +2122,20 @@ export const register: Register = (on, options) => {
     // En escritorio la vida es un SVG con degradado continuo; en la terminal, la fila de texto.
     const vidaEscritorio = (w: number) => {
       if (e.surface === 'terminal') return null
-      const ui = $.ui.resolve(e)
       const v = vidaDe(ctxFill.pct)
-      if (!('Svg' in ui) || v === null) return null
-      const { Svg } = ui
+      if (!('Svg' in els) || v === null) return null
+      const { Svg } = els
       const px = Math.max(120, Math.min(600, w * 8 - 48))
       return <Svg source={svgVida(v, px)} alt={`vida ${v}%`} width={px} height={18} />
     }
-    const sesionPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} width={w}>
-        <Text dimColor wrap="truncate">
-          sesión
-        </Text>
-        {sesionRows.map(f =>
-          w >= 40 ? (
-            <Box columnGap={1}>
-              <Box width={12} flexShrink={0}>
-                <Text dimColor wrap="truncate">
-                  {f.etiqueta}
-                </Text>
-              </Box>
-              <Box flexShrink={1}>
-                <Text wrap="wrap">{f.valor}</Text>
-              </Box>
-            </Box>
-          ) : (
-            <Text wrap="wrap">{`${f.etiqueta}: ${f.valor}`}</Text>
-          ),
-        )}
-        {vidaEscritorio(w) ?? vidaSesion(w)}
-      </Box>
-    )
-
-    // ---- log: whatever rows the other panels leave, 4 to 8
-    // The main box's speed line, the legend's gap and the gap above the log are a row each.
-    const used = 2 + legendGap + 5 + (m.speed ? 1 : 0) + 2 + (showArchitect ? 6 : 0) + (jevVisible ? 7 + (resumenJevs.ritmo ? 1 : 0) : 0) + (enDiagrama ? (jevVisible ? 1 : 0) + (panels.includes('agents') ? 3 : 0) + (panels.includes('agents') && running.length === 0 ? 3 : 0) + 1 : 0) + 6 + (v.gateOpen ? 5 : 0) + (cards.length > cfg.maxCards ? 3 + Math.min(6, cards.length) : 8) + (expandedCard ? 8 : 0) + (lp.length ? 1 : 0) + 3 + ((sesionRows.length > 0 || vidaVisible) ? sesionRows.length + 2 + (vidaVisible ? 1 : 0) : 0)
-    const bodyRows = e.props.scroll?.bodyRows ?? e.viewport?.rows ?? 40
-    const nLog = logRows(bodyRows, used)
-    const shownLines = (viewed ? lines.filter(l => l.agentId === viewed) : lines).slice(-nLog)
-    const whoLabel = (who: string) => ({ main: 'principal', gate: 'permisos', you: 'tú', engine: 'motor' } as Record<string, string>)[who] ?? who
-    const colorOf = (l: LogLine) =>
-      l.kind === 'error' ? C.warn : l.kind === 'consult' ? C.arch : l.who === 'main' ? C.main : l.who === 'gate' ? C.gate : l.who === 'you' ? C.text : C.agent
-    // Below 40 columns a line keeps its minute, not its second, and a shorter name.
-    const logPanel = (w: number) => (
-      <Box flexDirection="column" borderStyle="round" borderColor={C.faint} paddingX={1} marginTop={1} width={w}>
-        <Text dimColor wrap="truncate">
-          {viewed ? 'registro · este agente' : 'registro de sesión'}
-        </Text>
-        {shownLines.length === 0 ? <Text color={C.faint}>nada aún</Text> : null}
-        {shownLines.map(l => (
-          <Box>
-            <Box width={w < 40 ? 6 : 9} flexShrink={0}>
-              <Text color={C.faint}>{w < 40 ? fmtClock(l.at).slice(0, 5) : fmtClock(l.at)}</Text>
-            </Box>
-            <Box width={w < 40 ? 9 : 13} flexShrink={0}>
-              <Text color={colorOf(l)} bold wrap="truncate">
-                {whoLabel(l.who)}
-              </Text>
-            </Box>
-            <Text color={l.kind === 'error' ? C.warn : C.text} wrap="truncate">
-              {l.text}
-            </Text>
-          </Box>
-        ))}
-      </Box>
-    )
-
     // La caja JEV sale en la columna solo con decisiones; en el diagrama, siempre que el panel esté en `panels`.
     const jevPanel = (w: number) => panelJev(els, C, w, resumenJevs)
 
     const draw = (p: Panel, w: number) =>
       p === 'main'
-        ? mainPanel(w)
+        ? esLista
+          ? sesionPanel(w)
+          : mainPanel(w)
         : p === 'jev'
           ? jevPanel(w)
           : p === 'architect'
@@ -1510,23 +2146,20 @@ export const register: Register = (on, options) => {
                 ? agentsPanel(w)
                 : p === 'loops'
                   ? loopsPanel(w)
-                  : p === 'receipt'
-                    ? receiptPanel(w)
-                    : p === 'sesion'
-                      ? sesionPanel(w)
-                      : logPanel(w)
+                  : receiptPanel(w)
 
     // Panels with the flow between them; the agents panel draws its own rails.
+    // En la lista (auto) las secciones se separan con una fila en blanco, sin conectores.
     const column = (ps: Panel[], w: number) => (
-      <Box flexDirection="column" width={w}>
+      <Box flexDirection="column" width={w} gap={esLista ? 1 : 0}>
         {ps.map((p, i) => {
           const prev = ps[i - 1]
           const link =
-            i === 0 || p === 'agents' || prev === 'agents' || p === 'log' || p === 'loops' || prev === 'loops'
+            esLista || i === 0 || p === 'agents' || prev === 'agents' || p === 'loops' || prev === 'loops'
               ? null
               : rail(`link-${p}`, p === 'architect' ? advising : m.isRunning, p === 'architect' ? C.arch : C.main, w)
           return (
-            <Box flexDirection="column">
+            <Box key={p} flexDirection="column">
               {link}
               {draw(p, w)}
               {p === 'agents' ? expandedPanel(w) : null}
@@ -1537,42 +2170,17 @@ export const register: Register = (on, options) => {
     )
 
     // Desktop draws the agents' time axis as SVG under the panels.
-    const svgLanes =
-      e.surface !== 'terminal' && cards.length > 0
-        ? (() => {
-            const { Svg } = $.ui.resolve(e)
-            const rowH = 18
-            const pxW = 520
-            const geo = lanes(cards.slice(-10), now, 100)
-            const rects = cards
-              .slice(-10)
-              .map((c, i) => {
-                const gm = geo[i]
-                const x = 150 + ((gm?.before ?? 0) / 100) * (pxW - 160)
-                const wpx = Math.max(3, ((gm?.bar ?? 1) / 100) * (pxW - 160))
-                const fill = c.status === 'running' ? SVG_COLORS.running : c.status === 'done' ? SVG_COLORS.done : c.status === 'failed' ? SVG_COLORS.failed : SVG_COLORS.other
-                const label = shorten(cardTitle(c), 22).replace(/[<&>]/g, '')
-                return `<text x="4" y="${i * rowH + 13}" font-size="11" fill="${SVG_COLORS.label}">${label}</text><rect x="${x}" y="${i * rowH + 4}" width="${wpx}" height="10" rx="3" fill="${fill}"/>`
-              })
-              .join('')
-            const svgH = Math.min(10, cards.length) * rowH + 4
-            // No width or height on the element: it takes the markup's own width up to the pane's and
-            // scales down to fit a narrow one, rather than running past it at 520 pixels.
-            return (
-              <Svg
-                source={`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${svgH}" viewBox="0 0 ${pxW} ${svgH}">${rects}</svg>`}
-                alt={`${cards.length} agentes en una línea de tiempo`}
-              />
-            )
-          })()
-        : null
+    const svgLanes = e.surface !== 'terminal' && panels.includes('agents') && cards.length > 0 ? carrilesSvg($.ui.resolve(e).Svg, cards, now) : null
 
     // Inline above the prompt (the terminal's main screen), the pane is a summary of at most 8 rows.
-    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline')
+    // Con `auto` y 66 columnas o más, el diagrama también va inline; el resumen queda para lo más estrecho.
+    const esperaOtra = otrasVivas.find(o => o.estado === 'espera')
+    const cavMini = etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full')
+    const isMini = layout === 'mini' || (layout === 'auto' && e.props.placement === 'inline' && !enDiagrama && !enMapa)
     if (isMini) {
-      const live = [...cards.filter(c => c.status === 'running'), ...cards.filter(c => c.status !== 'running').reverse()].slice(0, 3)
+      const live = cfg.panels.includes('agents') ? [...cards.filter(c => c.status === 'running'), ...cards.filter(c => c.status !== 'running').reverse()].slice(0, 3) : []
       const counts = `${plural(s.rule, 'permitido', 'permitidos')} · ${s.cleared} ${decider}${s.ask > 0 ? ` · ${plural(s.ask, 'pendiente', 'pendientes')}` : ''} · ${plural(s.deny, 'denegado', 'denegados')}`
-      const strip = g.recent.slice(-Math.max(4, marksIn(W - cfg.gateLabel.length - 2 - counts.length, isTerminal)))
+      const strip = cfg.panels.includes('gate') ? g.recent.slice(-Math.max(4, marksIn(W - cfg.gateLabel.length - 2 - counts.length, isTerminal))) : []
       const mg = ctxFill.pct !== null ? gauge(ctxFill.pct, 6) : null
       return (
         <Box flexDirection="column" width={W}>
@@ -1580,7 +2188,7 @@ export const register: Register = (on, options) => {
             [
               {
                 spans: [
-                  { text: modelName, color: C.main, bold: true },
+                  { text: modelName, color: C.main, weight: 'semibold' },
                   { text: m.isRunning ? ' ● trabajando' : ' ○ en espera', color: m.isRunning ? C.main : C.dim },
                 ],
               },
@@ -1598,8 +2206,10 @@ export const register: Register = (on, options) => {
                   ? { spans: [{ text: `⟲${u.compactions}`, color: C.amber }] }
                   : null,
               u.costUsd !== null ? { spans: [{ text: `· ${fmtUsd(u.costUsd)}`, dim: true }] } : null,
+              ...u.limits.slice(0, 2).map((l): Piece => ({ spans: [{ text: `· ${nombreCupo(l.kind)} `, dim: true }, { text: `${Math.round(l.pct)}%`, color: tinta(l.pct) }] })),
+              cavMini ? { spans: [{ text: `· ${cavMini}`, color: C.amber }] } : null,
               jevN > 0 ? { spans: [{ text: `· jev [${jevN} decisiones]`, color: C.agent }] } : null,
-              showArchitect ? { spans: [{ text: `· ${cfg.architectLabel.toLowerCase()} ${advising ? 'asesorando' : a.consults.length}`, color: C.arch }] } : null,
+              showArchitect && cfg.panels.includes('architect') ? { spans: [{ text: `· ${cfg.architectLabel.toLowerCase()} ${advising ? 'asesorando' : a.consults.length}`, color: C.arch }] } : null,
             ],
             W,
           )}
@@ -1612,9 +2222,31 @@ export const register: Register = (on, options) => {
               </Text>
             </Box>
           ) : null}
-          {live.map(c => (
-            <Box columnGap={1}>
-              <Text color={statusColor(c)}>{glyph(c)}</Text>
+          {cacheNow && lineaNow?.prompt_cache ? (
+            <Text wrap="truncate">
+              <Text dimColor>Cache </Text>
+              <Text color={cacheNow.caliente ? C.gate : C.amber}>{cacheNow.caliente ? `● Caliente ${cacheNow.queda ?? ''}` : '○ Fría'}</Text>
+              {esperaOtra ? <Text color={C.amber}>{` · ◆ ${esperaOtra.nombre ?? esperaOtra.carpeta} te espera`}</Text> : null}
+            </Text>
+          ) : null}
+          {planesAhora.slice(0, 2).map((p, i) => {
+            const f = filaPlan(p, now)
+            const glifo = f.palabra === 'En curso' ? emojiDeEstado(now, 'running', 3 + i, cfg.animacion) : f.glifo
+            const color = f.palabra === 'Te espera' ? C.amber : f.palabra === 'Falló' ? C.warn : f.palabra === 'Hecho' ? C.gate : C.main
+            return (
+              <Box key={`mini-plan-${p.id}`} flexDirection="column">
+                <Text wrap="truncate">
+                  <Text color={color}>{`${glifo} ${f.palabra} `}</Text>
+                  <Text>{`${f.titulo} `}</Text>
+                  <Text dimColor>{`${f.hechos}/${f.total}${f.paso && f.palabra !== 'Hecho' ? `  Paso: ${f.paso}` : ''}  ${f.tiempo}`}</Text>
+                </Text>
+                {f.nota ? <Text color={color} wrap="truncate">{`  ↳ ${f.nota}`}</Text> : null}
+              </Box>
+            )
+          })}
+          {live.map((c, i) => (
+            <Box key={c.id} columnGap={1}>
+              <Text color={statusColor(c)}>{glyph(c, i)}</Text>
               <Box width={Math.max(6, W - 30)} flexShrink={0}>
                 <Text wrap="truncate">{cardTitle(c)}</Text>
               </Box>
@@ -1622,13 +2254,13 @@ export const register: Register = (on, options) => {
               {clock(`mini-clock-${c.id}`, c.spawnedAt, c.endedAt, C.dim)}
             </Box>
           ))}
-          {cards.length > live.length ? (
+          {cfg.panels.includes('agents') && cards.length > live.length ? (
             <Text color={C.faint} wrap="truncate">{`+${cards.length - live.length} agentes más · /tablero layout compact para ver todos`}</Text>
           ) : null}
-          {lp.length > 0 ? <Text dimColor wrap="truncate">{`otros loops ${lp.length} · ${lp.filter(l => isLoopActive(l, now)).length} activos`}</Text> : null}
-          {!m.isRunning && r ? (
+          {cfg.panels.includes('loops') && lp.length > 0 ? <Text dimColor wrap="truncate">{`otros loops ${lp.length} · ${lp.filter(l => isLoopActive(l, now)).length} activos`}</Text> : null}
+          {!m.isRunning && r && cfg.panels.includes('receipt') ? (
             <Text dimColor wrap="truncate">
-              {`último turno ${fmtDuration(r.durationMs)} · ${plural(r.agents, 'agente', 'agentes')} · ${plural(r.edits, 'edición', 'ediciones')} · ${plural(r.errors, 'error', 'errores')}${r.costDelta !== null ? ` · +${fmtUsd(r.costDelta)}` : ''}`}
+              {`${textoUltimoTurno(r)}${r.costDelta !== null ? ` · +${fmtUsd(r.costDelta)}` : ''}`}
             </Text>
           ) : null}
         </Box>
@@ -1648,11 +2280,11 @@ export const register: Register = (on, options) => {
 
     // El diagrama: el asesor a la izquierda, el lead y la caja JEV a la derecha, y debajo las tarjetas. Los paneles
     // que el diagrama no tiene sitio (permisos, bucles, turno, sesión) siguen en columna debajo, sin perderse.
-    // En el diagrama el asesor sale siempre, «de guardia» también sin consultas; solo lo quita `panels` sin architect.
-    const conAsesor = cfg.panels.includes('architect')
+    // El asesor sale solo si hubo consultas (y `panels` lo incluye): sin asesor configurado, la caja estorbaba vacía.
+    const conAsesor = cfg.panels.includes('architect') && showArchitect
     const { aw, rw } = anchosDiagrama(W, conAsesor)
     const conTarjetas = panels.includes('agents')
-    const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents', 'log'].includes(p))
+    const restoPaneles = panels.filter(p => !['main', 'jev', 'architect', 'agents'].includes(p))
     const diagramaBody = enDiagrama ? disposicionDiagrama(els, C, {
       ancho: W,
       asesor: conAsesor ? architectPanel(aw) : null,
@@ -1664,35 +2296,134 @@ export const register: Register = (on, options) => {
       expandido: conTarjetas ? expandedPanel(W) : null,
       vuelta: conTarjetas && running.length === 0,
       resto: restoPaneles.length > 0 ? column(restoPaneles, W) : null,
-      registro: panels.includes('log') ? logPanel(W) : null,
-      barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}] · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : 'de guardia'}]${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
+      barra: `subagentes [${cards.filter(c => c.status !== 'running').length}/${cards.length}]${conAsesor ? ` · ${cfg.architectLabel.toLowerCase()} [${advising ? 'asesorando' : a.consults.length}]` : ''}${jevN > 0 ? ` · jev [${jevN} decisiones]` : ''}`,
+      motion: cfg.motion,
+      activo: running.length > 0,
     }) : null
 
-    const body = enDiagrama ? diagramaBody : isWide ? (
+    const nivelRit = filaRit?.nivel
+    const ritmoMapa = rit && nivelRit
+      ? { texto: textoRitmoMapa(rit.exceso, nivelRit), k: tintaDeNivel(nivelRit) }
+      : undefined
+    // El tope que rige ahora para los subagentes (no el último que se aplicó): se calcula del uso de la cuenta.
+    const topeVigente = topeAhora(jevs.limites, now / 1000)
+    anotarCosto(muestrasCosto, u.costUsd, now, SPARK_ANCHO)
+    // La vista del mapa (`auto`, desde 40 columnas): sus datos y su dibujo están en mapa-vista.tsx.
+    const mapaDatos = datosDelMapa({
+      now,
+      rama: branchNow,
+      u,
+      m,
+      t,
+      r,
+      s,
+      cards,
+      lp,
+      a,
+      jevs,
+      usos: usosNow,
+      muestras: muestrasCosto,
+      panels: cfg.panels,
+      jevN,
+      modelo: modelName,
+      agentesActivos: running.length,
+      contexto: ctxFill.pct,
+      asesorVisible: showArchitect,
+      asesorActivo: advising,
+      ritmo: ritmoMapa,
+      tope: topeVigente,
+    })
+    if (enMapa) return vistaMapa(els, C, mapaDatos, W, now, cfg.animacion)
+
+    // La lista (1.3.0): Sesión, Planes, Agentes, Jev, Asesor, Aduana, Gasto, Sesiones, bucles, Permisos y turno.
+    const listaBody = (
+      <Box flexDirection="column" width={W} gap={1}>
+        {[
+          draw('main', W),
+          planesAhora.length > 0 ? planesPanel(W) : null,
+          !isEmpty.agents && cfg.panels.includes('agents') ? (
+            <Box key="agentes" flexDirection="column">
+              {agentsPanel(W)}
+              {expandedPanel(W)}
+            </Box>
+          ) : null,
+          !isEmpty.jev && cfg.panels.includes('jev') ? jevPanel(W) : null,
+          !isEmpty.architect && cfg.panels.includes('architect') ? architectPanel(W) : null,
+          aduanaPanel(W),
+          gastoPanel(W),
+          sesionesPanel(W),
+          conversacionesPanel(W),
+          !isEmpty.loops && cfg.panels.includes('loops') ? loopsPanel(W) : null,
+          !isEmpty.gate && cfg.panels.includes('gate') ? gatePanel(W) : null,
+          !isEmpty.receipt && cfg.panels.includes('receipt') ? receiptPanel(W) : null,
+        ].filter(Boolean)}
+      </Box>
+    )
+    const body = esLista ? listaBody : enDiagrama ? diagramaBody : isWide ? (
       <Box flexDirection="column">
         <Box columnGap={2}>
           {column(panels.filter(p => p === 'main' || p === 'architect' || p === 'gate'), colW)}
-          {column(panels.filter(p => p === 'agents' || p === 'loops' || p === 'receipt' || p === 'sesion'), colW)}
+          {column(panels.filter(p => p === 'agents' || p === 'loops' || p === 'receipt'), colW)}
         </Box>
-        {panels.includes('log') ? logPanel(W) : null}
       </Box>
     ) : (
       column(panels, W)
     )
+
+    // La lista lleva una cabecera sobria: nombre, modelo y estado a la izquierda; versión, tiempo y hora a la derecha,
+    // atenuados; debajo, una línea fina. Sin emoji ni leyenda de colores.
+    if (esLista) {
+      const servicio = cfg.extras.has('servicio') && W >= 80 ? fuentesNow.servicio : null
+      const dcha = [
+        W >= 48 ? `v${MOD_VERSION}` : '',
+        W >= 40 && u.startedAt ? fmtDuration(now - u.startedAt) : '',
+        // herdr ya muestra la rama y la hora arriba: fuera de herdr las da la cabecera.
+        !herdr && branchNow && W >= 70 ? `⎇ ${branchNow}` : '',
+        !herdr ? fmtClock(now).slice(0, 5) : '',
+      ].filter(Boolean).join(' · ')
+      // En un panel muy angosto la etiqueta del modo no cabe junto al estado: se omite.
+      const cav = W >= 44 ? etiquetaCaveman(cavemanNow === 'lite' || cavemanNow === 'ultra' || cavemanNow === 'normal' ? cavemanNow : 'full') : null
+      return (
+        <Box flexDirection="column" width={W}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">TABLERO</Text>
+              <Text dimColor>{' · '}</Text>
+              <Text color={m.isRunning ? C.main : C.dim}>{m.isRunning ? `${emojiDeEstado(now, 'running', 0, cfg.animacion)} Trabajando` : '○ En espera'}</Text>
+              {cav ? <Text dimColor>{' · '}</Text> : null}
+              {cav ? <Text color={C.amber}>{cav}</Text> : null}
+              {showArchitect && advising ? <Text color={C.arch}>{' · Asesorando'}</Text> : null}
+            </Text>
+            <Box flexShrink={0}>
+              <Text>
+                {servicio ? <Text color={servicio.ok ? C.gate : C.amber}>{`${servicio.ok ? '✓' : '◆'} ${servicio.texto}   `}</Text> : null}
+                <Text dimColor tabular>{dcha}</Text>
+              </Text>
+            </Box>
+          </Box>
+          <Text color={C.faint}>{'─'.repeat(W)}</Text>
+          {body}
+          {svgLanes}
+        </Box>
+      )
+    }
 
     return (
       <Box flexDirection="column" width={W}>
         {/* Below 40 columns the frame's own title names the pane, so the header starts at the model. */}
         {line(
           [
-            W >= 40 ? { spans: [{ text: 'TABLERO', bold: true }, { text: ' ·', color: C.dim, bold: true }] } : null,
-            { spans: [{ text: modelName.toUpperCase(), color: C.main, bold: true }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', bold: true }] },
+            W >= 40 ? { spans: [{ text: 'TABLERO', weight: 'semibold' }, { text: ' ·', color: C.dim, weight: 'semibold' }] } : null,
+            { spans: [{ text: modelName.toUpperCase(), color: C.main, weight: 'semibold' }, { text: m.isRunning ? ' TRABAJA' : ' EN ESPERA', weight: 'semibold' }] },
+            W >= 40 ? { spans: [{ text: `v${MOD_VERSION}`, dim: true }] } : null,
+            W >= 56 ? { spans: [{ text: `⏱ ${u.startedAt ? fmtDuration(now - u.startedAt) : '—'}`, dim: true }] } : null,
+            W >= 56 ? { spans: [{ text: `🕐 ${fmtClock(now).slice(0, 5)}`, dim: true }] } : null,
             showArchitect
               ? {
                   spans: [
-                    { text: '· ', color: C.dim, bold: true },
-                    { text: cfg.architectLabel, color: C.arch, bold: true },
-                    { text: advising ? ' ASESORANDO' : ' DE GUARDIA', bold: true },
+                    { text: '· ', color: C.dim, weight: 'semibold' },
+                    { text: cfg.architectLabel, color: C.arch, weight: 'semibold' },
+                    { text: advising ? ' ASESORANDO' : ' DE GUARDIA', weight: 'semibold' },
                   ],
                 }
               : null,
@@ -1703,7 +2434,7 @@ export const register: Register = (on, options) => {
         )}
         <Box key="legend" justifyContent="center" columnGap={2} marginBottom={legendGap}>
           {legend.map(l => (
-            <Box flexShrink={0}>
+            <Box key={l.label} flexShrink={0}>
               <Text>
                 <Text color={l.color}>■</Text>
                 <Text dimColor>{` ${l.label}`}</Text>
@@ -1715,12 +2446,24 @@ export const register: Register = (on, options) => {
         {svgLanes}
       </Box>
     )
+    }
+    const arbol = await pintar()
+    if (esPanel || !debajo) return arbol
+    const { Box } = $.ui.resolve(entrada)
+    return (
+      <Box flexDirection="column">
+        {arbol}
+        {debajo}
+      </Box>
+    )
   }).catch(($, e, next) => {
+    // Sobre el prompt, un fallo no deja una caja de error: la fila simplemente no sale.
+    if (e.component === 'AbovePrompt') return null
     // Without this a failed draw leaves the engine's empty pane.
     const { Box, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column" width={Math.max(20, e.props.bodyColumns)}>
-        <Text bold>TABLERO</Text>
+        <Text weight="semibold">TABLERO</Text>
         <Text color={C.warn} wrap="wrap">{`falló el dibujo (${next.error.kind}): ${next.error.message ?? 'sin mensaje'}`}</Text>
       </Box>
     )

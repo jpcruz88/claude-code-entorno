@@ -47,3 +47,13 @@ Una línea por memoria, sin frontmatter y sin contenido:
 - Antes de recomendar un archivo, función o bandera que aparezca en una memoria,
   verifica que sigue existiendo.
 - Nunca guardes claves, tokens, contraseñas ni datos personales de terceros.
+
+### El hilo de la conversación
+
+- Tras compactar o reanudar, el hook `hilo.py` te da los mensajes del usuario tal como
+  los escribió. Si el resumen de la compactación los contradice, valen las citas.
+- Para saber qué se dijo o se decidió en una sesión pasada, no lo reconstruyas de
+  memoria: corre `python3 ~/.claude/hooks/hilo.py buscar "<término>"` (con `--todos`
+  busca en todos los proyectos) y cita la fecha y la sesión. Una sesión entera sale
+  con `python3 ~/.claude/hooks/hilo.py ver <id>`.
+- Si no aparece, di que no lo encontraste. No lo inventes.

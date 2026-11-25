@@ -65,3 +65,66 @@ test('sin percent no avisa ni falla', async ($, on) => {
 
   expect(toasts).toEqual([])
 })
+
+const nucleo = (on: Parameters<Parameters<typeof test>[1]>[1]) => {
+  on('ui.toast', () => ({ value: undefined }))
+  on('ui.notify', () => ({ value: { isSent: true, channel: 'terminal_bell' } }))
+  on('session.measure', (_, e) => ({ changed: e.changed }))
+  on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
+}
+
+test('antes de cruzar el 70 % el mensaje entra sin nota', async ($, on) => {
+  nucleo(on)
+
+  await $.session.measure(medida(40))
+  const r = await $.prompt.submit({ text: 'hola' })
+
+  expect(r.context ?? []).toEqual([])
+})
+
+test('tras cruzar el 70 % el siguiente mensaje lleva la nota de handoff, una sola vez', async ($, on) => {
+  nucleo(on)
+
+  await $.session.measure(medida(71))
+  const primero = await $.prompt.submit({ text: 'sigue' })
+  const segundo = await $.prompt.submit({ text: 'y ahora esto' })
+
+  expect(primero.text).toBe('sigue')
+  expect(primero.context).toHaveLength(1)
+  expect(primero.context?.[0]).toContain('70 %')
+  expect(primero.context?.[0]).toContain('handoff.md')
+  expect(segundo.context ?? []).toEqual([])
+})
+
+test('al cruzar el 85 % la nota vuelve a ir, con el 85 %', async ($, on) => {
+  nucleo(on)
+
+  await $.session.measure(medida(71))
+  await $.prompt.submit({ text: 'uno' })
+  await $.session.measure(medida(86))
+  const r = await $.prompt.submit({ text: 'dos' })
+
+  expect(r.context).toHaveLength(1)
+  expect(r.context?.[0]).toContain('85 %')
+})
+
+test('si cruza 70 % y 85 % antes del siguiente mensaje, va una sola nota con el más alto', async ($, on) => {
+  nucleo(on)
+
+  await $.session.measure(medida(71))
+  await $.session.measure(medida(86))
+  const r = await $.prompt.submit({ text: 'sigue' })
+
+  expect(r.context).toHaveLength(1)
+  expect(r.context?.[0]).toContain('85 %')
+})
+
+test('tras compactar no queda nota pendiente', async ($, on) => {
+  nucleo(on)
+
+  await $.session.measure(medida(71))
+  await $.session.measure(medida(30))
+  const r = await $.prompt.submit({ text: 'sigue' })
+
+  expect(r.context ?? []).toEqual([])
+})
