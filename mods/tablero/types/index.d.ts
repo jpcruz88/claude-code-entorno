@@ -245,7 +245,18 @@ declare module 'claude-code' {
       /** Secciones plegadas del panel: Gasto (g), Sesiones (v) y Conversaciones (c). */
       plegado: { gasto: boolean; sesiones: boolean; conversaciones: boolean }
       /** Los mensajes de todas las sesiones y cuándo empezó y terminó el último turno del lead. */
-      conversaciones: { todas: import('../hooks/conversaciones').Mensaje[]; turnoFin: number | null; turnoInicio: number | null }
+      conversaciones: { todas: {
+          id: string
+          de: string
+          deNombre: string
+          a: string | null
+          aNombre: string
+          canal: 'herdr' | 'claude'
+          resumen: string
+          enviado: number
+          esperaFin: number | null
+          espera: boolean
+        }[]; turnoFin: number | null; turnoInicio: number | null }
       /** El modo caveman que dicen los prompts de la sesión. */
       caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */

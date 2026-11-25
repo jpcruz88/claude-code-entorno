@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.4 (tablero)
+
+- **Contrato de tipos:** `types/index.d.ts` declara el tipo de los mensajes de Conversaciones dentro del archivo, sin `import`. `claude plugin validate` exige un contrato autónomo y fallaba en el CI. Sin cambios de comportamiento.
+
 ## 1.4.3 (tablero)
 
 - **Pruebas:** el valor de ejemplo de la prueba de secretos se arma en tiempo de ejecución, para que gitleaks no lo tome por un secreto real. Sin cambios de comportamiento.
