@@ -253,8 +253,9 @@ class PasoOpenCodeWindows(unittest.TestCase):
     def test_sin_opencode_no_toca_nada(self):
         salida = self.correr("--sin-opencode")
         self.assertFalse(self.init.exists())
-        for perfil in self.perfiles:
-            self.assertFalse(perfil.exists())
+        for perfil in self.perfiles:  # el perfil puede existir por el atajo cl
+            texto = perfil.read_text(encoding="utf-8") if perfil.exists() else ""
+            self.assertNotIn(LINEA_PS1, texto)
         self.assertIn("Se omite (--sin-opencode).", salida)
 
 

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Atajo `cl`: arranca Claude Code sin pedir permisos (--dangerously-skip-permissions).
+# El instalador lo copia a ~/.local/bin, así funciona en cualquier shell.
+# En Windows es una función de tu perfil de PowerShell (ver instalar_comun.py).
+exec claude --dangerously-skip-permissions "$@"

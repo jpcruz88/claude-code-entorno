@@ -768,6 +768,18 @@ class Instalador:
         self.instalar_archivo(origen.read_bytes(), destino, origen.relative_to(REPO))
         linea = ('if (Test-Path "$HOME\\.config\\claude-code-entorno\\opencode.ps1") '
                  '{ . "$HOME\\.config\\claude-code-entorno\\opencode.ps1" }')
+        if self.agregar_a_perfiles_ps(linea, "OpenCode como respaldo de Claude Code (ver README)"):
+            self.pendientes.append("Abre una terminal de PowerShell nueva para usar cl-go y cl-or.")
+        self.pendientes.append(
+            "cl-go necesita OPENCODE_API_KEY y cl-or necesita OPENROUTER_API_KEY: "
+            "defínelas como variables de usuario de Windows, nunca en el repo. "
+            "Sin ellas los comandos no se crean.")
+
+    def agregar_a_perfiles_ps(self, linea, comentario):
+        """Agrega `linea` (con su comentario) a cada perfil de PowerShell que no la tenga.
+
+        Devuelve True si cambió algún perfil.
+        """
         agregado = False
         for perfil in self.perfiles_ps:
             texto = perfil.read_text(encoding="utf-8-sig") if perfil.exists() else ""
@@ -779,16 +791,32 @@ class Instalador:
                 perfil.parent.mkdir(parents=True, exist_ok=True)
                 separador = "\n" if texto and not texto.endswith("\n") else ""
                 with perfil.open("a", encoding="utf-8") as f:
-                    f.write("%s\n# OpenCode como respaldo de Claude Code (ver README)\n%s\n"
-                            % (separador, linea))
+                    f.write("%s\n# %s\n%s\n" % (separador, comentario, linea))
                 self.info("agregado a %s" % perfil)
                 agregado = True
-        if agregado:
-            self.pendientes.append("Abre una terminal de PowerShell nueva para usar cl-go y cl-or.")
-        self.pendientes.append(
-            "cl-go necesita OPENCODE_API_KEY y cl-or necesita OPENROUTER_API_KEY: "
-            "defínelas como variables de usuario de Windows, nunca en el repo. "
-            "Sin ellas los comandos no se crean.")
+        return agregado
+
+    # ------------------------------------------- 10b. atajo cl (Claude con bypass)
+    def atajo_cl(self):
+        """`cl`: Claude Code sin pedir permisos, en Mac, Linux y Windows.
+
+        En Mac y Linux es un script en ~/.local/bin (vale en cualquier shell). En
+        Windows, PowerShell no corre ese script: va como función en su perfil.
+        """
+        self.paso("Atajo cl (claude --dangerously-skip-permissions)")
+        if self.plataforma == "windows":
+            if self.agregar_a_perfiles_ps(
+                    "function cl { claude --dangerously-skip-permissions @args }",
+                    "Atajo cl: Claude Code sin pedir permisos (claude-code-entorno)"):
+                self.pendientes.append("Abre una terminal de PowerShell nueva para usar cl.")
+            return
+        origen = REPO / "terminal" / "cl"
+        local_bin = self.home / ".local" / "bin"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), local_bin / "cl",
+                              origen.relative_to(REPO), ejecutable=True)
+        rutas = [os.path.expanduser(x) for x in os.environ.get("PATH", "").split(os.pathsep)]
+        if str(local_bin) not in rutas:
+            self.aviso("~/.local/bin no está en tu PATH: agrégalo a tu .zshrc o .bashrc para usar cl.")
 
     # ---------------------------------------- 11. config global de OpenCode
     def opencode_config(self):
@@ -1009,7 +1037,7 @@ def main(argv=None):
         a.python_hooks = '"%s"' % a.python_hooks  # ruta con posibles espacios
     inst = Instalador(a)
     for paso in (inst.archivos, inst.settings, inst.plugins, inst.mods, inst.skills, inst.mcp,
-                 inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.opencode,
+                 inst.herdr, inst.ghostty, inst.nvim, inst.terminal, inst.atajo_cl, inst.opencode,
                  inst.opencode_config, inst.git):
         try:
             paso()
