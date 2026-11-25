@@ -20,7 +20,7 @@ const banda = (bodyColumns = 100) => ({
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 12, bodyColumns, scroll: { offset: 0, bodyRows: 12 }, view: {}, rows: [] },
 })
 
-type Opciones = { herdr?: boolean; colocado?: boolean; cache?: Record<string, unknown>; ghFalla?: boolean; llamadasGh?: { n: number }; otraCerrada?: boolean; claudeMdSoloImporta?: boolean }
+type Opciones = { herdr?: boolean; colocado?: boolean; cache?: Record<string, unknown>; ghFalla?: boolean; llamadasGh?: { n: number }; otraCerrada?: boolean; claudeMdSoloImporta?: boolean; conversaciones?: { lista: unknown[] } }
 
 const motor = (on: On, o: Opciones = {}) => {
   const reloj = mock.clock(on)
@@ -44,6 +44,7 @@ const motor = (on: On, o: Opciones = {}) => {
     throw new Error('ENOENT')
   })
   on('fs.read', (_$, e) => {
+    if (o.conversaciones && String(e.path) === '/casa/.claude/tablero/conversaciones/otra.json') return { value: JSON.stringify(o.conversaciones.lista) }
     if (o.claudeMdSoloImporta && String(e.path) === '/x/claude-code-entorno/CLAUDE.md') return { value: '@AGENTS.md\n' }
     if (String(e.path).endsWith('/.claude/tablero/sesiones/otra.json')) {
       return {
@@ -67,7 +68,11 @@ const motor = (on: On, o: Opciones = {}) => {
   on('fs.write', () => ({ value: undefined }))
   on('tool.check', () => ({ decision: 'allow' }) as never)
   on('turn.complete', () => ({ text: '' }) as never)
-  on('fs.list', (_$, e) => ({ value: String((e as { path?: string }).path ?? '').endsWith('/sesiones') ? [{ name: 'otra.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] : [] }) as never)
+  on('fs.list', (_$, e) => {
+    const ruta = String((e as { path?: string }).path ?? '')
+    const conArchivo = ruta.endsWith('/sesiones') || (o.conversaciones !== undefined && ruta.endsWith('/conversaciones'))
+    return { value: conArchivo ? [{ name: 'otra.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] : [] } as never
+  })
   on('session.messages', () => ({
     value: [1, 2, 3].map(n => ({ role: 'assistant', text: '', toolUses: [{ tool_use_id: `r${n}`, tool: 'Read', input: { file_path: 'src/a.ts' }, text: 'x'.repeat(4000) }] })),
   }) as never)
@@ -177,6 +182,47 @@ test('una sesión que se cerró hace rato no cuenta como abierta: sin otras viva
   await ui.unmount()
 })
 
+// Conversaciones: Mazda (otra) le pide algo a esta sesión (abc) y esta espera la respuesta de reviewer (rev).
+const mensajesDePrueba = (ahora: number) => [
+  { id: 'm1', de: 'otra', deNombre: 'Mazda', a: 'abc', aNombre: 'yo', canal: 'claude', resumen: '¿Subo el PR?', enviado: ahora, esperaFin: null, espera: false },
+  { id: 'm2', de: 'abc', deNombre: 'yo', a: 'rev', aNombre: 'reviewer', canal: 'herdr', resumen: 'Revisa el diff', enviado: ahora - 120_000, esperaFin: null, espera: true },
+]
+
+test('Conversaciones plegada: cuántas esperan respuesta y cuántas te piden algo', async ($, on) => {
+  const holder = { lista: [] as unknown[] }
+  const reloj = motor(on, { herdr: true, conversaciones: holder })
+  await preparar($, reloj)
+  holder.lista = mensajesDePrueba(reloj.now())
+  await reloj.advance(10_000)
+  const ui = await $.ui.mount(pane(108) as never)
+  expect(await ui.find({ text: /^Conversaciones +1 espera respuesta · 1 te pidió algo/ })).toBeDefined()
+  expect((await ui.findAll({ type: 'Button' })).some((b: any) => b.props?.hotkey === 'c')).toBe(true)
+  await ui.unmount()
+})
+
+test('Conversaciones abierta: quién le habla a quién y quién espera', async ($, on) => {
+  const holder = { lista: [] as unknown[] }
+  const reloj = motor(on, { herdr: true, conversaciones: holder })
+  await preparar($, reloj)
+  holder.lista = mensajesDePrueba(reloj.now())
+  await reloj.advance(10_000)
+  const ui = await $.ui.mount(pane(108) as never)
+  await ui.press({ key: 'conversaciones-plegar' })
+  const filas = filasDibujadas(await ui.drawn())
+  expect(filas.some(f => /Mazda → esta +◆ Te pidió algo .*«¿Subo el PR\?»/.test(f))).toBe(true)
+  expect(filas.some(f => /esta → reviewer +◆ Espera respuesta/.test(f))).toBe(true)
+  expect(filas.findIndex(f => f.includes('Mazda → esta'))).toBeLessThan(filas.findIndex(f => f.includes('esta → reviewer')))
+  await ui.unmount()
+})
+
+test('sin mensajes recientes no sale la sección Conversaciones', async ($, on) => {
+  const reloj = motor(on, { herdr: true, conversaciones: { lista: [] } })
+  await preparar($, reloj)
+  const ui = await $.ui.mount(pane(108) as never)
+  expect(await ui.find({ text: /^Conversaciones/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 // El texto de cada fila tal como se dibuja: un Text con todos sus Text anidados.
 const filasDibujadas = (n: any, out: string[] = [], dentroDeText = false): string[] => {
   if (!n || typeof n !== 'object') return out
@@ -186,12 +232,16 @@ const filasDibujadas = (n: any, out: string[] = [], dentroDeText = false): strin
   return out
 }
 
-test('a 40 columnas ninguna fila pasa del ancho, con Gasto y Sesiones abiertas', async ($, on) => {
-  const reloj = motor(on, { herdr: false })
+test('a 40 columnas ninguna fila pasa del ancho, con Gasto, Sesiones y Conversaciones abiertas', async ($, on) => {
+  const holder = { lista: [] as unknown[] }
+  const reloj = motor(on, { herdr: false, conversaciones: holder })
   await preparar($, reloj)
+  holder.lista = mensajesDePrueba(reloj.now())
+  await reloj.advance(10_000)
   const ui = await $.ui.mount(pane(40) as never)
   await ui.press({ key: 'gasto-plegar' })
   await ui.press({ key: 'sesiones-plegar' })
+  await ui.press({ key: 'conversaciones-plegar' })
   const filas = filasDibujadas(await ui.drawn())
   expect(filas.some(f => f.startsWith('Read src/a.ts'))).toBe(true)
   expect(filas.some(f => f.includes('Te espera') && f.includes('Mazda'))).toBe(true)
@@ -220,13 +270,17 @@ test('si gh falla no se reintenta cada 10 s: como mucho una vez por minuto', asy
   expect(llamadasGh.n - antes).toBe(1)
 })
 
-test('Sesiones y Permisos no comparten tecla', async ($, on) => {
-  const reloj = motor(on, { herdr: true })
+test('Sesiones, Conversaciones y Permisos no comparten tecla', async ($, on) => {
+  const holder = { lista: [] as unknown[] }
+  const reloj = motor(on, { herdr: true, conversaciones: holder })
   await preparar($, reloj)
+  holder.lista = mensajesDePrueba(reloj.now())
+  await reloj.advance(10_000)
   await ($ as any).tool.check({ tool: 'Bash', tool_use_id: 'k1', input: { command: 'ls' } })
   const ui = await $.ui.mount(pane(108) as never)
   const botones = await ui.findAll({ type: 'Button' })
   const teclas = botones.map((b: any) => b.props?.hotkey).filter(Boolean)
+  expect(teclas).toContain('c')
   expect(new Set(teclas).size).toBe(teclas.length)
   await ui.unmount()
 })

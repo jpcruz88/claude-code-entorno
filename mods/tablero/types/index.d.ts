@@ -178,6 +178,10 @@ export type RegistroSesion = {
   /** El día local (AAAA-MM-DD) al que se refiere `base`. */
   dia: string
   actualizado: number
+  /** Cuándo terminó su último turno (ms epoch); lo usan las demás para saber si ya respondió. */
+  turnoFin?: number
+  /** Cuándo empezó su último turno (ms epoch): un turno que ya corría al recibir un mensaje no es su respuesta. */
+  turnoInicio?: number
 }
 
 export type Extra = {
@@ -238,8 +242,21 @@ declare module 'claude-code' {
       otras: RegistroSesion[]
       /** Lo que más contexto consume y su consejo (gasto.ts), calculado al final de cada turno del lead. */
       gasto: { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null }
-      /** Secciones plegadas del panel: Gasto (g) y Sesiones (s). */
-      plegado: { gasto: boolean; sesiones: boolean }
+      /** Secciones plegadas del panel: Gasto (g), Sesiones (v) y Conversaciones (c). */
+      plegado: { gasto: boolean; sesiones: boolean; conversaciones: boolean }
+      /** Los mensajes de todas las sesiones y cuándo empezó y terminó el último turno del lead. */
+      conversaciones: { todas: {
+          id: string
+          de: string
+          deNombre: string
+          a: string | null
+          aNombre: string
+          canal: 'herdr' | 'claude'
+          resumen: string
+          enviado: number
+          esperaFin: number | null
+          espera: boolean
+        }[]; turnoFin: number | null; turnoInicio: number | null }
       /** El modo caveman que dicen los prompts de la sesión. */
       caveman: 'lite' | 'full' | 'ultra' | 'normal'
       /** Panel de progreso y de agentes (savvy-progress, adaptado). */

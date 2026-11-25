@@ -15,6 +15,7 @@ import { URL_SERVICIO, leerServicio } from './servicio'
 import { contarConfig, contarHooks, servidoresMcp, soloImporta } from './config-cargada'
 import { consejoGasto, topGasto } from './gasto'
 import { abiertas, estadoSesion, leerSesiones } from './sesiones'
+import { anotar, destinoHerdr, envioDe, filasConversaciones, leerConversaciones, resumenConversaciones, type Envio, type Mensaje, type Turno } from './conversaciones'
 import type { RegistroSesion } from '../types'
 import {
   DEFAULT_ARCHITECT,
@@ -153,14 +154,89 @@ let relojFuentes: { cancel: () => void } | null = null
 // Las demás sesiones, lo que más gasta y lo plegado del panel.
 const otras = atom({ plugin: 'tablero', key: 'otras' } as const, [] as RegistroSesion[])
 const gasto = atom({ plugin: 'tablero', key: 'gasto' } as const, { filas: [], consejo: null } as { filas: { llamada: string; motivo: string; tokens: number }[]; consejo: string | null })
-const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true })
+const plegado = atom({ plugin: 'tablero', key: 'plegado' } as const, { gasto: true, sesiones: true, conversaciones: true })
+// Quién le habla a quién (conversaciones.ts): lo que envió esta sesión, lo de todas y su último fin de turno.
+const DEFAULT_CONV = { todas: [] as Mensaje[], turnoFin: null as number | null, turnoInicio: null as number | null }
+// Lo que envió esta sesión vive en memoria del módulo y se anota en fila: cada evento lee su propia copia del
+// estado, así que dos envíos a la vez se pisarían si la lista saliera de ahí.
+let misMensajes: Mensaje[] = []
+let colaConversaciones: Promise<unknown> = Promise.resolve()
+const conv = atom({ plugin: 'tablero', key: 'conversaciones' } as const, DEFAULT_CONV)
+const carpetaConversaciones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/conversaciones`
+/** Anota (o cambia) un mensaje de esta sesión y reescribe su archivo para las demás. */
+const guardarMensaje = ($: EngineInterface, m: Mensaje) => {
+  const paso = colaConversaciones.then(async () => {
+    const ahora = await $.clock.now()
+    misMensajes = anotar(misMensajes, m, ahora)
+    const mias = misMensajes
+    await $.fs.write(`${await carpetaConversaciones($)}/${m.de}.json`, JSON.stringify(mias)).catch(() => undefined)
+  })
+  colaConversaciones = paso.catch(() => undefined)
+  return paso
+}
+/** A qué sesión va un envío: herdr lo sabe por `agent get` (como mucho 2 s); SendMessage, por el registro de Sesiones. */
+const resolverDestino = async ($: EngineInterface, canal: 'herdr' | 'claude', destino: string): Promise<{ id: string | null; nombre: string }> => {
+  if (canal === 'claude') {
+    const s = listOf<RegistroSesion>(await read($, otras)).find(o => o.nombre === destino)
+    return { id: s?.id ?? null, nombre: destino }
+  }
+  const r = await conTope($, 2000, $.process.run(['herdr', 'agent', 'get', destino], { timeoutMs: 2000 }))
+  const d = r && r.exitCode === 0 ? destinoHerdr(r.stdout) : null
+  return d ?? { id: null, nombre: destino }
+}
+/** Anota lo que envía esta sesión. `agent wait` no crea mensaje: vuelve a abrir la espera del último a ese destino.
+ *  Un envío a la propia sesión no se anota. Devuelve el mensaje anotado, o null. */
+const anotarEnvio = async ($: EngineInterface, envio: Envio, id: string): Promise<Mensaje | null> => {
+  const [propia, ahora, ex, cwd] = await Promise.all([$.session.id().catch(() => ''), $.clock.now(), read($, extra), $.session.cwd().catch(() => '')])
+  if (!propia) return null
+  const destino = await resolverDestino($, envio.canal, envio.destino)
+  if (destino.id === propia) return null
+  if (envio.soloEspera) {
+    await colaConversaciones
+    const previos = misMensajes.filter(m => (destino.id !== null && m.a === destino.id) || m.aNombre === destino.nombre || m.aNombre === envio.destino)
+    const ultimo = previos[previos.length - 1]
+    if (!ultimo) return null
+    // La espera cuenta desde ahora: una respuesta anterior no la cierra.
+    const m = { ...ultimo, espera: true, esperaFin: null, enviado: ahora }
+    await guardarMensaje($, m)
+    return m
+  }
+  const nombrePropio = normalize(DEFAULT_EXTRA, ex).linea?.session_name ?? (cwd.split('/').filter(Boolean).pop() || propia)
+  const m: Mensaje = {
+    id,
+    de: propia,
+    deNombre: nombrePropio,
+    a: destino.id,
+    aNombre: destino.nombre,
+    canal: envio.canal,
+    resumen: envio.resumen,
+    enviado: ahora,
+    esperaFin: null,
+    espera: envio.espera,
+  }
+  await guardarMensaje($, m)
+  return m
+}
+const leerTodasConversaciones = async ($: EngineInterface) => {
+  const [carpeta, ahora] = await Promise.all([carpetaConversaciones($), $.clock.now()])
+  const lista = await $.fs.list(carpeta).catch(() => [])
+  const textos = await Promise.all(
+    lista
+      .filter(f => f.kind === 'file' && f.name.endsWith('.json'))
+      .map(async f => ({ nombre: f.name, texto: String(await $.fs.read(`${carpeta}/${f.name}`).catch(() => '')) })),
+  )
+  const todas = leerConversaciones(textos, ahora)
+  // Sin cambios no se toca el estado: cada escritura pide un redibujo.
+  if (JSON.stringify(todas) === JSON.stringify(normalize(DEFAULT_CONV, await read($, conv)).todas)) return
+  await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), todas }))
+}
 // Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
 let estadoPropio: { estado: RegistroSesion['estado']; desde: number } | null = null
 const carpetaSesiones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/sesiones`
 /** Escribe el registro de esta sesión para las demás y para el presupuesto. Sin rename en la API: quien lee
  *  ignora un archivo a medio escribir. */
 const escribirRegistro = async ($: EngineInterface) => {
-  const [id, ahora, m, g, ps, ex, costo, cwd] = await Promise.all([
+  const [id, ahora, m, g, ps, ex, costo, cwd, cv] = await Promise.all([
     $.session.id().catch(() => ''),
     $.clock.now(),
     getMain($),
@@ -169,8 +245,10 @@ const escribirRegistro = async ($: EngineInterface) => {
     read($, extra),
     costNow($),
     $.session.cwd().catch(() => ''),
+    read($, conv),
   ])
   if (!/^[A-Za-z0-9_-]+$/.test(id)) return
+  const c = normalize(DEFAULT_CONV, cv)
   const x = normalize(DEFAULT_EXTRA, ex)
   const estado = estadoSesion({
     trabajando: m.isRunning,
@@ -188,6 +266,8 @@ const escribirRegistro = async ($: EngineInterface) => {
     base: x.base,
     dia: x.dia,
     actualizado: ahora,
+    ...(c.turnoFin !== null ? { turnoFin: c.turnoFin } : {}),
+    ...(c.turnoInicio !== null ? { turnoInicio: c.turnoInicio } : {}),
   }
   await $.fs.write(`${await carpetaSesiones($)}/${id}.json`, JSON.stringify(registro))
 }
@@ -592,6 +672,7 @@ export const register: Register = (on, options) => {
         if (cfg.extras.has('servicio') && n % 30 === 0) tareas.push(leerServicioClaude($))
         if (n % 30 === 0) tareas.push(leerConfig($))
         if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) tareas.push(leerOtras($))
+        if (cfg.extras.has('sesiones')) tareas.push(leerTodasConversaciones($))
         await Promise.all(tareas.map(t => t.catch(() => undefined)))
       }
       void vuelta()
@@ -720,6 +801,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return next(e)
     const [now, cost] = await Promise.all([$.clock.now(), costNow($)])
     await update($, turn, () => ({ ...DEFAULT_TURN, startedAt: now, costAtStart: cost }))
+    await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), turnoInicio: now }))
     await update($, main, m => ({ ...normalize(DEFAULT_MAIN, m), isRunning: true }))
     // A background architect's report reaches the main loop as the text opening this turn. The
     // SubagentHandback tool call (in tool.call) normally carries it first; this is the fallback.
@@ -855,52 +937,69 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     callLoop.set(e.tool_use_id, e.agentId ?? null)
-    // La `ask` del clasificador se lee al terminar la llamada, y se borra aunque la llamada lance: no queda para siempre.
-    const { ran, auto } = await llamadaConAutomatica(autoAsks, e.tool_use_id, () => next(e)).finally(() => callLoop.delete(e.tool_use_id))
-    const didRun = ran.deny === undefined
-    // Una `ask` que decidió el clasificador se anota ahora, ya resuelta: corrió o fue rechazada.
-    if (auto) {
-      await update($, gate, g => recordCheck(normalizeGate(g), { ...auto, verdict: didRun ? 'cleared' : 'deny' }))
-    }
-    // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
-    const g0 = await getGate($)
-    const isSettled = settleCheck(g0, e.tool_use_id, didRun) !== g0
-    if (isSettled) await update($, gate, g => settleCheck(normalizeGate(g), e.tool_use_id, didRun))
-    // A background agent hands its report back through this tool; an architect's report is its advice.
-    if (String(e.tool) === 'SubagentHandback') {
-      const consejo = consejoNuevo(e.agentId ? await getArchitect($) : null, e.agentId, (e as unknown as { message?: unknown }).message)
-      if (consejo) await noteAdvice($, cfg, consejo)
+    // Lo que la sesión principal envía a otra sesión se anota antes de correr, para que se vea mientras espera.
+    const envio = !e.agentId && cfg.extras.has('sesiones') ? envioDe(String(e.tool), e) : null
+    const anotado = envio ? await anotarEnvio($, envio, e.tool_use_id).catch(() => null) : null
+    const correr = async () => {
+      // La `ask` del clasificador se lee al terminar la llamada, y se borra aunque la llamada lance: no queda para siempre.
+      const { ran, auto } = await llamadaConAutomatica(autoAsks, e.tool_use_id, () => next(e)).finally(() => callLoop.delete(e.tool_use_id))
+      const didRun = ran.deny === undefined
+      // Una `ask` que decidió el clasificador se anota ahora, ya resuelta: corrió o fue rechazada.
+      if (auto) {
+        await update($, gate, g => recordCheck(normalizeGate(g), { ...auto, verdict: didRun ? 'cleared' : 'deny' }))
+      }
+      // Settle this call's pending ask, if it had one; skip the write (and the redraw) otherwise.
+      const g0 = await getGate($)
+      const isSettled = settleCheck(g0, e.tool_use_id, didRun) !== g0
+      if (isSettled) await update($, gate, g => settleCheck(normalizeGate(g), e.tool_use_id, didRun))
+      // A background agent hands its report back through this tool; an architect's report is its advice.
+      if (String(e.tool) === 'SubagentHandback') {
+        const consejo = consejoNuevo(e.agentId ? await getArchitect($) : null, e.agentId, (e as unknown as { message?: unknown }).message)
+        if (consejo) await noteAdvice($, cfg, consejo)
+        return ran
+      }
+      if (e.tool === 'Agent') return ran
+      const uso = didRun ? usoDe(String(e.tool), e) : null
+      if (uso) await update($, usos, x => noteUso(normalize(DEFAULT_USOS, x), uso))
+      const hasFailed = didRun && ran.isError === true
+      const isEdit = !hasFailed && didRun && EDIT_TOOLS.has(e.tool)
+      if (isEdit) {
+        const cambio = lineasDeEdicion(e.tool, e)
+        if (cambio.agregadas > 0 || cambio.quitadas > 0) {
+          await update($, usage, x => {
+            const u0 = normalize(DEFAULT_USAGE, x)
+            return { ...u0, linesAdded: (u0.linesAdded ?? 0) + cambio.agregadas, linesRemoved: (u0.linesRemoved ?? 0) + cambio.quitadas }
+          })
+        }
+      }
+      const t0 = await getTurn($)
+      if (isEdit || hasFailed || (!e.agentId && t0.errorStreak > 0)) {
+        await update($, turn, t => afterCall(normalize(DEFAULT_TURN, t), { inSubagent: Boolean(e.agentId), hasFailed, isEdit }))
+      }
+      const text = shorten(describeInput(e.tool, e), 64)
+      if (e.agentId) {
+        const id = e.agentId
+        await update($, agents, list =>
+          listOf<unknown>(list)
+            .map(normalizeCard)
+            .map(c => (c.id === id ? noteTool(c, { tool: e.tool, text, isError: hasFailed || ran.deny !== undefined }) : c)),
+        )
+      }
+      if (hasFailed) await releerJev($)
       return ran
     }
-    if (e.tool === 'Agent') return ran
-    const uso = didRun ? usoDe(String(e.tool), e) : null
-    if (uso) await update($, usos, x => noteUso(normalize(DEFAULT_USOS, x), uso))
-    const hasFailed = didRun && ran.isError === true
-    const isEdit = !hasFailed && didRun && EDIT_TOOLS.has(e.tool)
-    if (isEdit) {
-      const cambio = lineasDeEdicion(e.tool, e)
-      if (cambio.agregadas > 0 || cambio.quitadas > 0) {
-        await update($, usage, x => {
-          const u0 = normalize(DEFAULT_USAGE, x)
-          return { ...u0, linesAdded: (u0.linesAdded ?? 0) + cambio.agregadas, linesRemoved: (u0.linesRemoved ?? 0) + cambio.quitadas }
-        })
-      }
+    if (!anotado?.espera) return correr()
+    // Con --wait (o agent wait) la llamada dura lo que tarda la respuesta: si acaba bien, la espera se cierra.
+    // Si falla (tiempo agotado, rechazo, error) no hay respuesta: deja de esperar en la llamada y cuenta el turno.
+    let bien = false
+    try {
+      const r = await correr()
+      bien = r?.deny === undefined && r?.isError !== true
+      return r
+    } finally {
+      const fin = await $.clock.now()
+      await guardarMensaje($, bien ? { ...anotado, esperaFin: fin } : { ...anotado, espera: false }).catch(() => undefined)
     }
-    const t0 = await getTurn($)
-    if (isEdit || hasFailed || (!e.agentId && t0.errorStreak > 0)) {
-      await update($, turn, t => afterCall(normalize(DEFAULT_TURN, t), { inSubagent: Boolean(e.agentId), hasFailed, isEdit }))
-    }
-    const text = shorten(describeInput(e.tool, e), 64)
-    if (e.agentId) {
-      const id = e.agentId
-      await update($, agents, list =>
-        listOf<unknown>(list)
-          .map(normalizeCard)
-          .map(c => (c.id === id ? noteTool(c, { tool: e.tool, text, isError: hasFailed || ran.deny !== undefined }) : c)),
-      )
-    }
-    if (hasFailed) await releerJev($)
-    return ran
   })
 
   // A server-side review tool never reaches tool.call: it shows only in the assistant's rows.
@@ -967,6 +1066,8 @@ export const register: Register = (on, options) => {
     const id = e.agentId
     const now = await $.clock.now()
     if (!id) {
+      // Las demás sesiones saben así si ya respondió a lo que le mandaron.
+      await update($, conv, x => ({ ...normalize(DEFAULT_CONV, x), turnoFin: now }))
       const [t, cards, cost] = await Promise.all([getTurn($), getCards($), costNow($)])
       const r = receiptOf(t, {
         durationMs: e.durationMs,
@@ -1076,7 +1177,7 @@ export const register: Register = (on, options) => {
       read($, gitBranch),
       read($, usos).then(x => normalize(DEFAULT_USOS, x)),
     ])
-    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr] = await Promise.all([
+    const [planesNow, aduanaNow, cavemanNow, extraNow, fuentesNow, otrasNow, gastoNow, plegadoNow, herdr, convNow, idPropio] = await Promise.all([
       read($, planes).then(x => listOf<Plan>(x)),
       read($, aduana),
       read($, caveman),
@@ -1084,8 +1185,10 @@ export const register: Register = (on, options) => {
       read($, fuentes).then(x => normalize(DEFAULT_FUENTES, x)),
       read($, otras).then(x => listOf<RegistroSesion>(x)),
       read($, gasto),
-      read($, plegado).then(x => normalize({ gasto: true, sesiones: true }, x)),
+      read($, plegado).then(x => normalize({ gasto: true, sesiones: true, conversaciones: true }, x)),
       $.env.get('HERDR_ENV').then(x => x === '1').catch(() => false),
+      read($, conv).then(x => normalize(DEFAULT_CONV, x)),
+      $.session.id().catch(() => ''),
     ])
     const rit = ritmoSemana(jevs.limites, now / 1000)
     const filaRit = filaRitmo(rit, jevs.limites?.five_hour, now / 1000)
@@ -1415,8 +1518,8 @@ export const register: Register = (on, options) => {
     }
 
     // ---- Gasto y Sesiones: plegadas en una línea; g y s las abren.
-    const plegar = (k: 'gasto' | 'sesiones') => () => update($, plegado, x => {
-      const v = normalize({ gasto: true, sesiones: true }, x)
+    const plegar = (k: 'gasto' | 'sesiones' | 'conversaciones') => () => update($, plegado, x => {
+      const v = normalize({ gasto: true, sesiones: true, conversaciones: true }, x)
       return { ...v, [k]: !v[k] }
     })
     const gastoFilas = cfg.extras.has('gasto') ? (gastoNow?.filas ?? []) : []
@@ -1504,6 +1607,59 @@ export const register: Register = (on, options) => {
                   <Text dimColor>{fmtDuration(Math.max(0, now - o.desde))}</Text>
                 </Text>
               ))}
+            </Box>
+          ) : null}
+        </Box>
+      )
+    }
+
+    // Conversaciones: quién le habla a quién y quién espera respuesta (conversaciones.ts).
+    const turnos = new Map<string, Turno>(otrasNow.map(o => [o.id, { inicio: o.turnoInicio, fin: o.turnoFin }]))
+    if (idPropio) turnos.set(idPropio, { inicio: convNow.turnoInicio ?? undefined, fin: convNow.turnoFin ?? undefined })
+    const filasConv = cfg.extras.has('sesiones') && idPropio ? filasConversaciones(convNow.todas, idPropio, id => turnos.get(id), now, id => otrasNow.find(o => o.id === id)?.nombre ?? undefined) : []
+    const conversacionesPanel = (w: number) => {
+      if (filasConv.length === 0) return null
+      const abierto = !plegadoNow.conversaciones
+      const ESTADO: Record<string, { t: string; c?: string; dim?: boolean }> = {
+        teToca: { t: '◆ Te pidió algo   ', c: C.amber },
+        espera: { t: '◆ Espera respuesta', c: C.amber },
+        respondio: { t: '✓ Respondió       ', c: C.gate },
+        enviado: { t: '○ Enviado         ', dim: true },
+      }
+      return (
+        <Box flexDirection="column" width={w}>
+          <Box justifyContent="space-between">
+            <Text wrap="truncate">
+              <Text weight="semibold">Conversaciones</Text>
+              <Text dimColor>{`  ${shorten(abierto ? 'Quién le habla a quién' : resumenConversaciones(filasConv), Math.max(4, w - 27))}`}</Text>
+            </Text>
+            <Box flexShrink={0}>
+              <Button key="conversaciones-plegar" plain hotkey="c" label={abierto ? 'plegar' : 'abrir'} dimColor onPress={plegar('conversaciones')} />
+            </Box>
+          </Box>
+          {abierto ? (
+            <Box flexDirection="column" paddingLeft={2}>
+              {filasConv.slice(0, 6).map((f, i) => {
+                const est = ESTADO[f.teToca ? 'teToca' : f.estado]!
+                const quien = shorten(`${f.de} → ${f.a}`, Math.max(4, Math.min(24, w - 2 - 19 - 9)))
+                const cuando = f.estado === 'espera' ? fmtDuration(Math.max(0, now - f.desde)) : `hace ${fmtDuration(Math.max(0, now - f.desde))}`
+                const resto = w - 2 - [...quien].length - 2 - 19 - [...cuando].length - 2
+                return (
+                  <Text key={`conv-${i}`} wrap="truncate">
+                    {trozos(
+                      caben(
+                        [
+                          { t: `${quien}  ` },
+                          { t: `${est.t} `, c: est.c, dim: est.dim },
+                          { t: cuando, dim: true },
+                          resto > 6 && f.resumen ? { t: `  «${shorten(f.resumen, resto - 2)}»`, dim: true } : null,
+                        ],
+                        w - 2,
+                      ),
+                    )}
+                  </Text>
+                )
+              })}
             </Box>
           ) : null}
         </Box>
@@ -2196,6 +2352,7 @@ export const register: Register = (on, options) => {
           aduanaPanel(W),
           gastoPanel(W),
           sesionesPanel(W),
+          conversacionesPanel(W),
           !isEmpty.loops && cfg.panels.includes('loops') ? loopsPanel(W) : null,
           !isEmpty.gate && cfg.panels.includes('gate') ? gatePanel(W) : null,
           !isEmpty.receipt && cfg.panels.includes('receipt') ? receiptPanel(W) : null,
