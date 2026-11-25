@@ -110,6 +110,21 @@ class AtajoWindows(Base):
         self.assertIn("al día: %s ya lo carga" % self.perfiles[0], salida)
         self.assertFalse((self.home / ".local" / "bin" / "cl").exists())
 
+    @unittest.skipUnless(shutil.which("pwsh") or shutil.which("powershell"),
+                         "necesita PowerShell (corre en el CI de Windows)")
+    def test_cl_en_powershell_arranca_claude_con_bypass(self):
+        self.correr()
+        # Un claude de mentira que PowerShell encuentra en el PATH y repite sus argumentos.
+        (self.bin / "claude.ps1").write_text(
+            "Write-Output ('ARGS: ' + ($args -join ' '))", encoding="utf-8")
+        ps = shutil.which("pwsh") or shutil.which("powershell")
+        orden = ". '%s'; cl --resume abc" % self.perfiles[0]
+        env = dict(os.environ, PATH=os.pathsep.join([str(self.bin), os.environ.get("PATH", "")]))
+        r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", orden],
+                           env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
+        self.assertIn("ARGS: --dangerously-skip-permissions --resume abc",
+                      r.stdout.decode("utf-8", "replace"))
+
     def test_simular_no_toca_los_perfiles(self):
         self.correr("--simular")
         for perfil in self.perfiles:
