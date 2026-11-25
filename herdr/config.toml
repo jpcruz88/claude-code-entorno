@@ -64,6 +64,9 @@ rows = [
 # Avisos cuando un agente termina o necesita respuesta en otro espacio
 [ui.toast]
 delivery = "system"
+# Solo avisa si el agente sigue terminado o bloqueado 30 s después: una pausa
+# corta entre pasos de Claude no cuenta como «terminó».
+delay_seconds = 30
 
 [ui.sound]
 enabled = true
