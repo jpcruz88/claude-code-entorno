@@ -1,0 +1,101 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tablero · terminal</title>
+<style>
+body{background:#0e0e11;margin:0;padding:20px;color:#8a8a9a;font:13px/1.25 Menlo,ui-monospace,monospace}
+#t{background:#1b1b1f;display:inline-block;padding:10px;border:1px solid #333;white-space:pre;overflow-x:auto;max-width:100%}
+#t span{display:inline-block;width:1ch;height:1.25em;overflow:hidden;vertical-align:top}
+p{margin:0 0 12px}button{background:#2a2a32;color:#d8d8e0;border:1px solid #44444f;border-radius:4px;font:inherit;padding:3px 12px;cursor:pointer}
+button.on{border-color:#4fe3f0;color:#4fe3f0}
+</style>
+<p>Rejilla de 100×31 celdas, un cuadro cada 110 ms. Solo cambia texto y color de cada celda, como en la terminal. <button id="bA" class="on">activo</button> <button id="bR">reposo</button> · forzar: <button data-f="trab">trabajando</button> <button data-f="user">te espera</button> <button data-f="stop">detenido</button> <button data-f="idle">en espera</button> <button data-f="">auto</button></p>
+<div id="t"></div>
+<script>
+const W=100,H=31,OFF=3,$=id=>document.getElementById(id);
+const C={a:'#b48cff',ad:'#5a4a80',l:'#4fe3f0',ld:'#25666b',j:'#5dfc8f',jd:'#2c7e49',d:'#6f6f82',dd:'#44444f',w:'#ffb454',m:'#ff4fd0',t:'#f2f2f6',g:'#8a8a9a'};
+const FL=['#254a33','#1d3b29','#162d20','#11221a']; // destello en 4 pasos
+let ch,fg,bg;
+const clear=()=>{ch=[...Array(H)].map(()=>Array(W).fill(' '));fg=[...Array(H)].map(()=>Array(W).fill(C.g));bg=[...Array(H)].map(()=>Array(W).fill(null))};
+const putRaw=(r,c,s,f,b)=>{[...s].forEach((x,i)=>{if(c+i<W&&r<H){ch[r][c+i]=x;if(f)fg[r][c+i]=f;if(b!==undefined)bg[r][c+i]=b}})};
+const put=(r,c,s,f,b)=>putRaw(r>=2?r+OFF:r,c,s,f,b);
+const box=(r,c,w,h,col,title,tcol)=>{put(r,c,'┌'+'─'.repeat(w-2)+'┐',col);for(let i=1;i<h-1;i++){put(r+i,c,'│',col);put(r+i,c+w-1,'│',col)}
+ put(r+h-1,c,'└'+'─'.repeat(w-2)+'┘',col);put(r,c+2,' '+title+' ',tcol||col)};
+const kv=(r,c,w,k,v,f)=>{put(r,c+2,k,C.g);put(r,c+w-2-[...v].length,v,f||C.t)};
+const bar=(r,c,pct,n)=>{const k=Math.round(pct*n/100);put(r,c,'▓'.repeat(k),C.m);put(r,c+k,'░'.repeat(n-k),C.dd);put(r,c+n,' '+Math.round(pct)+'%',C.t)};
+// estado
+let forz=null,activo=true,fase=0,t0=Date.now(),turno0=0,paso=0,packH=-1,packV=-1;
+let costo=0,costoT=0,ctx=8,ctxT=8,resp=0,cons=0,ed=0,lp=0,lm=0,lest='a la espera',aest='de guardia',uc='—';
+let reg=[],dec=[],spark=Array(24).fill(0),flashAs=0,flashLe=0,flashJe=0;
+const av=(a,b,n=4)=>Math.abs(b-a)<.5?b:a+(b-a)/n;
+const hora=()=>new Date().toTimeString().slice(0,5);
+const log=(rol,txt)=>{reg.unshift({h:hora(),rol,txt,age:0});reg=reg.slice(0,5)};
+const decidir=(txt,conf)=>{dec.unshift({h:hora(),txt,conf,age:0});dec=dec.slice(0,3)};
+const pasos=[
+ ()=>{packH=0;cons++;aest='consultando';uc='hace 0s «¿migrar el hook?»';flashAs=40;log('a','consulta: ¿migrar el hook?')},
+ ()=>{aest='de guardia';lest='trabajando';turno0=Date.now();ctxT=Math.min(90,ctxT+6);costoT+=.04;resp++;ed++;lp+=23;lm+=5;log('l','edita hooks/mapa.ts')},
+ ()=>{lest='esperando permiso';log('l','pide permiso: git push')},
+ ()=>{lest='trabajando';log('l','permiso concedido')},
+ ()=>{packV=0;costoT+=.03;ctxT=Math.min(90,ctxT+3);log('l','pide decisión de modelo')},
+ ()=>{flashJe=30;decidir('modelo → sonnet',.91);log('j','modelo → sonnet (0.91)')},
+ ()=>{lest='detenido';log('l','detenido: 3 errores seguidos')},
+ ()=>{lest='a la espera';turno0=0;ed=0;log('l','turno terminado')},
+ ()=>{flashJe=30;decidir('esfuerzo → medio',.84);log('j','esfuerzo → medio (0.84)')},
+ ()=>{}];
+setInterval(()=>{if(activo){pasos[paso%pasos.length]();paso++}},2600);
+const SP='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏',SK='▁▂▃▄▅▆▇█';
+function frame(){fase++;clear();
+ const trab=activo&&lest==='trabajando',viva=Math.floor(fase/5)%2===0; // pulso(): 5 cuadros encendido, 5 apagado
+ costo=costo+(costoT-costo)/6;ctx=av(ctx,ctxT);reg.forEach(e=>e.age++);dec.forEach(e=>e.age++);
+ if(flashAs>0)flashAs--;if(flashJe>0)flashJe--;
+ // banner de situación, 3 filas de fondo sólido
+ {const sit=forz||(!activo?'idle':lest==='trabajando'?'trab':lest==='esperando permiso'?'user':lest==='detenido'?'stop':'idle');
+  const S={trab:{bg:'#4fe3f0',fg:'#0e0e11',t:SP[fase%10]+'   T R A B A J A N D O',d:turno0?'turno '+((Date.now()-turno0)/1000).toFixed(1)+'s':'el lead trabaja'},
+   user:{bg:viva?'#ffb454':'#8a5f22',fg:viva?'#0e0e11':'#f2f2f6',t:'▲   T E   E S P E R A',d:'permiso pendiente · responde para seguir'},
+   stop:{bg:viva?'#ff5c5c':'#8a2f2f',fg:viva?'#0e0e11':'#f2f2f6',t:'■   D E T E N I D O',d:'3 errores seguidos · el lead paró'},
+   idle:{bg:'#2a2a32',fg:'#8a8a9a',t:(Math.floor(fase/9)%2?'●':'○')+'   E N   E S P E R A',d:'sin trabajo · el lead espera'}}[sit];
+  for(let r=1;r<=3;r++)putRaw(r,0,' '.repeat(W),S.fg,S.bg);
+  putRaw(2,Math.floor((W-[...S.t].length)/2),S.t,S.fg,S.bg);
+  putRaw(3,Math.floor((W-[...S.d].length)/2),S.d,S.fg,S.bg)}
+ // cabecera
+ const el=Math.floor((Date.now()-t0)/1000);
+ put(0,0,'TABLERO',C.t);put(0,22,'rama feat/tablero-paleta-neon',C.d);put(0,80,'t '+Math.floor(el/60)+':'+String(el%60).padStart(2,'0')+'  '+hora(),C.d);
+ // ESTADO a todo lo ancho, arriba
+ box(2,0,100,6,C.dd,'ESTADO',C.d);
+ const col=(c,k,v,f)=>{put(3,c,k,C.d);put(3,c+10,v,f||C.t)};
+ put(3,2,'costo',C.d);put(3,12,'$'+costo.toFixed(2),C.t);put(4,2,'último turno',C.d);put(4,15,'$0.08',C.g);
+ put(3,26,'cupo 5h',C.d);bar(3,34,31,8);put(4,26,'reinicia',C.d);put(4,35,'3h10m',C.g);
+ put(3,52,'cupo 7d',C.d);bar(3,60,62,8);put(4,52,'ritmo',C.d);put(4,58,'ámbar +9 pts',C.w);
+ put(3,78,'permisos',C.d);put(3,87,'2 pend.',C.w);put(4,78,'1 den.',C.w);put(4,85,'acceptEdits',C.g);
+ put(5,2,'bucles',C.d);put(5,9,'0');put(5,14,'racha errores',C.d);put(5,28,'1');put(5,33,'ediciones turno',C.d);put(5,49,String(ed));
+ put(5,56,'costo/min',C.d);if(fase%6===0){spark.push(trab?3+Math.floor(Math.random()*5):Math.floor(Math.random()*2));spark.shift()}put(5,66,spark.map(x=>SK[x]).join(''),C.l);
+ put(6,2,'skills',C.d);put(6,9,'tdd×2 caveman×1');put(6,40,'mcp',C.d);put(6,44,'codebase×3 ctx7×1');
+ // asesor
+ const ca=activo&&flashAs>0;box(9,0,44,6,ca&&viva?C.a:C.ad,'ASESOR · '+aest,C.a);
+ kv(10,0,44,'consultas',String(cons));kv(11,0,44,'permisos','0 pend.');kv(12,0,44,'modelo','sonnet · medio');put(13,2,('última consulta '+(cons?uc:'—')).slice(0,40),C.d);
+ // lead
+ box(9,51,49,7,trab?(viva?C.l:C.ld):C.ld,'LEAD · principal',C.l);
+ put(9,70,trab?SP[fase%10]:(Math.floor(fase/9)%2?'●':'○'),trab?C.l:C.d);
+ put(10,53,lest,C.l);if(turno0)put(10,65,'turno '+((Date.now()-turno0)/1000).toFixed(1)+'s',C.d);
+ kv(11,51,49,'modelo','haiku · medio');
+ put(12,53,'contexto',C.g);{const n=8,k2=Math.round(ctx*n/100),s=Math.round(ctx)+'%',x=100-3-n-1-s.length;put(12,x,'▓'.repeat(k2),C.m);put(12,x+k2,'░'.repeat(n-k2),C.dd);put(12,100-3-s.length,s,C.t)}
+ put(13,53,'líneas',C.g);put(13,100-3-String(lm).length-String(lp).length-4,'+'+lp,C.j);put(13,100-3-String(lm).length,'−'+lm,C.w);
+ kv(14,51,49,'respuestas',String(resp));
+ // conectores
+ put(11,44,'──────▶',C.dd);if(packH>=0){const p=Math.floor(packH);if(p<6)put(11,44+p,'●',C.a);packH+=.5;if(packH>6.5)packH=-1}
+ put(16,75,'│',C.dd);put(17,75,'│',C.dd);put(18,75,'▾',C.dd);if(packV>=0){const p=Math.floor(packV);if(p<3)put(16+p,75,'●',C.j);packV+=.5;if(packV>3.5)packV=-1}
+ // jev
+ const cj=flashJe>0;box(19,51,49,7,cj&&viva?C.j:C.jd,'JEV · decisiones',C.j);
+ kv(20,51,49,'umbral','0.80');
+ dec.forEach((e,i)=>{const b=e.age<12?FL[Math.floor(e.age/3)]:null;put(21+i,53,' '.repeat(45),null,b);put(21+i,53,e.h,C.d,b);put(21+i,59,e.txt,C.t,b);const n=Math.round(e.conf*10);put(21+i,76,'▮'.repeat(n),C.j,b);put(21+i,76+n,'▯'.repeat(10-n),C.jd,b);put(21+i,87,e.conf.toFixed(2),C.d,b)});
+ put(24,53,'tope semana +12 pts → sonnet',C.w);
+ // registro, a la izquierda bajo el asesor
+ box(15,0,44,7,C.dd,'REGISTRO',C.d);
+ reg.forEach((e,i)=>{const b=e.age<12?FL[Math.floor(e.age/3)]:null;put(16+i,2,' '.repeat(40),null,b);put(16+i,2,e.h,C.d,b);put(16+i,8,e.rol==='a'?'asesor':e.rol==='l'?'lead':'jev',{a:C.a,l:C.l,j:C.j}[e.rol],b);put(16+i,15,e.txt.slice(0,27),C.g,b)});
+ put(27,0,activo?'2 tareas · subagentes 1/2':'SIN TAREAS · el lead espera trabajo · subagentes 0/0',C.d);
+ {const f='tablero v0.3.17 · desarrollado por ';put(27,100-f.length-2,f,C.dd);put(27,100-2,'JP',C.l)}
+ // volcado
+ let o='';for(let r=0;r<H;r++){for(let c=0;c<W;c++){const s=`color:${fg[r][c]}`+(bg[r][c]?`;background:${bg[r][c]}`:'');o+=`<span style="${s}">${ch[r][c]===' '?'&nbsp;':ch[r][c]}</span>`}o+='\n'}
+ $('t').innerHTML=o}
+setInterval(frame,110);
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{forz=b.dataset.f||null});
+$('bA').onclick=()=>{activo=true;$('bA').className='on';$('bR').className=''};
+$('bR').onclick=()=>{activo=false;$('bR').className='on';$('bA').className='';lest='a la espera';turno0=0;aest='de guardia';packH=packV=-1;flashAs=flashJe=0};
+</script></html>

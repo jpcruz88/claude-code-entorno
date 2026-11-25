@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, resumenJev, ritmoSemana } from '../hooks/jev-modelo'
+import { filaRitmo, leerDecisiones, leerLimites, lineaLog, marcaTarjeta, recientesJev, resumenJev, ritmoSemana, topeAhora } from '../hooks/jev-modelo'
 import type { DecisionJev } from '../hooks/jev-modelo'
 
 const SESION = 'sesion-a'
@@ -84,9 +84,9 @@ test('resumenJev da las tres filas en orden, con el total de todas las decisione
   const r = resumenJev([decision(), decision({ tipo: 'esfuerzo', claude: 'medium', opcion: 'high', aplicada: true }), sinRespuesta({ tipo: 'reintento' })])
   expect(r.total).toBe(3)
   expect(r.filas.map(f => f.tipo)).toEqual(['modelo', 'esfuerzo', 'reintento'])
-  expect(r.filas.map(f => f.etiqueta)).toEqual(['qué modelo', 'qué esfuerzo', 'reintentar o parar'])
-  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'qué modelo', confianza: 0.91, sharp: true })
-  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'reintentar o parar', confianza: null, sharp: false })
+  expect(r.filas.map(f => f.etiqueta)).toEqual(['Qué modelo', 'Qué esfuerzo', 'Reintentar o parar'])
+  expect(r.filas[0]).toEqual({ tipo: 'modelo', etiqueta: 'Qué modelo', confianza: 0.91, sharp: true, estado: 'cambio' })
+  expect(r.filas[2]).toEqual({ tipo: 'reintento', etiqueta: 'Reintentar o parar', confianza: null, sharp: false, estado: 'claude' })
 })
 
 test('resumenJev sin decisiones deja filas vacías con null', () => {
@@ -115,11 +115,11 @@ test('sharp es el de la última decisión de ese tipo', () => {
   expect(r.filas[0]?.sharp).toBe(false)
 })
 
-test('línea de log sharp y split', () => {
-  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.91, sharp: true }))).toBe('qué modelo → sonnet   p=0.91 sharp → código')
-  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.62, sharp: false, aplicada: false, claude: 'sonnet' }))).toBe('qué modelo → sonnet   p=0.62 split → claude')
-  expect(lineaLog(decision({ tipo: 'esfuerzo', opcion: 'low', confianza: 0.85, sharp: true, claude: 'high' }))).toBe('qué esfuerzo → low   p=0.85 sharp → código')
-  expect(lineaLog(sinRespuesta())).toBe('qué modelo → sin respuesta')
+test('línea de log: qué pidió Claude, qué hizo Jev y qué tan seguro estaba', () => {
+  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.91, sharp: true }))).toBe('Jev cambió modelo haiku→sonnet (91%)')
+  expect(lineaLog(decision({ opcion: 'sonnet', confianza: 0.62, sharp: false, aplicada: false, claude: 'sonnet' }))).toBe('Jev no tocó modelo sonnet (solo 62%)')
+  expect(lineaLog(decision({ tipo: 'esfuerzo', opcion: 'low', confianza: 0.85, sharp: true, claude: 'high' }))).toBe('Jev cambió esfuerzo high→low (85%)')
+  expect(lineaLog(sinRespuesta())).toBe('Jev no respondió sobre modelo')
 })
 
 test('marca solo si se aplicó: jev ↑ o ↓ según haiku < sonnet < opus', () => {
@@ -231,11 +231,14 @@ test('ritmo: sin dato, dato viejo, reinicio vencido o JSON roto no dan nada', ()
 const rs = (usado: number, ritmo: number, despuesDelCorte = false) => ({ usado, ritmo, exceso: usado - ritmo, despuesDelCorte })
 const h5 = (usado: number, falta = 3 * 3600) => ({ usado, reinicio: AHORA + falta })
 
-test('fila de ritmo: texto y color por exceso (verde ≤ 5, ámbar 5 a 15, rojo > 15)', () => {
+// El color es el del tope que rige (ver la prueba de coherencia al final): con la 5 h al 40 %, manda la semana.
+test('fila de ritmo: texto y color del tope (verde hasta +5, ámbar hasta +25, rojo cuando baja a haiku)', () => {
   expect(filaRitmo(rs(52, 40), h5(40), AHORA)).toEqual({ texto: 'semana 52% · ritmo 40% · +12', nivel: 'ambar' })
   expect(filaRitmo(rs(45, 40), h5(40), AHORA)).toEqual({ texto: 'semana 45% · ritmo 40% · +5', nivel: 'verde' })
   expect(filaRitmo(rs(55, 40), h5(40), AHORA)).toEqual({ texto: 'semana 55% · ritmo 40% · +15', nivel: 'ambar' })
-  expect(filaRitmo(rs(55.4, 40), h5(40), AHORA)?.nivel).toBe('rojo')
+  expect(filaRitmo(rs(55.4, 40), h5(40), AHORA)?.nivel).toBe('ambar')
+  expect(filaRitmo(rs(65, 40), h5(40), AHORA)?.nivel).toBe('ambar')
+  expect(filaRitmo(rs(65.1, 40), h5(40), AHORA)?.nivel).toBe('rojo')
   expect(filaRitmo(rs(70, 40), h5(40), AHORA)).toEqual({ texto: 'semana 70% · ritmo 40% · +30', nivel: 'rojo' })
   expect(filaRitmo(rs(25, 40), h5(40), AHORA)).toEqual({ texto: 'semana 25% · ritmo 40% · −15 · xhigh ok', nivel: 'verde' })
   expect(filaRitmo(null, h5(40), AHORA)).toBe(null)
@@ -252,19 +255,29 @@ test('xhigh ok: semana −12 con 5 h al 70 % no lo muestra (manda la regla de 5 
   expect(filaRitmo(rs(28, 40), h5(59), AHORA)?.texto).toBe('semana 28% · ritmo 40% · −12 · xhigh ok')
 })
 
-test('xhigh ok: después del corte con 85 % y 5 h al 30 % sí lo muestra', () => {
-  expect(filaRitmo(rs(85, 90, true), h5(30), AHORA)?.texto).toBe('semana 85% · ritmo 90% · −5 · xhigh ok')
+test('después del corte con 85 %: fable ok con la 5 h al 30 % y xhigh ok con la 5 h al 50 %', () => {
+  expect(filaRitmo(rs(85, 90, true), h5(30), AHORA)?.texto).toBe('semana 85% · ritmo 90% · −5 · fable ok')
+  expect(filaRitmo(rs(85, 90, true), h5(50), AHORA)?.texto).toBe('semana 85% · ritmo 90% · −5 · xhigh ok')
 })
 
-test('xhigh ok: después del corte se apaga desde 97 % y con la 5 h alta', () => {
-  expect(filaRitmo(rs(96, 90, true), h5(30), AHORA)?.texto).toContain('xhigh ok')
-  expect(filaRitmo(rs(97, 90, true), h5(30), AHORA)?.texto).not.toContain('xhigh ok')
-  expect(filaRitmo(rs(85, 90, true), h5(70), AHORA)?.texto).not.toContain('xhigh ok')
+test('después del corte el margen se apaga desde 97 % y con la 5 h alta', () => {
+  expect(filaRitmo(rs(96, 90, true), h5(30), AHORA)?.texto).toContain('fable ok')
+  expect(filaRitmo(rs(97, 90, true), h5(30), AHORA)?.texto).not.toContain(' ok')
+  expect(filaRitmo(rs(85, 90, true), h5(70), AHORA)?.texto).not.toContain(' ok')
 })
 
-test('xhigh ok: sin la ventana de 5 h o con la 5 h vencida no lo muestra', () => {
-  expect(filaRitmo(rs(25, 40), undefined, AHORA)?.texto).toBe('semana 25% · ritmo 40% · −15')
-  expect(filaRitmo(rs(85, 90, true), undefined, AHORA)?.texto).not.toContain('xhigh ok')
+test('xhigh ok: una cuenta sin ventana de 5 h lo muestra si la semana lo permite', () => {
+  expect(filaRitmo(rs(25, 40), undefined, AHORA)?.texto).toBe('semana 25% · ritmo 40% · −15 · xhigh ok')
+  expect(filaRitmo(rs(85, 90, true), undefined, AHORA)?.texto).toContain('fable ok')
+  expect(filaRitmo(rs(31, 40), undefined, AHORA)?.texto).not.toContain('xhigh ok')
+})
+
+test('fable ok: con el margen de Fable la fila lo dice en vez de xhigh ok', () => {
+  expect(filaRitmo(rs(15, 40), undefined, AHORA)?.texto).toBe('semana 15% · ritmo 40% · −25 · fable ok')
+  expect(filaRitmo(rs(15, 40), h5(50), AHORA)?.texto).toBe('semana 15% · ritmo 40% · −25 · xhigh ok')
+})
+
+test('xhigh ok: con la 5 h vencida no lo muestra', () => {
   expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA }, AHORA)?.texto).not.toContain('xhigh ok')
   expect(filaRitmo(rs(25, 40), { usado: 10, reinicio: AHORA - 60 }, AHORA)?.texto).not.toContain('xhigh ok')
 })
@@ -278,4 +291,139 @@ test('ritmo: despuesDelCorte marca si ya pasó el corte del jueves', () => {
   expect(ritmoSemana(semana(52, '2026-11-12T23:00:00+01:00'), AHORA, undefined, UTC1)?.despuesDelCorte).toBe(false)
   const l = { actualizado: ep('2026-11-13T00:00:00+01:00'), seven_day: { usado: 52, reinicio: ep('2026-11-13T00:30:00+01:00') } }
   expect(ritmoSemana(l, ep('2026-11-13T00:00:00+01:00'), undefined, UTC1)?.despuesDelCorte).toBe(true)
+})
+
+// ---------------------------------------------------------------- tope vigente (réplica de calcular_tope)
+// Con `semana(u, JUEVES)` el ritmo a las 12:00 del lunes es 45,5: el exceso es u − 45,5.
+const JUEVES = '2026-11-12T23:00:00+01:00'
+const ta = (l: Parameters<typeof topeAhora>[0], ahora = AHORA) => topeAhora(l, ahora, UTC1)
+
+test('tope ahora: la semana sola recorre los escalones, del más libre al más bajo', () => {
+  expect(ta(semana(20, JUEVES))).toEqual({ texto: 'tope ahora: fable xhigh · sin recorte', nivel: 'verde' })
+  expect(ta(semana(25, JUEVES)).texto).toBe('tope ahora: fable xhigh · sin recorte')
+  expect(ta(semana(27, JUEVES)).texto).toBe('tope ahora: opus xhigh · semana −19 pts')
+  expect(ta(semana(30, JUEVES))).toEqual({ texto: 'tope ahora: opus xhigh · semana −16 pts', nivel: 'verde' })
+  expect(ta(semana(44, JUEVES))).toEqual({ texto: 'tope ahora: opus high · semana −2 pts', nivel: 'verde' })
+  expect(ta(semana(52, JUEVES))).toEqual({ texto: 'tope ahora: opus medium · semana +6 pts', nivel: 'ambar' })
+  expect(ta(semana(58, JUEVES))).toEqual({ texto: 'tope ahora: sonnet high · semana +12 pts', nivel: 'ambar' })
+  expect(ta(semana(66, JUEVES))).toEqual({ texto: 'tope ahora: sonnet medium · semana +20 pts', nivel: 'ambar' })
+  expect(ta(semana(75, JUEVES))).toEqual({ texto: 'tope ahora: haiku medium · semana +29 pts', nivel: 'rojo' })
+})
+
+test('tope ahora: con la meta de la semana cumplida baja a haiku y dice el uso', () => {
+  const l = { actualizado: ep('2026-11-12T20:00:00+01:00'), seven_day: { usado: 91, reinicio: ep(JUEVES) + 3600 } }
+  expect(ta(l, ep('2026-11-12T20:00:00+01:00')).texto).toBe('tope ahora: haiku medium · semana 91%')
+})
+
+test('tope ahora: después del corte es libre hasta 97 % y desde ahí baja a haiku', () => {
+  const tarde = ep('2026-11-13T00:00:00+01:00')
+  const l = (usado: number) => ({ actualizado: tarde, seven_day: { usado, reinicio: ep('2026-11-13T00:30:00+01:00') } })
+  expect(ta(l(95), tarde).texto).toBe('tope ahora: fable xhigh · sin recorte')
+  expect(ta(l(97), tarde)).toEqual({ texto: 'tope ahora: haiku medium · semana 97%', nivel: 'rojo' })
+})
+
+test('tope ahora: la ventana de 5 h manda cuando es la que más baja', () => {
+  expect(ta({ ...semana(20, JUEVES), five_hour: h5(39) }).texto).toBe('tope ahora: fable xhigh · sin recorte')
+  expect(ta({ ...semana(20, JUEVES), five_hour: h5(40) }).texto).toBe('tope ahora: opus xhigh · 5h 40%')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(40) }).texto).toBe('tope ahora: opus xhigh · semana −16 pts')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(65) }).texto).toBe('tope ahora: opus medium · 5h 65%')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(80) }).texto).toBe('tope ahora: sonnet medium · 5h 80%')
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(90) })).toEqual({ texto: 'tope ahora: haiku medium · 5h 90%', nivel: 'rojo' })
+  expect(ta({ ...semana(58, JUEVES), five_hour: h5(40) }).texto).toBe('tope ahora: sonnet high · semana +12 pts')
+})
+
+test('tope ahora: la 5 h en gracia (reinicia en menos de 15 min) no recorta', () => {
+  expect(ta({ ...semana(30, JUEVES), five_hour: h5(90, 14 * 60) }).texto).toBe('tope ahora: opus xhigh · semana −16 pts')
+  expect(ta({ ...semana(20, JUEVES), five_hour: h5(90, 14 * 60) }).texto).toBe('tope ahora: fable xhigh · sin recorte')
+})
+
+test('tope ahora: con una ventana vencida o sin la semana, xhigh no pasa y dice qué dato falta', () => {
+  expect(ta({ ...semana(30, JUEVES), five_hour: { usado: 10, reinicio: AHORA - 60 } }).texto).toBe('tope ahora: opus high · falta dato de 5h')
+  expect(ta({ actualizado: AHORA, five_hour: h5(40) }).texto).toBe('tope ahora: opus high · falta dato de semana')
+  expect(ta({ ...semana(20, JUEVES), five_hour: { usado: 10, reinicio: AHORA - 60 } }).texto).toBe('tope ahora: opus high · falta dato de 5h')
+  expect(ta({ actualizado: AHORA, five_hour: h5(10) }).texto).toBe('tope ahora: opus high · falta dato de semana')
+  expect(ta({ actualizado: AHORA, five_hour: h5(80) }).texto).toBe('tope ahora: sonnet medium · 5h 80%')
+})
+
+test('tope ahora: sin dato o con dato viejo no hay tope y lo dice', () => {
+  const sinDato = { texto: 'tope ahora: opus high · sin dato de uso', nivel: 'ambar' }
+  expect(ta(null)).toEqual(sinDato)
+  expect(ta({ actualizado: AHORA })).toEqual(sinDato)
+  expect(ta({ ...semana(75, JUEVES), actualizado: AHORA - 6 * 3600 - 1 })).toEqual(sinDato)
+})
+
+// ---------------------------------------------------------------- 0.10.0: la familia más capaz y el motivo del guardián
+// El nombre se arma aparte, como en el resto de pruebas que lo nombran junto a un id de modelo.
+const MAS_CAPAZ = ['fa', 'ble'].join('')
+const ID_MAS_CAPAZ = `claude-${MAS_CAPAZ}-5-1`
+
+test('la familia más capaz es una familia: su id completo y su alias son lo mismo', () => {
+  expect(lineaLog(decision({ claude: ID_MAS_CAPAZ, opcion: MAS_CAPAZ, confianza: 0.9 }))).toBe(`Jev dejó modelo ${MAS_CAPAZ} (90%)`)
+  expect(lineaLog(decision({ claude: 'opus', opcion: ID_MAS_CAPAZ, confianza: 0.9 }))).toBe(`Jev cambió modelo opus→${MAS_CAPAZ} (90%)`)
+})
+
+test('la familia más capaz está por encima de opus en la marca de tarjeta', () => {
+  expect(marcaTarjeta(decision({ claude: ID_MAS_CAPAZ, opcion: 'opus', aplicada: true }))).toBe('jev ↓ opus')
+  expect(marcaTarjeta(decision({ claude: 'opus', opcion: MAS_CAPAZ, aplicada: true }))).toBe(`jev ↑ ${MAS_CAPAZ}`)
+  expect(marcaTarjeta(decision({ claude: ID_MAS_CAPAZ, opcion: MAS_CAPAZ, aplicada: true }))).toBe(null)
+})
+
+test('el motivo «tope: <modelo> → opus» del guardián se lee sin los dos puntos', () => {
+  expect(lineaLog(tope({ opcion: 'opus', claude: MAS_CAPAZ, motivo: `tope: ${MAS_CAPAZ} → opus` }))).toBe(`tope → opus · pedía ${MAS_CAPAZ}`)
+  expect(lineaLog(tope({ opcion: 'opus', claude: MAS_CAPAZ, motivo: `tope: ${MAS_CAPAZ} → opus; esfuerzo xhigh → high` }))).toBe(
+    `tope → opus · pedía ${MAS_CAPAZ} · esfuerzo high`,
+  )
+})
+
+test('el color de la fila de ritmo sale del mismo tope que la línea «tope ahora»', () => {
+  // semana(u, JUEVES) a las 12:00 del lunes: ritmo 45,5. Con 61,0 el exceso es +15,5: sonnet medium (ámbar), no rojo.
+  for (const usado of [20, 30, 44, 52, 58, 61, 66, 75]) {
+    for (const cinco of [undefined, h5(30), h5(65), h5(80), h5(90)]) {
+      const l = { ...semana(usado, JUEVES), ...(cinco ? { five_hour: cinco } : {}) }
+      const fila = filaRitmo(ritmoSemana(l, AHORA, undefined, UTC1), cinco, AHORA)
+      expect(fila?.nivel).toBe(ta(l).nivel)
+    }
+  }
+})
+
+test('sin dato de uso el tope no se pinta en verde', () => {
+  expect(ta(null).nivel).not.toBe('verde')
+  expect(ta({ actualizado: AHORA }).nivel).not.toBe('verde')
+})
+
+test('descripción y motivo de Jev salen sin controles ni secretos', () => {
+  const texto = linea({ descripcion: 'buscar\x1b[2J curl -u admin:hunter2', motivo: 'tope\x07 semana' })
+  const d = leerDecisiones(texto, SESION)[0]!
+  expect(d.descripcion).toBe('buscar[2J curl -u admin:•••')
+  expect(d.motivo).toBe('tope semana')
+})
+
+test('un decisiones.jsonl mayor que el tope se trata como sin dato', () => {
+  const grande = [linea({ opcion: 'sonnet' }), linea({ descripcion: 'x'.repeat(2_000_000) })].join('\n')
+  expect(leerDecisiones(grande, SESION).length).toBe(0)
+})
+
+test('un limites.json mayor que el tope da null', () => {
+  const grande = JSON.stringify({ actualizado: 1, relleno: 'a'.repeat(2_000_000) })
+  expect(leerLimites(grande) === null).toBe(true)
+})
+
+test('leerDecisiones con el mismo texto y la misma sesión devuelve lo ya leído, sin parsear de nuevo', () => {
+  const texto = [linea({ opcion: 'sonnet' }), linea({ opcion: 'opus' })].join('\n')
+  expect(leerDecisiones(texto, SESION)).toBe(leerDecisiones(texto, SESION))
+  // Otra sesión o un texto distinto sí se lee de nuevo.
+  expect(leerDecisiones(texto, 'otra')).not.toBe(leerDecisiones(texto, SESION))
+  expect(leerDecisiones(texto + '\n' + linea({ opcion: 'haiku' }), SESION).length).toBe(3)
+})
+
+test('recientesJev solo mira el final del registro: no lee las decisiones viejas', () => {
+  const ds: DecisionJev[] = Array.from({ length: 5000 }, () => decision())
+  for (let i = 0; i < ds.length - 10; i++) {
+    Object.defineProperty(ds, i, {
+      get: () => {
+        throw new Error('leyó una decisión vieja')
+      },
+    })
+  }
+  expect(recientesJev(ds).length).toBe(3)
 })

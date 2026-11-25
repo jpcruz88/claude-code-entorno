@@ -1,5 +1,5 @@
 {
-  "model": "haiku",
+  "model": "opus",
   "modelSettings": {
     "claude-opus-5-5": {
       "effortLevel": "medium"
@@ -24,6 +24,11 @@
           {
             "type": "command",
             "command": "~/.claude/hooks/cbm-session-reminder"
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/al-dia.py",
+            "timeout": 5
           }
         ]
       },
@@ -61,6 +66,16 @@
             "type": "command",
             "command": "python3 ~/.claude/hooks/memoria-maestra.py inicio",
             "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/hilo.py",
+            "timeout": 15
           }
         ]
       }
@@ -126,6 +141,17 @@
             "type": "command",
             "command": "python3 ~/.claude/hooks/memoria-maestra.py fin",
             "timeout": 60
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/caveman-activo.py",
+            "timeout": 5
           }
         ]
       }

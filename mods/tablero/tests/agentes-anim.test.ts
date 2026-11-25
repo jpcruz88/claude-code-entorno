@@ -1,57 +1,13 @@
 import { expect, test } from 'claude-code/testing'
 
-import { EMOJI_AGENTES, PASO_AGENTE_MS, barraAvance, barraIndeterminada, emojiDe, fotogramaDeMarcha, glifoAgente, pistaCarril, posicionMarcha } from '../hooks/agentes-anim'
-
-test('con la animación apagada, un agente en marcha muestra siempre el mismo cuadro', () => {
-  expect(glifoAgente(0, 'running', false)).toBe('◐')
-  expect(glifoAgente(3 * PASO_AGENTE_MS, 'running', false)).toBe('◐')
-})
+import { PASO_AGENTE_MS, barraIndeterminada, fotogramaDeMarcha, pistaCarril } from '../hooks/agentes-anim'
 
 test('el fotograma de marcha cambia cada paso solo si hay agentes caminando', () => {
   expect(fotogramaDeMarcha(0, 1)).not.toBe(fotogramaDeMarcha(PASO_AGENTE_MS, 1))
   expect(fotogramaDeMarcha(0, 0)).toBe(fotogramaDeMarcha(PASO_AGENTE_MS, 0))
 })
 
-test('un agente en marcha cambia de cuadro cada PASO_AGENTE_MS', () => {
-  expect(PASO_AGENTE_MS).toBe(250)
-  expect(glifoAgente(0, 'running')).not.toBe(glifoAgente(PASO_AGENTE_MS, 'running'))
-})
-
-test('el ciclo de marcha son cuatro cuadros distintos y se repite', () => {
-  const cuadros = [0, 1, 2, 3].map(i => glifoAgente(i * PASO_AGENTE_MS, 'running'))
-  expect(new Set(cuadros).size).toBe(4)
-  expect(glifoAgente(4 * PASO_AGENTE_MS, 'running')).toBe(cuadros[0])
-})
-
-test('los agentes terminados quedan fijos, sin importar el momento', () => {
-  expect(glifoAgente(0, 'done')).toBe('✓')
-  expect(glifoAgente(999_999, 'done')).toBe('✓')
-  expect(glifoAgente(0, 'failed')).toBe('✗')
-  expect(glifoAgente(777, 'failed')).toBe('✗')
-  expect(glifoAgente(0, 'other')).toBe('■')
-})
-
 // --- cangrejo en el carril: emoji por agente que va de un lado a otro mientras trabaja
-
-test('cada agente tiene un emoji fijo, siempre el mismo para el mismo id', () => {
-  expect(emojiDe('ag1')).toBe(emojiDe('ag1'))
-  expect(EMOJI_AGENTES).toContain(emojiDe('ag1'))
-  expect(EMOJI_AGENTES).toContain(emojiDe('otro-agente'))
-})
-
-test('posicionMarcha va de izquierda a derecha y regresa, sin salirse de la pista', () => {
-  // pista de 10 celdas: el emoji ocupa 2, así que las posiciones van de 0 a 8
-  const pos = Array.from({ length: 17 }, (_, i) => posicionMarcha(i * PASO_AGENTE_MS, 10, 0))
-  expect(pos.slice(0, 9)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
-  expect(pos.slice(9)).toEqual([7, 6, 5, 4, 3, 2, 1, 0])
-  expect(Math.min(...pos)).toBeGreaterThanOrEqual(0)
-  expect(Math.max(...pos)).toBeLessThanOrEqual(8)
-})
-
-test('posicionMarcha con pista demasiado corta no mueve el emoji', () => {
-  expect(posicionMarcha(5 * PASO_AGENTE_MS, 2, 0)).toBe(0)
-  expect(posicionMarcha(5 * PASO_AGENTE_MS, 1, 0)).toBe(0)
-})
 
 test('pistaCarril parte la barra alrededor del emoji sin perder celdas', () => {
   const g = { before: 3, bar: 4, after: 3 }
@@ -76,24 +32,37 @@ test('la barra del carril usa el tono de barra y lo demás es tenue', () => {
   ])
 })
 
-test('la barra de avance llena celdas según done/total', () => {
-  expect(barraAvance(0, 4, 8)).toBe('░░░░░░░░')
-  expect(barraAvance(2, 4, 8)).toBe('████░░░░')
-  expect(barraAvance(4, 4, 8)).toBe('████████')
-})
-
-test('la barra de avance se acota y tolera datos raros', () => {
-  expect(barraAvance(9, 4, 8)).toBe('████████')
-  expect(barraAvance(-1, 4, 8)).toBe('░░░░░░░░')
-  expect(barraAvance(1, 0, 8)).toBe('░░░░░░░░')
-  expect(barraAvance(NaN, 4, 8)).toBe('░░░░░░░░')
-  expect(barraAvance(1, 4, 0)).toBe('')
-})
-
 test('la barra indeterminada tiene el ancho pedido y su bloque se mueve con el tiempo', () => {
   const a = barraIndeterminada(0, 10)
   const b = barraIndeterminada(3 * PASO_AGENTE_MS, 10)
   expect([...a].length).toBe(10)
   expect(a).not.toBe(b)
   expect(barraIndeterminada(0, 2)).toBe('██')
+})
+
+// Indicador por estado: un giro de un carácter mientras el agente trabaja; ✓ terminado, ✗ fallido, ○ detenido. Sin emoji.
+import { CARRILES_VISIBLES, emojiDeEstado } from '../hooks/agentes-anim'
+
+test('un agente en marcha muestra un giro de un carácter, un cuadro por paso', () => {
+  expect(emojiDeEstado(0, 'running')).toBe('⠋')
+  expect(emojiDeEstado(PASO_AGENTE_MS, 'running')).toBe('⠙')
+  expect(emojiDeEstado(8 * PASO_AGENTE_MS, 'running')).toBe('⠋')
+})
+
+test('cada agente va en su fase: el desfase cambia la luna de un mismo instante', () => {
+  expect(emojiDeEstado(0, 'running', 1)).toBe('⠙')
+})
+
+test('con la animación apagada, un agente en marcha muestra siempre el mismo punto', () => {
+  expect(emojiDeEstado(3 * PASO_AGENTE_MS, 'running', 0, false)).toBe('●')
+})
+
+test('terminado, fallido y detenido tienen su símbolo fijo', () => {
+  expect(emojiDeEstado(0, 'done')).toBe('✓')
+  expect(emojiDeEstado(0, 'failed')).toBe('✗')
+  expect(emojiDeEstado(0, 'stopped')).toBe('○')
+})
+
+test('la lista muestra hasta siete agentes', () => {
+  expect(CARRILES_VISIBLES).toBe(7)
 })

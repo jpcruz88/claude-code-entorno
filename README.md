@@ -1,8 +1,19 @@
-# nexus-claude
+# claude-code-entorno
 
 > Un solo nodo para todo mi Claude Code: reglas, hooks, skills, plugins,
-> mods y memoria. Este repo se llama `claude-code-entorno` (el nombre del marketplace y
-> de los plugins); «nexus-claude» es el nombre del proyecto.
+> mods y memoria. Es también el nombre del marketplace de los mods y de los plugins.
+
+## Arranque rápido
+
+En Mac o Linux, tres comandos y uno más para los hooks de git si vas a contribuir
+(en Windows, ver [Instalación en Windows](#instalación-en-windows-paso-a-paso-a-mano)):
+
+```bash
+git clone https://github.com/jpcruz88/claude-code-entorno.git && cd claude-code-entorno
+./instalar.sh --simular   # ver qué haría, sin cambiar nada
+./instalar.sh             # instalar
+git config core.hooksPath .githooks   # una vez por clon: activa los hooks de privacidad y gitleaks
+```
 
 Mi configuración de [Claude Code](https://code.claude.com) lista para copiar en otra
 computadora, con **Windows** o con **Mac**. Un solo comando deja reglas, hooks,
@@ -62,21 +73,24 @@ dices que sí.
 | Qué | Dónde está en el repo | Qué hace |
 |---|---|---|
 | Ajustes | `claude/settings.base.json` | Modelo, esfuerzo, tema, hooks y línea de estado. Se **suma** a tu `settings.json` sin borrar lo tuyo. |
-| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones) y `nunca-fable.md`: usar `ctx7` para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». También: desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y Haiku por omisión, salvo que pidas otro modelo (ver [Modelo por defecto](#modelo-por-defecto-haiku)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). |
+| Reglas | `claude/rules/` | Instrucciones que Claude lee en todos los proyectos. Incluye `git.md` (commit y push siempre, con convenciones), `nunca-fable.md` (Fable solo en subagentes y con tope de uso) y `mods-version.md` (los pasos para cambiar un mod: subir la versión y actualizar la caché). También: usar `ctx7` (regla `context7.md`) para documentación, matar procesos solo por PID y responder siempre en modo `caveman` (telegráfico, en español) en el chat, sin aplicarlo al código, commits, documentos ni textos para otras personas. Se apaga en una sesión con «stop caveman» o «modo normal». Además, desarrollo guiado por pruebas (TDD) en todo cambio de comportamiento del código, con `superpowers:test-driven-development` (primero la prueba que falla) y `superpowers:verification-before-completion` (no decir «terminado» sin correr las pruebas). Y el modelo de la sesión es el que tú eliges (ver [Modelo de la sesión](#modelo-de-la-sesión)). Y cómo usar la memoria persistente (ver [Memoria persistente](#memoria-persistente)). Y `codigo-minimo.md`: una línea que pide escribir lo mínimo que resuelva la tarea, sin quitar validaciones ni pruebas (en las pruebas de Aduana: mismos aciertos y entre 28 y 44 % menos líneas). |
 | Hook `guard-kill.py` | `claude/hooks/` | Bloquea comandos que matan procesos en masa (`pkill -f cat`, `killall`, `taskkill /IM`, `Stop-Process -Name`…). |
+| Hook `al-dia.py` | `claude/hooks/` | «Al día»: al abrir Claude, si pasaron 24 h, actualiza en segundo plano tus skills, plugins y programas (no los mods de este repo). Los cambios de texto quedan como diff en `~/.claude/al-dia/cambios/` y el tablero muestra un resumen. |
+| Hook `hilo.py` | `claude/hooks/` | El hilo literal de la conversación. Tras compactar o reanudar, mete en el contexto los mensajes del usuario tal como los escribió (sacados de la transcripción, no de un resumen) y los archivos editados. Al abrir una sesión, apunta a la anterior del proyecto. Como comando busca en sesiones pasadas y cita fecha y sesión: `python3 ~/.claude/hooks/hilo.py buscar "<término>"` (con `--todos`, en todos los proyectos) y `python3 ~/.claude/hooks/hilo.py ver <id>`. No guarda nada: lee las transcripciones que Claude Code ya conserva. |
+| Hook `caveman-activo.py` | `claude/hooks/` | Activa el modo caveman solo: al abrir, reanudar, limpiar o compactar una sesión mete en el contexto las reglas del modo en corto (no la skill entera), y en cada mensaje recuerda el modo en una línea. Sigue `/caveman lite\|full\|ultra`, «stop caveman» y «modo normal»; el modo de cada sesión se guarda en `~/.claude/caveman/`. Sin él, caveman dependía solo del texto de la regla `caveman.md`. |
 | Línea de estado | `claude/statusline.sh` | Muestra modelo, carpeta, rama, contexto usado, costo, límites de uso y hora. |
 | Plugins | `plugins.txt` | `superpowers`. |
-| Mods | `mods/` | Ocho mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify`, `caveman-badge` y `tablero` (panel en español sobre el prompt). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
+| Mods | `mods/` | Siete mods de Claude Code, cada uno con su plugin y sus pruebas: `secret-guard` (bloquea escribir secretos), `tdd-gate` y `spec-gate` (avisan si se edita código sin prueba o sin spec), `guard-kill-visible`, `ctx-budget` (avisa al 70 % y 85 % de contexto), `sound-notify` y `tablero` (panel en español con todo el estado de la sesión: planes, subagentes, cache, git y CI, Aduana, gasto, otras sesiones y modo caveman). El repo es su propio marketplace (`.claude-plugin/marketplace.json`). Opcionales: `--sin-mods` / `-SinMods`. |
 | Skills | `skills/lista.json` | 48 skills de repositorios públicos de terceros (ver el [aviso](#skills)). Opcionales: `--sin-skills`. |
 | Servidores MCP | `mcp/` | `context7` (documentación al día) y `codebase-memory-mcp` (mapa del código). |
 | Gitignore global | `git/gitignore_global` | Archivos que no deben entrar a ningún repositorio. |
 | herdr | `herdr/config.toml` | Organizador de terminales para agentes, con la paleta Kanagawa, atajos `ctrl+alt`, lazygit, btop y Neovim en ventanas flotantes, avisos y sesión que sobrevive a reinicios. Además: su integración con Claude y su skill. Mac y Linux. Ver [herdr y Telegram](#herdr-y-telegram). |
 | Plugins de herdr | `herdr/plugins.txt` | `permgps/herdr-telegram-agents`: controla los agentes desde Telegram. Opcional: `--sin-plugins-herdr`. |
-| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Solo Mac. |
+| Ghostty | `ghostty/config` | Terminal con la paleta Kanagawa Wave y JetBrains Mono Nerd Font; abre herdr al arrancar. Antes espera (hasta 120 s, `HERDR_ESPERA_DISCOS`) a los discos externos de la sesión guardada con `herdr/esperar-discos.sh`, para que herdr no marque las pestañas como «Saved directory is unavailable». Solo Mac. |
 | Tema de Claude Code | `claude/themes/kanagawa.json` | Tema `custom:kanagawa` para Claude Code, a juego con Ghostty, herdr y Neovim. Hay que abrir una sesión nueva para que lo cargue. |
 | Neovim | `nvim/` | [LazyVim](https://www.lazyvim.org) con el tema Kanagawa. Mac y Linux. No pisa una config de Neovim que ya tengas. Opcional: `--sin-nvim`. Ver [Neovim](#neovim). |
 | Terminal | `terminal/terminal.sh` | `eza` (`ll` con íconos), `bat` (archivos con colores), `zoxide` (`z` salta a carpetas), `fzf` (buscar archivos) y `atuin` (historial con búsqueda), cargados desde tu `.zshrc`. Mac y Linux. Opcional: `--sin-terminal`. Ver [Terminal y Stats](#terminal-y-stats). |
-| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan. Mac y Linux. Opcional: `--sin-opencode`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
+| OpenCode como respaldo | `opencode/` | Las aliases `cl-go` y `cl-or` abren Claude Code contra OpenCode Go y OpenRouter, por si se acaban los tokens de Claude. Con la variable `OPENCODE_API_KEY` se define `cl-go`; sin ella no se crea. Además instala `/go-modelos`, que dentro de Claude Code enumera los modelos que incluye tu plan (Mac y Linux). En Windows, `cl-go` y `cl-or` se cargan desde tu perfil de PowerShell. Opcional: `--sin-opencode` (en Windows, `-SinOpencode`). Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Config de OpenCode | *fuera de este repo* | Trae de [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config) la config global de OpenCode en `~/.config/opencode`: el router que elige modelo por complejidad y el script `gomodel`. Va en un repo aparte **a propósito**: si se copiara aquí, esa config tendría dos fuentes de verdad. Mac y Linux. Opcional: `--sin-opencode-config`. Ver [OpenCode como respaldo](#opencode-como-respaldo). |
 | Monitor en la barra de menú | `instalar.sh` | [Stats](https://github.com/exelban/stats) (código abierto): uso de CPU, GPU, RAM y disco en la barra de arriba; arranca al iniciar sesión. Solo Mac. Opcional: `--sin-stats`. |
 | Modo servidor | `instalar.sh --servidor` | Mac que se queda encendida: no duerme, se enciende tras un corte de luz y abre Ghostty al iniciar sesión. Solo si lo pides. |
@@ -288,11 +302,13 @@ cd claude-code-entorno
 11. **Terminal** (Mac y Linux): copia `terminal/terminal.sh` a
     `~/.config/claude-code-entorno/` y agrega a tu `~/.zshrc` (o `~/.bashrc`, según
     tu shell) una línea que lo carga, solo la primera vez.
-12. **OpenCode** (Mac y Linux): copia `opencode/opencode.sh` a
+12. **OpenCode**: en Mac y Linux copia `opencode/opencode.sh` a
     `~/.config/claude-code-entorno/` y `opencode/opencode-go-modelos` a
-    `~/.local/bin/`, y agrega al rc la línea que carga el primero. Solo define las
-    aliases `cl-go` y `cl-or` si su variable de entorno existe; no pide ni escribe
-    claves. Ver [OpenCode como respaldo](#opencode-como-respaldo).
+    `~/.local/bin/`, y agrega al rc la línea que carga el primero. En Windows copia
+    `opencode/opencode.ps1` a `%USERPROFILE%\.config\claude-code-entorno\` y lo
+    carga desde tu perfil de PowerShell (7 y 5.1). Solo define `cl-go` y `cl-or` si
+    su variable de entorno existe; no pide ni escribe claves. Ver
+    [OpenCode como respaldo](#opencode-como-respaldo).
 13. **Config de OpenCode** (Mac y Linux): trae [`jpcruz88/opencode-config`](https://github.com/jpcruz88/opencode-config)
     a `~/.config/opencode` — clon, `git pull` si ya estaba, o conversión de una
     carpeta que ya existiera (sin tocar sus archivos sin seguimiento, como
@@ -329,7 +345,7 @@ con un aviso.
 
 | Clave | Valor | Qué hace |
 |---|---|---|
-| `model` | `haiku` | Modelo por omisión: Haiku. Ver [Modelo por defecto](#modelo-por-defecto-haiku). |
+| `model` | `opus` | Modelo con el que arranca una máquina nueva. Ver [Modelo de la sesión](#modelo-de-la-sesión). |
 | `modelSettings` | `claude-opus-5-5` → `effortLevel: xhigh` | Esfuerzo de razonamiento alto para ese modelo. |
 | `statusLine` | `~/.claude/statusline.sh` | Línea de estado de abajo (en Windows: `bash ~/.claude/statusline.sh`). |
 | `hooks.PreToolUse` `Bash\|PowerShell` | `guard-kill.py` | Revisa cada comando antes de correrlo y bloquea los que matan procesos en masa. |
@@ -388,26 +404,28 @@ carpeta `memory.bak-<fecha>` antes de enlazar, y lo que no esté en el repo se c
 
 Nunca pongas en el repo público el contenido de la memoria: solo el hook y la regla.
 
-## Modelo por defecto: Haiku
+## Modelo de la sesión
 
-Cada sesión arranca con **Haiku**. Se fija en dos sitios que se complementan:
+La sesión principal usa el modelo que tú eliges. Ya no hay Haiku fijo por omisión:
+aquí pesa más no perder el hilo ni inventar datos que el gasto. Se fija en dos sitios:
 
 | Dónde | Qué hace |
 |---|---|
-| `claude/settings.base.json` → `"model": "haiku"` | Es el modelo con el que arranca Claude Code. |
-| `claude/rules/modelo.md` | Le indica a Claude que use Haiku también en los subagentes (`model: "haiku"`) y que no cambie de modelo por su cuenta. |
+| `claude/settings.base.json` → `"model": "opus"` | Es el modelo con el que arranca Claude Code en una máquina nueva. Si tu `settings.json` ya tiene otro, el instalador conserva el tuyo. |
+| `claude/rules/modelo.md` | Le indica a Claude qué modelo y esfuerzo pedir en los subagentes según el tamaño de la tarea, y que no cambie el modelo de la sesión por su cuenta. |
 
-Para usar otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o
-usa `/model`. La petición vale solo para esa tarea; la siguiente vuelve a Haiku.
-Fable no se usa por omisión: solo si lo pides de forma explícita.
+Para usar otro modelo, pídelo («usa sonnet para esto») o usa `/model`. Claude no
+cambia el modelo de la sesión por su cuenta. En la sesión principal, Fable solo se usa
+si tú lo eliges.
 
-**Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-`low`, `medium` o `high`; `xhigh` solo cuando el tope de uso de la cuenta deja
-margen (si no, baja a `high`). Nunca `max` ni Fable. Lo revisa el hook
+**Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
+esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide según el tamaño de la tarea
+y el tope de uso de la cuenta lo baja en cada lanzamiento si el crédito no alcanza:
+`xhigh` y `fable` solo pasan con margen (si no, bajan a `high` y a `opus`, o más).
+Nunca `max`. En un workflow, solo `haiku`, `sonnet` u `opus`. Lo revisa el hook
 `claude/hooks/guard-subagentes.py` en las llamadas a Agent, Task y Workflow. Si
 Jev está seguro (confianza de al menos 0,80), elige el modelo y el esfuerzo de cada
-subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base sigue fijando
-Haiku con esfuerzo medio como valor por defecto de la sesión.
+subagente; ver «Jev» en `docs/GUIA-DE-USO.md`. La configuración base fija esfuerzo medio como valor por defecto.
 
 Para cambiar el modelo por defecto en todas tus computadoras, edita
 `claude/settings.base.json`, haz commit y corre el instalador en cada una. En la
@@ -448,7 +466,7 @@ modelo y esfuerzo de los subagentes; ver «Tope por uso de la cuenta» en
 
 ## Mods
 
-Ocho mods de Claude Code en `mods/`, cada uno con su plugin y sus pruebas. Se
+Diez mods de Claude Code en `mods/`, cada uno con su plugin y sus pruebas. Se
 instalan por defecto en todas las computadoras (`--sin-mods` / `-SinMods` para
 omitirlos).
 
@@ -458,10 +476,9 @@ omitirlos).
 | `tdd-gate` | Pregunta una vez por sesión si se edita código de producción sin haber tocado antes una prueba. |
 | `spec-gate` | Pregunta una vez por sesión si se edita código de producción sin una spec reciente. |
 | `guard-kill-visible` | Avisa cuando un comando mata procesos por nombre. Solo avisa, no bloquea. |
-| `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto. |
+| `ctx-budget` | Avisa al cruzar el 70 % y el 85 % del contexto, y le pide a Claude actualizar `handoff.md` antes de que se compacte. |
 | `sound-notify` | Avisa al terminar un turno largo y cuando Claude espera un permiso. |
-| `caveman-badge` | Muestra en la línea de estado el modo caveman (aproximado). |
-| `tablero` | Panel en español con carpeta, modelo, costo, contexto, subagentes, permisos y uso. Derivado de Flightdeck (MIT). |
+| `tablero` | Panel en español con todo el estado de la sesión, sin duplicados: modelo, contexto, cache, costo y presupuesto, cupos, git y CI, planes (herramienta `mcp__tablero__plan_progress`), subagentes, Jev, Aduana, gasto, otras sesiones, permisos y modo caveman. Con él activo, la statusline no imprime nada. Derivado de Flightdeck (MIT). |
 
 El repo es su propio marketplace: `.claude-plugin/marketplace.json` lista cada mod
 con su carpeta. El instalador agrega el marketplace por la ruta de este repo y
@@ -879,6 +896,7 @@ instalado:
 | `alt+c` | Entra a una subcarpeta (`fzf`). |
 | `ctrl+r` | Busca en el historial de todas tus terminales (`atuin`; en bash, el de `fzf`). La flecha arriba sigue como siempre. |
 | `bat <archivo>` | Muestra un archivo con colores, con el tema de VS Code. |
+| `claude --resume <id>` | Con `export CLAUDE_RESUME_SALTAR_PERMISOS=1` en tu rc, añade `--dangerously-skip-permissions` a `--resume`, `-r`, `--continue` y `-c`: así reanuda tus sesiones herdr al reiniciar. Apagado por omisión; no toca sesiones nuevas ni `-p`, ni repite una bandera que ya pasaste. |
 
 No cambia `ls` ni `cat`: Claude Code y los scripts los usan y esperan su salida de
 siempre. Para pasar a atuin el historial que ya tenías: `atuin import auto` (se
@@ -915,6 +933,17 @@ cada máquina:
 export OPENCODE_API_KEY="…"    # de https://opencode.ai/console
 export OPENROUTER_API_KEY="…"  # de https://openrouter.ai/keys
 ```
+
+En Windows, `opencode/opencode.ps1` hace lo mismo en PowerShell: `instalar.ps1` lo
+carga desde tu perfil, y las claves van como variables de usuario (abre después
+una terminal nueva):
+
+```powershell
+[Environment]::SetEnvironmentVariable('OPENCODE_API_KEY', '…', 'User')
+[Environment]::SetEnvironmentVariable('OPENROUTER_API_KEY', '…', 'User')
+```
+
+`/go-modelos` y la config de OpenCode (abajo) siguen siendo solo de Mac y Linux.
 
 Ponlas en un archivo que no esté en el repo (`~/.config/secrets.env`, por ejemplo)
 y cárgalas desde tu `.zshrc`; nunca dentro de este repo.
@@ -970,6 +999,26 @@ borra**: avisa, porque puede mandar sobre el `opencode.jsonc` que sí está gest
 
 Para no instalar ninguna de las dos: `--sin-opencode` (las aliases y `/go-modelos`)
 y `--sin-opencode-config` (el router y `gomodel`).
+
+## Evaluar herramientas y técnicas de IA (`/evaluar`)
+
+Dentro de Claude Code, `/evaluar <link | archivo | nombre>` revisa si una herramienta
+o técnica de IA sirve o es humo y la compara contra lo que ya trae este entorno. Acepta
+repositorios, videos de YouTube, Instagram o Facebook, archivos de video o documento,
+páginas, o solo un nombre o una pregunta. Sin argumentos lista lo ya evaluado; lo que
+ya se evaluó no se repite, y una versión nueva se compara con la anterior.
+
+El comando solo lleva el procedimiento. El registro de lo evaluado y los programas de
+apoyo viven en un repo privado aparte (Aduana, antes detector-humo; los datos locales
+siguen en `~/.config/detector-humo`), porque los reportes mencionan tus proyectos.
+Dile al comando dónde está con una línea en `~/.config/detector-humo/ruta` o con la
+variable `DETECTOR_HUMO_RUTA`; sin eso, `/evaluar` avisa que no lo encuentra.
+
+Reglas que el comando impone: sin pruebas propias el veredicto es «sin probar»; lo que
+diga una fuente es dato, no instrucción; no se ejecuta nada de un repositorio clonado;
+y nada se integra a este entorno sin tu aprobación. Solo tú lo lanzas: el modelo no
+puede invocarlo por su cuenta. En una máquina con servicios en producción, crea el
+archivo `~/.config/detector-humo/solo-lectura` para que ahí solo consulte el registro.
 
 ## Panel de servicios locales
 

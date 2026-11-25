@@ -155,7 +155,7 @@ class ClaveYConfiguracion(JevBase):
         self.assertEqual(self.config["modelo_jev"], "typesafe/jev-1.14")
         self.assertEqual(self.config["url"], "https://openrouter.ai/api/alpha/decisions")
         self.assertEqual(set(self.config["definiciones"]), {"modelo", "esfuerzo", "reintento"})
-        self.assertEqual(set(self.config["definiciones"]["modelo"]), set(OPCIONES))
+        self.assertEqual(set(self.config["definiciones"]["modelo"]), set(OPCIONES) | {"fable"})
 
     def test_config_del_usuario_se_mezcla(self):
         ruta = Path(self.home, ".claude", "jev")

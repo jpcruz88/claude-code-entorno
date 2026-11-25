@@ -8,7 +8,6 @@ import type {
   Check,
   Gate,
   Layout,
-  LogLine,
   Loop,
   Main,
   Moment,
@@ -17,11 +16,43 @@ import type {
   Tally,
   ToolNote,
   Turn,
+  Usos,
   Usage,
   View,
 } from '../types'
 
 export const SCHEMA_VERSION = 2
+
+export const DEFAULT_USOS: Usos = { skills: {}, mcp: {} }
+
+/** Qué cuenta una llamada: una habilidad (herramienta Skill) o un servidor MCP (mcp__servidor__herramienta). */
+export type Uso = { kind: 'skill'; name: string } | { kind: 'mcp'; server: string }
+
+export const usoDe = (tool: string, input: unknown): Uso | null => {
+  if (tool === 'Skill') {
+    const name = isObject(input) && typeof input.skill === 'string' ? input.skill.trim() : ''
+    return name ? { kind: 'skill', name } : null
+  }
+  const partes = tool.split('__')
+  return partes.length >= 3 && partes[0] === 'mcp' && partes[1] ? { kind: 'mcp', server: partes[1] } : null
+}
+
+const sumar = (cuentas: Record<string, number>, clave: string) => ({ ...cuentas, [clave]: (cuentas[clave] ?? 0) + 1 })
+
+export const noteUso = (u: Usos, uso: Uso): Usos =>
+  uso.kind === 'skill' ? { ...u, skills: sumar(u.skills, uso.name) } : { ...u, mcp: sumar(u.mcp, uso.server) }
+
+/** Una línea para la tarjeta: «habilidades caveman×2 · MCP tablero×3»; vacía si no hay usos. */
+export const resumenUsos = (u: Usos): string => {
+  const partes: string[] = []
+  const hab = Object.entries(u.skills).map(([k, n]) => `${k}×${n}`)
+  const mcp = Object.entries(u.mcp).map(([k, n]) => `${k}×${n}`)
+  if (hab.length) partes.push(`habilidades ${hab.join(' ')}`)
+  if (mcp.length) partes.push(`MCP ${mcp.join(' ')}`)
+  return partes.join(' · ')
+}
+// Versión del mod que muestra la cabecera. Debe ser la de .claude-plugin/plugin.json.
+export const MOD_VERSION = '1.4.4'
 
 // ---------------------------------------------------------------- defaults
 
@@ -87,19 +118,12 @@ export const normalizeCard = (stored: unknown): AgentCard =>
     stored,
   )
 
-export const normalizeLog = (stored: unknown): LogLine[] =>
-  listOf<Record<string, unknown>>(stored).map(l => ({
-    at: typeof l.at === 'number' ? l.at : 0,
-    who: String(l.who ?? ''),
-    text: String(l.text ?? ''),
-    agentId: typeof l.agentId === 'string' ? l.agentId : null,
-    kind: l.kind === 'error' || l.kind === 'consult' || l.kind === 'done' ? l.kind : 'info',
-  }))
-
 // ---------------------------------------------------------------- config
 
-export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'sesion' | 'log'
-const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'sesion', 'log']
+export type Panel = 'main' | 'jev' | 'architect' | 'gate' | 'agents' | 'loops' | 'receipt' | 'aldia'
+const PANELS: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'receipt', 'aldia']
+/** Lo que sale por defecto: sin «último turno» (el diagrama ya muestra el flujo). `receipt` sigue válido en `panels`. */
+export const PANELS_DEFECTO: readonly Panel[] = ['main', 'jev', 'architect', 'gate', 'agents', 'loops', 'aldia']
 
 export type Config = {
   architect: RegExp
@@ -114,11 +138,12 @@ export type Config = {
   layout: Layout
   palette: Palette
   openOnStart: boolean
-  statusLine: boolean
-  /** La banda de Tablero sobre el prompt. */
-  banda: boolean
-  /** Movimiento de la banda: barras que se llenan, indicador que pulsa, reloj. */
+  /** Animación del panel: spinner, paquetes en las líneas, bordes que respiran. */
   animacion: boolean
+  /** Las fuentes nuevas de 1.3.0 que están encendidas (opción `extras`). */
+  extras: ReadonlySet<Fuente>
+  /** Tope de gasto diario en USD; 0 oculta la fila Hoy. */
+  presupuestoDiario: number
 }
 
 const safeRegExp = (source: string, fallback: string) => {
@@ -130,10 +155,13 @@ const safeRegExp = (source: string, fallback: string) => {
 }
 
 /** The plugin's `/config` values, read leniently: anything malformed falls back to the default. */
+export const FUENTES = ['cache', 'git', 'ci', 'servicio', 'presupuesto', 'gasto', 'sesiones'] as const
+export type Fuente = (typeof FUENTES)[number]
+
 export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
   const str = (k: string, d: string) => (typeof o[k] === 'string' && o[k] !== '' ? (o[k] as string) : d)
   const bool = (k: string, d: boolean) => (typeof o[k] === 'boolean' ? (o[k] as boolean) : d)
-  const panels = str('panels', PANELS.join(','))
+  const panels = str('panels', PANELS_DEFECTO.join(','))
     .split(',')
     .map(s => s.trim())
     .filter((p): p is Panel => (PANELS as readonly string[]).includes(p))
@@ -144,30 +172,35 @@ export const parseConfig = (o: Readonly<Record<string, unknown>>): Config => {
     architect: safeRegExp(str('architectPattern', ''), 'advisor|architect'),
     architectLabel: str('architectLabel', 'ASESOR'),
     gateLabel: str('gateLabel', 'PERMISOS'),
-    panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS],
+    panels: panels.length > 0 ? [...new Set(panels)] : [...PANELS_DEFECTO],
     motion: str('motion', 'while-active') !== 'off',
     moments: bool('moments', true),
     matchDescriptions: bool('matchDescriptions', false),
     maxCards: Math.min(6, Math.max(1, max)),
     // The body clamps its drawing at 40 columns, so a narrower dock would only clip it.
     paneColumns: Math.max(40, cols),
-    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' ? layout : 'auto',
-    palette: str('palette', 'theme') === 'pastel' ? 'pastel' : 'theme',
+    layout: layout === 'compact' || layout === 'wide' || layout === 'mini' || layout === 'diagrama' || layout === 'mapa' ? layout : 'auto',
+    palette: (['theme', 'pastel', 'neon'] as const).find(p => p === str('palette', 'theme')) ?? 'theme',
     openOnStart: bool('openOnStart', true),
-    statusLine: bool('statusLine', false),
-    banda: bool('banda', true),
     animacion: bool('animacion', true),
+    extras: new Set(
+      (typeof o.extras === 'string' ? o.extras : FUENTES.join(','))
+        .split(',')
+        .map(s => s.trim())
+        .filter((f): f is Fuente => (FUENTES as readonly string[]).includes(f)),
+    ),
+    presupuestoDiario: typeof o.presupuestoDiario === 'number' && o.presupuestoDiario > 0 ? o.presupuestoDiario : 0,
   }
 }
 
 // ---------------------------------------------------------------- palette
 
-export type Palette = 'theme' | 'pastel'
+export type Palette = 'theme' | 'pastel' | 'neon'
 export type Colors = Record<'main' | 'agent' | 'gate' | 'cleared' | 'arch' | 'amber' | 'warn' | 'dim' | 'faint' | 'text', string>
 
 /**
  * `theme` names the person's own theme colours (they follow light, dark and colour-blind themes);
- * `pastel` is fixed hex tuned for dark terminals.
+ * `pastel` is fixed hex tuned for dark terminals; `neon` is saturated fixed hex that makes the box lines glow.
  */
 export const PALETTES: Record<Palette, Colors> = {
   theme: {
@@ -194,6 +227,18 @@ export const PALETTES: Record<Palette, Colors> = {
     faint: '#3f4654',
     text: '#e5e7eb',
   },
+  neon: {
+    main: '#00f0ff',
+    agent: '#ff2bd6',
+    gate: '#39ff14',
+    cleared: '#00ffa3',
+    arch: '#b388ff',
+    amber: '#ffe600',
+    warn: '#ff3b5c',
+    dim: '#6b7280',
+    faint: '#3f4654',
+    text: '#f5f5f5',
+  },
 }
 
 /** SVG cannot name theme keys: mid-tone colours that read on light and dark backgrounds. */
@@ -201,7 +246,6 @@ export const SVG_COLORS = { running: '#3b82f6', done: '#16a34a', failed: '#dc262
 
 // ---------------------------------------------------------------- formatting
 
-/** `claude-opus-5-5` → `Opus 5.5`; anything else is shown as given. */
 /**
  * A model id as people say it, from any provider's spelling: `claude-opus-5-5[1m]` → `Opus 5.5 1M`,
  * `us.anthropic.claude-sonnet-4-5-20250929-v1:0` → `Sonnet 4.5`, `claude-3-5-haiku-20241022` →
@@ -218,8 +262,14 @@ export const prettyModel = (id: string) => {
   return shorten(id, 22)
 }
 
+/** Tope de lectura de un archivo de datos: lo que pase de aquí no se toma como dato («sin dato»). */
+export const TOPE_LECTURA = 2_000_000
+
+/** Espacios normales y sin caracteres de control (ESC, BEL, C1…): lo que se puede guardar o dibujar. */
+export const sinControles = (s: string) => s.replace(/\s+/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim()
+
 export const shorten = (s: string, n: number) => {
-  const one = s.replace(/\s+/g, ' ').trim()
+  const one = limpio(s)
   return n <= 0 ? '' : one.length > n ? `${one.slice(0, Math.max(0, n - 1)).trimEnd()}…` : one
 }
 
@@ -231,6 +281,13 @@ export const fmtDuration = (ms: number) => {
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   return m < 60 ? `${m}m${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
+}
+
+/** Minutos para el reloj del mapa en reposo: `<1m` bajo un minuto, `12m`, y `1h05m` pasada la hora. */
+export const fmtMinutos = (ms: number) => {
+  const m = Math.floor(Math.max(0, ms) / 60_000)
+  if (m === 0 && ms < 60_000) return '<1m'
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
 }
 
 /** A running clock as the live cards draw it: m:ss, or XhYY past an hour. */
@@ -259,7 +316,7 @@ export const momentLabel = (m: string) =>
 
 /** El estado de una tarjeta de agente como se lee en pantalla; el valor guardado sigue siendo el interno. */
 export const statusLabel = (s: string) =>
-  ({ running: 'en curso', done: 'listo', failed: 'fallido', stopped: 'detenido' } as Record<string, string>)[s] ?? s
+  ({ running: 'En curso', done: 'Hecho', failed: 'Falló', stopped: 'Detenido' } as Record<string, string>)[s] ?? s
 
 export const fmtUsd = (n: number) => (n >= 100 ? `$${Math.round(n)}` : `$${n.toFixed(2)}`)
 
@@ -331,14 +388,19 @@ export const limitOf = (r: { kind: string; percentUsed: number; resetsAt?: strin
   return { kind: r.kind, pct: r.percentUsed, resetsAt: Number.isFinite(at) ? at : null }
 }
 
-/** Time left until a window resets, its two largest units: `25m`, `3h10m`, `4d2h`; empty when unknown or past. */
-export const fmtResetIn = (resetsAt: number | null | undefined, now: number) => {
-  if (resetsAt === null || resetsAt === undefined || resetsAt <= now) return ''
-  const m = Math.max(1, Math.floor((resetsAt - now) / 60_000))
-  const d = Math.floor(m / 1440)
-  const h = Math.floor((m % 1440) / 60)
-  if (d > 0) return `${d}d${h}h`
-  return h > 0 ? `${h}h${String(m % 60).padStart(2, '0')}m` : `${m}m`
+const DIAS_CORTOS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+
+/** La hora de reinicio de una ventana: `hoy 23:05`, `mañana 01:30` o `vie 06:00`; vacío si no hay dato o ya pasó. */
+export const fmtReinicio = (resetsAt: number | null | undefined, now: number) => {
+  if (resetsAt === null || resetsAt === undefined || !Number.isFinite(resetsAt) || resetsAt <= now) return ''
+  const at = new Date(resetsAt)
+  const hora = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  const hoy = new Date(now)
+  const manana = new Date(now + 86_400_000)
+  const mismoDia = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  if (mismoDia(at, hoy)) return `hoy ${hora}`
+  if (mismoDia(at, manana)) return `mañana ${hora}`
+  return `${DIAS_CORTOS[at.getDay()]} ${hora}`
 }
 
 /** A rate-limit window's short name: `five_hour` → `5h`, `seven_day_opus` → `7d opus`. */
@@ -356,14 +418,22 @@ const SECRETS: [RegExp, string][] = [
   [/(authorization\s*[:=]\s*)(bearer\s+|basic\s+)?\S+/gi, '$1$2•••'],
   [/\b(bearer)\s+[A-Za-z0-9._~+/-]{8,}=*/gi, '$1 •••'],
   [/\b(sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs])[-_][A-Za-z0-9_-]{8,}/g, '•••'],
-  [/((?:api[_-]?key|access[_-]?token|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
+  [/((?:api[_-]?key|access[_-]?token|secret[_-]?key|token|secret|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)/gi, '$1•••'],
   [/(--(?:token|password|api-key|secret)[= ])\S+/gi, '$1•••'],
   [/(\b[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)=)\S+/g, '$1•••'],
   [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s@]+@/gi, '$1•••@'],
+  [/(\b(?:mysql|mariadb|mysqldump)\b[^\n|;&]*?\s-p)\S+/gi, '$1•••'],
+  [/(\baws_secret_access_key\s+)\S+/gi, '$1•••'],
+  [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '•••'],
+  [/\bAIza[0-9A-Za-z_-]{35}/g, '•••'],
+  [/(\b(?:curl|wget)\b[^\n|;&]*?\s(?:-u|--user)[ =]*[^\s:]+:)(?!\/\/)\S+/gi, '$1•••'],
 ]
 
 /** What the gate drill-down may store: credentials masked before anything is written to state. */
 export const redact = (s: string) => SECRETS.reduce((t, [re, to]) => t.replace(re, to), s)
+
+/** Todo texto de fuera antes de guardarse o dibujarse: sin controles y con los secretos tapados. */
+export const limpio = (s: string) => redact(sinControles(s))
 
 // ---------------------------------------------------------------- tools and gate
 
@@ -382,10 +452,13 @@ export const describeInput = (tool: string, input: unknown) => {
     typeof i.command === 'string'
       ? i.command
       : path || (typeof i.pattern === 'string' ? i.pattern : typeof i.url === 'string' ? i.url : typeof i.description === 'string' ? i.description : '')
-  return redact(what ? `${tool} → ${what}` : tool)
+  return limpio(what ? `${tool} → ${what}` : tool)
 }
 
-/** Keeps the last `max` checks, but never drops a pending ask: its settle must still find it. */
+/**
+ * Guarda unos `max` controles: primero se quitan los más viejos ya resueltos. Un permiso pendiente nunca se quita,
+ * porque su resolución tiene que encontrarlo; por eso la lista puede pasar de `max`, hasta `max * 2`.
+ */
 export const trimRecent = (list: Check[], max: number): Check[] => {
   let extra = list.length - max
   if (extra <= 0) return list
@@ -420,6 +493,28 @@ export const settleCheck = (g: Gate, id: string, didRun: boolean): Gate => {
   }
 }
 
+/**
+ * Retira las `ask` que nadie va a responder: el turno del lead terminó (solo las del lead, `soloLead`) o empezó otro
+ * proceso (todas). La llamada no corrió, así que cuentan como denegadas, igual que en `settleCheck`.
+ */
+export const retireAsks = (g: Gate, soloLead: boolean): Gate =>
+  g.recent
+    .filter(c => c.verdict === 'ask' && !(soloLead && c.inSubagent))
+    .reduce((acc, c) => settleCheck(acc, c.id, false), g)
+
+/** Retira las `ask` de un subagente que terminó: ya nadie va a responderlas. Cuentan como denegadas. */
+export const retireAsksDe = (g: Gate, agente: string): Gate =>
+  g.recent
+    .filter(c => c.verdict === 'ask' && c.agente === agente)
+    .reduce((acc, c) => settleCheck(acc, c.id, false), g)
+
+/**
+ * Si un veredicto deja a la persona con algo que responder. Un `ask` va a quien decide en el modo: el diálogo o, en
+ * modo automático, el clasificador. El `ask` que hizo el hook de un plugin (`plugin`) siempre va a la persona.
+ */
+export const esperaPersona = (modo: string | undefined, v: { decision: string; plugin?: string }): boolean =>
+  v.decision === 'ask' && (modo !== 'auto' || v.plugin !== undefined)
+
 export const gateSummary = (g: Gate) => {
   const all = (['file', 'shell', 'other'] as const).reduce(
     (s, k) => ({
@@ -450,8 +545,21 @@ export const afterCall = (t: Turn, c: { inSubagent: boolean; hasFailed: boolean;
 export const momentOf = (t: Pick<Turn, 'edits' | 'errorStreak'>): Moment =>
   t.errorStreak >= 2 ? 'error repeats' : t.edits === 0 ? 'before a plan' : 'before done'
 
+/** Abre una consulta. Si el id ya está, es el mismo asesor reanudado: su consulta se reabre con su hora de inicio. */
 export const startConsult = (a: Architect, c: { id: string; at: number; moment: Moment; via: string }): Architect =>
-  a.consults.some(x => x.id === c.id) ? a : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+  a.consults.some(x => x.id === c.id)
+    ? { ...a, consults: a.consults.map(x => (x.id === c.id ? { ...x, endAt: null } : x)) }
+    : { ...a, consults: [...a.consults, { ...c, endAt: null }].slice(-40) }
+
+/**
+ * Cierra las consultas abiertas que ya no tendrán respuesta. Al terminar el turno del lead se cierran las de la
+ * herramienta de servidor, pero no la de un subagente asesor (su id está en `ids`), que puede seguir en segundo plano
+ * y se cierra al terminar él. Con `todas` (al abrir la sesión) se cierran también esas.
+ */
+export const cerrarConsultas = (a: Architect, at: number, todas = false): Architect => ({
+  ...a,
+  consults: a.consults.map(c => (c.endAt === null && (todas || !a.ids.includes(c.id)) ? { ...c, endAt: at } : c)),
+})
 
 /** Ends the open consult (the latest without an end), or the one named. */
 export const endConsult = (a: Architect, at: number, advice: string | null, id?: string): Architect => {
@@ -512,6 +620,14 @@ export const noteTool = (c: AgentCard, n: ToolNote): AgentCard => ({ ...c, tools
 /** A surface module's fault key, `desktop:rail.tsx`, from `hooks/rail.tsx` or `hooks\rail.tsx` alike. */
 export const faultKey = (surface: string, module: string) => `${surface}:${module.split(/[\\/]/).pop()}`
 
+/** Anota un fallo de un módulo de superficie del panel `pane`; dice si es el primero de esa pieza (hay que volver a dibujar). */
+export const anotarFallo = (fallados: Set<string>, pane: string, e: { requestId: string; surface: string; module: string }): boolean => {
+  const key = faultKey(e.surface, e.module)
+  if (e.requestId !== pane || fallados.has(key)) return false
+  fallados.add(key)
+  return true
+}
+
 /** A card whose agent was resumed after it finished (SendMessage): running again, its clock from its first spawn. */
 export const resumeCard = (c: AgentCard): AgentCard => ({ ...c, status: 'running', endedAt: null })
 
@@ -519,10 +635,20 @@ export const resumeCard = (c: AgentCard): AgentCard => ({ ...c, status: 'running
  * A spawned card joins the list. An id already there is that agent resumed: its card runs again
  * where it stands, with its tallies and the new task and model, so no two cards share keys.
  */
-export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] =>
-  cards.some(c => c.id === card.id)
-    ? cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
-    : [...cards, card].slice(-24)
+export const addCard = (cards: AgentCard[], card: AgentCard): AgentCard[] => {
+  if (cards.some(c => c.id === card.id))
+    return cards.map(c => (c.id === card.id ? resumeCard({ ...c, description: card.description || c.description, model: card.model || c.model }) : c))
+  // Pasado 24, se quitan primero las tarjetas terminadas más viejas. Una en curso se queda: si las 24 están en curso, la lista pasa de 24.
+  const out = [...cards, card]
+  let sobran = out.length - 24
+  return out.filter(c => {
+    if (sobran > 0 && c.status !== 'running') {
+      sobran -= 1
+      return false
+    }
+    return true
+  })
+}
 
 export const stepLoop = (loops: Loop[], id: string, at: number): Loop[] => {
   const found = loops.find(l => l.id === id)
@@ -547,9 +673,6 @@ export const lanes = (cards: AgentCard[], now: number, width: number) => {
 }
 
 // ---------------------------------------------------------------- layout
-
-/** How many log lines fit: what the other panels leave, never fewer than 4 nor more than 8. */
-export const logRows = (bodyRows: number, used: number) => Math.max(4, Math.min(8, bodyRows - used - 3))
 
 /** Legend items that fit on one row of `width` cells, in order; the rest are dropped. */
 export const fitLegend = <T extends { label: string }>(items: T[], width: number) => {
@@ -602,18 +725,6 @@ export const titleLines = (title: string, first: number, rest: number): [string,
 }
 
 /**
- * What a turn's opening text was, for the log: the person's words, or for a turn the engine
- * opened with a tagged message (a subagent's hand-back, a task notification), that message's kind.
- */
-export const promptLine = (text: string): { who: string; text: string } => {
-  const tag = /^\s*<([a-z][\w-]*)/i.exec(text)?.[1]
-  if (!tag) return { who: 'you', text: shorten(text, 70) }
-  const from = /\bfrom="([^"]+)"/.exec(text)?.[1]
-  const kind = tag === 'agent-message' ? 'mensaje de agente' : tag.replace(/[-_]/g, ' ')
-  return { who: 'engine', text: shorten(`${kind}${from ? ` de ${from.slice(0, 8)}` : ''}`, 70) }
-}
-
-/**
  * A subagent's hand-back message: who sent it and the first line of what it said. The report
  * follows a framing header in the message; without one, the first line after the opening tag.
  */
@@ -636,4 +747,33 @@ export const adviceLine = (report: string) => {
   return shorten(first.replace(/\*\*|__/g, '').replace(/^[#>*\s-]+/, ''), 160)
 }
 
-export const elapsedOf = (c: AgentCard, now: number) => (c.endedAt ?? now) - c.spawnedAt
+/** El consejo que una entrega de SubagentHandback trae al panel, o null: solo de un asesor conocido, con texto y distinto del último. */
+export const consejoNuevo = (a: Architect | null, agentId: string | undefined, message: unknown): string | null => {
+  if (!a || !agentId || !a.ids.includes(agentId) || typeof message !== 'string') return null
+  const advice = adviceLine(message)
+  return advice && advice !== a.lastAdvice ? advice : null
+}
+
+/** ¿Es asesor este tipo de agente? Por su nombre o, si `matchDescriptions`, también por su descripción. */
+export const esTipoAsesor = (patron: RegExp, matchDescriptions: boolean, e: { agent: string; description: string }): boolean =>
+  patron.test(e.agent) || (matchDescriptions && patron.test(e.description))
+
+/** Anota un tipo de asesor en el roster: sin repetirlo y con tope de 20 (se queda con los más nuevos). */
+export const anotarTipoAsesor = (r: Roster, tipo: string): Roster => {
+  const tipos = listOf<string>(r.architectTypes)
+  return tipos.includes(tipo) ? r : { architectTypes: [...tipos, tipo].slice(-20) }
+}
+
+/**
+ * Corre la llamada `next` y, al terminar aunque lance, saca de `autoAsks` la `ask` que el clasificador decidió para ella.
+ * Devuelve lo que dejó la llamada y esa `ask` (si la hubo), para anotarla ya resuelta.
+ */
+export const llamadaConAutomatica = async <T>(autoAsks: Map<string, Check>, id: string, next: () => Promise<T>): Promise<{ ran: T; auto?: Check }> => {
+  try {
+    const ran = await next()
+    return { ran, auto: autoAsks.get(id) }
+  } finally {
+    autoAsks.delete(id)
+  }
+}
+

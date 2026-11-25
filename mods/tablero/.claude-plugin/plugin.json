@@ -1,7 +1,7 @@
 {
   "name": "tablero",
-  "version": "0.3.1",
-  "description": "Tablero: banda en español sobre el prompt con carpeta, modelo, costo, contexto, subagentes, permisos y uso con su reseteo. Derivado de Flightdeck (scasella, MIT)",
+  "version": "1.4.4",
+  "description": "Tablero: panel en español junto al chat con todo el estado de la sesión, sin duplicados: costo, cupos, cache, git y CI, planes, subagentes, decisiones de Jev, Aduana, gasto y otras sesiones. Derivado de Flightdeck (scasella, MIT)",
   "author": {
     "name": "Stephen Casella",
     "url": "https://github.com/scasella"
@@ -21,13 +21,13 @@
   "userConfig": {
     "architectPattern": {
       "title": "Patrón del arquitecto",
-      "description": "Expresión regular (sin distinguir mayúsculas) de los tipos de agente y herramientas de servidor que cuentan como arquitecto de guardia, por ejemplo advisor|architect",
+      "description": "Expresión regular (sin distinguir mayúsculas) de los tipos de agente y herramientas de servidor que cuentan como asesor, por ejemplo advisor|architect. La caja ASESOR solo aparece cuando hubo consultas",
       "type": "string",
       "default": "advisor|architect"
     },
     "architectLabel": {
       "title": "Etiqueta del asesor",
-      "description": "Nombre que se muestra para el rol de asesor (el asesor de guardia que consulta al modelo más capaz)",
+      "description": "Nombre que se muestra para el rol de asesor",
       "type": "string",
       "default": "ASESOR"
     },
@@ -39,9 +39,9 @@
     },
     "panels": {
       "title": "Paneles",
-      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, receipt, sesion, log. Omite uno para ocultarlo.",
+      "description": "Paneles separados por comas en orden de aparición: main, jev, architect, gate, agents, loops, aldia (la caja AL DÍA del mapa, con lo que se actualizó), receipt (último turno, fuera por defecto). Omite uno para ocultarlo. En el mapa, main (la cabecera, la franja, ESTADO y el LEAD) siempre se ve; se ocultan architect (la caja ASESOR), aldia (AL DÍA), jev (la caja JEV y su REGISTRO), agents (las tarjetas de agentes y su bus: el mapa pasa a la variante compacta) y gate (los datos de permisos de ESTADO). loops y receipt no tienen caja en el mapa. En las demás distribuciones, cada panel oculto se quita de la columna.",
       "type": "string",
-      "default": "main,jev,architect,gate,agents,loops,receipt,sesion,log"
+      "default": "main,jev,architect,gate,agents,loops,aldia"
     },
     "motion": {
       "title": "Movimiento",
@@ -79,50 +79,52 @@
     },
     "layout": {
       "title": "Distribución",
-      "description": "auto: resumen de máximo 8 filas con el panel en línea sobre el prompt, diagrama desde 66 columnas acoplado, una columna en otro caso. diagrama: lead, asesor, JEV y tarjetas en diagrama (con menos de 66 columnas, una columna)",
+      "description": "auto: una lista de secciones con título y sin cajas (sesión, agentes, JEV, asesor, permisos…); sobre el prompt, un resumen de hasta 8 filas. mapa: el mapa de cajas (situación, estado, lead, JEV, subagentes y AL DÍA), acoplado desde 40 columnas y sobre el prompt desde 100. compact (una columna), wide (dos columnas), mini (el resumen) y diagrama (lead, asesor, JEV y tarjetas con conectores; con menos de 66 columnas, una columna) son las distribuciones anteriores",
       "type": "string",
       "options": [
         "auto",
         "compact",
         "wide",
         "mini",
-        "diagrama"
+        "diagrama",
+        "mapa"
       ],
       "default": "auto"
     },
     "palette": {
       "title": "Paleta",
-      "description": "theme sigue el tema de Claude Code (claro, oscuro, daltónico); pastel son colores fijos pensados para terminales oscuras",
+      "description": "theme sigue el tema de Claude Code (claro, oscuro, daltónico); pastel son colores fijos pensados para terminales oscuras; neon son colores fijos saturados para que las líneas de las cajas brillen",
       "type": "string",
       "options": [
         "theme",
-        "pastel"
+        "pastel",
+        "neon"
       ],
       "default": "theme"
     },
     "openOnStart": {
       "title": "Abrir al iniciar",
-      "description": "Abre el panel completo de Tablero al iniciar la sesión. Si lo apagas, se abre con /tablero; la banda sobre el prompt queda de respaldo",
-      "type": "boolean",
-      "default": true
-    },
-    "banda": {
-      "title": "Banda",
-      "description": "Muestra la banda de Tablero sobre el prompt: carpeta, modelo, costo, contexto, subagentes, permisos y uso",
+      "description": "Abre el panel de Tablero al iniciar la sesión. Si lo apagas, se abre con /tablero",
       "type": "boolean",
       "default": true
     },
     "animacion": {
       "title": "Animación",
-      "description": "Anima la banda: barras que se llenan, indicador que pulsa y cuenta regresiva. Apagarla evita redibujar cada segundo",
+      "description": "Anima el panel: spinner, paquetes que recorren las líneas y bordes que respiran. Apagarla evita redibujar a cada momento",
       "type": "boolean",
       "default": true
     },
-    "statusLine": {
-      "title": "Línea de estado",
-      "description": "Muestra contexto, agentes, permisos y uso en el footer",
-      "type": "boolean",
-      "default": false
+    "extras": {
+      "title": "Fuentes extra",
+      "description": "Fuentes de 1.3.0 encendidas, separadas por comas: cache (fila Cache, de la statusline), git (lanza git cada 10 s), ci (lanza gh pr checks cada minuto si hay PR), servicio (consulta status.claude.com cada 5 min), presupuesto (fila Hoy), gasto (sección Gasto) y sesiones (escribe y lee ~/.claude/tablero/sesiones). Omite una para apagarla",
+      "type": "string",
+      "default": "cache,git,ci,servicio,presupuesto,gasto,sesiones"
+    },
+    "presupuestoDiario": {
+      "title": "Presupuesto diario",
+      "description": "Tope de gasto del día en USD entre todas las sesiones, para la fila Hoy; 0 la oculta",
+      "type": "number",
+      "default": 0
     }
   }
 }

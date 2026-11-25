@@ -35,7 +35,7 @@ const medir = ($: { session: { measure: (e: never) => Promise<unknown> } }) =>
     changed: ['context'],
   } as never)
 
-test('en escritorio la barra de vida se dibuja como SVG con su degradado', async ($, on) => {
+test('en escritorio la barra de vida se dibuja como SVG con su degradado', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await medir($)
   const ui = await $.ui.mount(panel('desktop'))
@@ -44,7 +44,7 @@ test('en escritorio la barra de vida se dibuja como SVG con su degradado', async
   await ui.unmount()
 })
 
-test('en terminal la barra de vida sigue siendo texto, sin SVG', async ($, on) => {
+test('en terminal la barra de vida sigue siendo texto, sin SVG', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await medir($)
   const ui = await $.ui.mount(panel('terminal'))

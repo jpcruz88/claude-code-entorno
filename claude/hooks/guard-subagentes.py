@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""PreToolUse(Agent|Task|Workflow): los subagentes usan Haiku, Sonnet u Opus, con tope por uso.
+"""PreToolUse(Agent|Task|Workflow): los subagentes usan Haiku, Sonnet, Opus o Fable, con tope por uso.
 
-Regla: cualquier agente o subagente usa haiku, sonnet u opus (o su id completo, como
+Regla: cualquier agente o subagente usa haiku, sonnet, opus o fable (o su id completo, como
 claude-opus-5-5), con esfuerzo low, medium, high o xhigh. Se bloquean max y cualquier otro
-modelo, Fable incluido. Fable nunca se permite. xhigh nunca se bloquea en Agent / Task: si
-el tope de uso (jev_limites) no lo permite, se baja con `updatedInput`.
+modelo. xhigh y Fable nunca se bloquean en Agent / Task: si el tope de uso (jev_limites) no
+los permite, se bajan con `updatedInput`. Fable solo pasa con mucho margen de uso; sin dato
+de uso baja a opus. En un Workflow, Fable y xhigh se bloquean, porque no se pueden bajar.
 
 Qué revisa:
-- Agent / Task: el parámetro `model` debe ser haiku, sonnet u opus (o claude-<familia>-…)
-  y el `effort`, low, medium, high o xhigh. Si falta cualquiera de los dos, se bloquea: hay que
-  ponerlo explícito.
+- Agent / Task: el parámetro `model` debe ser haiku, sonnet, opus o fable (o
+  claude-<familia>-…) y el `effort`, low, medium, high o xhigh. Si falta cualquiera de los
+  dos, se bloquea: hay que ponerlo explícito.
 - Jev (solo Agent / Task): si Claude pidió un modelo y un esfuerzo válidos, Jev elige
   ambos. Si Jev está seguro (confianza ≥ umbral), su elección reemplaza la de Claude y se
   devuelve con `updatedInput`. Cada decisión queda en ~/.claude/jev/decisiones.jsonl sin
@@ -18,8 +19,15 @@ Qué revisa:
   máximos según ~/.claude/jev/limites.json. Si la elección final los supera, se baja con
   `updatedInput` y queda una línea `tope` en decisiones.jsonl. Nunca hace deny; cualquier
   fallo equivale a sin tope.
-- Workflow: el script debe fijar un modelo permitido en cada agent() y nunca un esfuerzo
-  mayor que high (un workflow no se puede bajar con el tope, así que xhigh se bloquea). Jev no rutea workflows.
+- Fork (Agent / Task con subagent_type "fork"): ignora model y effort y hereda el modelo de
+  la sesión, así que ni Jev ni el tope lo pueden bajar. Si el modelo de la sesión (el que
+  traiga la entrada del hook, ANTHROPIC_MODEL o la clave `model` de ~/.claude/settings.json)
+  es de la familia más capaz, se bloquea y se propone un agente normal con modelo explícito.
+  Si no se puede saber el modelo, pasa.
+- Workflow: el script (en línea o el archivo de `scriptPath`) debe fijar haiku, sonnet u
+  opus en cada agent() y nunca un esfuerzo mayor que high (un workflow no se puede bajar con
+  el tope, así que Fable y xhigh se bloquean). Los comentarios // y /* */ no cuentan. Jev no
+  rutea workflows.
 
 Funciona con python3 (3.6 o más nuevo), sin dependencias. Si algo falla dentro del
 guardián, deja pasar la acción: un error propio nunca debe frenar el trabajo normal.
@@ -45,20 +53,25 @@ except Exception:
 
 ESFUERZOS_PERMITIDOS = ("low", "medium", "high", "xhigh")
 ESFUERZO_MAX_WORKFLOW = "high"  # un workflow no se puede bajar con updatedInput
-MODELOS_PERMITIDOS = ("haiku", "sonnet", "opus")
+MODELOS_PERMITIDOS = ("haiku", "sonnet", "opus", "fable")
+MODELOS_WORKFLOW = ("haiku", "sonnet", "opus")  # un workflow no se puede bajar con updatedInput
+MODELO_SIN_TOPES = "opus"  # sin poder calcular el tope, Fable baja a este
 OPCIONES_JEV = {"modelo": list(MODELOS_PERMITIDOS), "esfuerzo": list(ESFUERZOS_PERMITIDOS)}
 DESCRIPCION_MAX = 60
+TOPE_SCRIPT = 512 * 1024  # bytes que se leen de un scriptPath
+FAMILIA_MAS_CAPAZ = "fable"  # un fork con esta familia se salta el tope
 # `model: 'haiku'`, `model: "claude-haiku-5-5"`, `model = haiku`
 MODELO_EN_GUION = re.compile(r"""\bmodel["'\\]*\s*[:=]\s*["'\\]*([\w./:-]*)""", re.I)
 # `effort: 'high'`, `effort = medium`
 ESFUERZO_EN_GUION = re.compile(r"""\beffort["'\\]*\s*[:=]\s*["'\\]*([\w./:-]*)""", re.I)
 LLAMADA_AGENTE = re.compile(r"\bagent\s*\(")
 # `claude-opus-5-5`: la familia seguida de guion; `claude-opusxyz` no cuenta
-RE_ID_DE_FAMILIA = re.compile(r"claude-(?:%s)(?:-.*)?" % "|".join(MODELOS_PERMITIDOS))
+RE_ID_DE_FAMILIA = re.compile(r"claude-(%s)(?:-.*)?" % "|".join(MODELOS_PERMITIDOS))
 
-CONSEJO = ("Regla (~/.claude/rules/modelo.md): los agentes y subagentes usan haiku, sonnet u "
-           "opus, con esfuerzo low, medium, high o xhigh (el tope de uso puede bajarlo); nunca "
-           "Fable ni max. Vuelve a llamarlo con un modelo permitido y un esfuerzo permitido.")
+CONSEJO = ("Regla (~/.claude/rules/modelo.md): los agentes y subagentes usan haiku, sonnet, "
+           "opus o fable, con esfuerzo low, medium, high o xhigh (el tope de uso puede "
+           "bajarlos); nunca max. En un workflow, solo haiku, sonnet u opus y esfuerzo hasta "
+           "high. Vuelve a llamarlo con un modelo permitido y un esfuerzo permitido.")
 
 
 def deny(motivo):
@@ -92,10 +105,13 @@ def texto(valor):
     return valor if isinstance(valor, str) else ""
 
 
-def es_modelo_permitido(modelo):
-    """`haiku`, `sonnet`, `opus` o un id completo de esa familia (`claude-opus-5-5`)."""
+def es_modelo_permitido(modelo, permitidos=MODELOS_PERMITIDOS):
+    """Una familia de `permitidos` o un id completo de esa familia (`claude-opus-5-5`)."""
     m = modelo.lower()
-    return m in MODELOS_PERMITIDOS or RE_ID_DE_FAMILIA.fullmatch(m) is not None
+    if m in permitidos:
+        return True
+    encontrada = RE_ID_DE_FAMILIA.fullmatch(m)
+    return encontrada is not None and encontrada.group(1) in permitidos
 
 
 def familia_de_modelo(modelo):
@@ -109,9 +125,9 @@ def familia_de_modelo(modelo):
 
 def validar_agente(modelo, esfuerzo):
     if not modelo:
-        deny("El agente no fija model; debe ser haiku, sonnet u opus.")
+        deny("El agente no fija model; debe ser haiku, sonnet, opus o fable.")
     if not es_modelo_permitido(modelo):
-        deny("El agente pide model=%r; solo se permiten haiku, sonnet y opus." % modelo)
+        deny("El agente pide model=%r; solo se permiten haiku, sonnet, opus y fable." % modelo)
     if not esfuerzo:
         deny("El agente no fija effort; debe ser low, medium, high o xhigh.")
     if esfuerzo not in ESFUERZOS_PERMITIDOS:
@@ -181,7 +197,9 @@ def rutear_con_jev(entrada, modelo, esfuerzo, session_id):
 
 
 def _sin_topes(modelo, esfuerzo):
-    """Sin poder calcular el tope, xhigh baja a high (xhigh exige conocer el uso); nunca deny."""
+    """Sin poder calcular el tope, xhigh baja a high y Fable a opus (exigen conocer el uso)."""
+    if familia_de_modelo(modelo) == "fable":
+        modelo = MODELO_SIN_TOPES
     return modelo, ("high" if esfuerzo == "xhigh" else esfuerzo)
 
 
@@ -202,6 +220,8 @@ def aplicar_tope_de_uso(entrada, modelo, esfuerzo, session_id):
         return _sin_topes(modelo, esfuerzo)  # un fallo al leer o calcular: sin tope, sin xhigh
     try:
         motivo = tope.get("motivo")
+        if nuevo_modelo != modelo and not motivo:  # el tope no recorta opus, pero sí Fable
+            motivo = "tope: %s → %s" % (familia_de_modelo(modelo), nuevo_modelo)
         if nuevo_esfuerzo != esfuerzo and "esfuerzo" not in (motivo or ""):
             motivo = "%s; esfuerzo %s → %s" % (motivo or "tope", esfuerzo, nuevo_esfuerzo)
         if jev_cliente is not None:
@@ -219,7 +239,7 @@ def revisar_agente(entrada, session_id=None):
     """Devuelve (entrada reescrita, por_jev, por_tope) si algo cambió; None si pasa tal cual."""
     modelo = texto(entrada.get("model")).strip()
     esfuerzo = texto(entrada.get("effort")).strip().lower()
-    validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: Fable nunca llega a Jev
+    validar_agente(modelo, esfuerzo)  # antes de consultar a Jev: lo no permitido nunca llega a Jev
     final_modelo, final_esfuerzo = rutear_con_jev(entrada, modelo, esfuerzo, session_id)
     validar_agente(final_modelo, final_esfuerzo)
     tras_jev = (final_modelo, final_esfuerzo)
@@ -237,16 +257,99 @@ def revisar_agente(entrada, session_id=None):
     return dict(entrada, **cambios), por_jev, por_tope
 
 
-def revisar_workflow(entrada, session_id=None):
+def ruta_de_ajustes():
+    return os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
+
+
+def modelo_de_sesion(datos, ajustes=None):
+    """Modelo de la sesión: la entrada del hook, ANTHROPIC_MODEL o settings.json. '' si no se sabe."""
+    modelo = datos.get("model")
+    if isinstance(modelo, dict):
+        modelo = modelo.get("id") or modelo.get("display_name")
+    if isinstance(modelo, str) and modelo.strip():
+        return modelo.strip()
+    modelo = os.environ.get("ANTHROPIC_MODEL", "")
+    if modelo.strip():
+        return modelo.strip()
+    try:
+        with open(ajustes or ruta_de_ajustes(), "r", encoding="utf-8") as f:
+            config = json.load(f)
+        modelo = config.get("model") if isinstance(config, dict) else None
+        return modelo.strip() if isinstance(modelo, str) else ""
+    except Exception:
+        return ""
+
+
+def es_fork(entrada):
+    return texto(entrada.get("subagent_type")).strip().lower() == "fork"
+
+
+def revisar_fork(datos, ajustes=None):
+    """Un fork hereda el modelo de la sesión: si es de la familia más capaz, se bloquea."""
+    modelo = modelo_de_sesion(datos, ajustes)
+    if FAMILIA_MAS_CAPAZ in modelo.lower():
+        deny("Un fork (subagent_type \"fork\") ignora model y effort y hereda el modelo de "
+             "la sesión (%s), así que se salta el tope de uso. Lanza un agente normal, sin "
+             "subagent_type \"fork\", con modelo explícito (por ejemplo opus con effort high)."
+             % modelo)
+    return None
+
+
+def quitar_comentarios(guion):
+    """Quita los comentarios // y /* */ de un script sin tocar lo que va dentro de textos."""
+    salida, i, n, comilla = [], 0, len(guion), None
+    while i < n:
+        c = guion[i]
+        if comilla:
+            salida.append(c)
+            if c == "\\" and i + 1 < n:
+                salida.append(guion[i + 1])
+                i += 2
+                continue
+            if c == comilla:
+                comilla = None
+            i += 1
+        elif c in "'\"`":
+            comilla = c
+            salida.append(c)
+            i += 1
+        elif guion.startswith("//", i):
+            fin = guion.find("\n", i)
+            i = n if fin < 0 else fin
+        elif guion.startswith("/*", i):
+            fin = guion.find("*/", i + 2)
+            salida.append(" ")
+            i = n if fin < 0 else fin + 2
+        else:
+            salida.append(c)
+            i += 1
+    return "".join(salida)
+
+
+def leer_guion(entrada):
+    """El script en línea o, si no hay, el archivo de `scriptPath`. '' si no se puede leer."""
     guion = texto(entrada.get("script"))
+    ruta = texto(entrada.get("scriptPath"))
+    if guion or not ruta:
+        return guion
+    try:
+        with open(os.path.expanduser(ruta), "r", encoding="utf-8", errors="replace") as f:
+            return f.read(TOPE_SCRIPT)
+    except Exception:
+        return ""
+
+
+def revisar_workflow(entrada, session_id=None):
+    guion = leer_guion(entrada)
     if not guion:
-        return None  # sin script inline no hay nada que revisar aquí
+        return None  # sin script legible no hay nada que revisar aquí
+    guion = quitar_comentarios(guion)
     llamadas = len(LLAMADA_AGENTE.findall(guion))
     modelos = [m.strip() for m in MODELO_EN_GUION.findall(guion)]
-    if any(not es_modelo_permitido(m) for m in modelos if m):
+    if any(not es_modelo_permitido(m, MODELOS_WORKFLOW) for m in modelos if m):
         deny("El script del workflow fija un agente con un modelo no permitido "
              "(solo haiku, sonnet u opus).")
-    if sum(1 for m in modelos if m and es_modelo_permitido(m)) < llamadas:
+    if sum(1 for m in modelos if m and es_modelo_permitido(m, MODELOS_WORKFLOW)) < llamadas:
         deny("Hay agent() sin model explícito (haiku, sonnet u opus) en el workflow.")
     for esfuerzo in (e.strip().lower() for e in ESFUERZO_EN_GUION.findall(guion)):
         if esfuerzo and (esfuerzo not in ESFUERZOS_PERMITIDOS or esfuerzo == "xhigh"):
@@ -276,6 +379,8 @@ def main():
     if not isinstance(sesion, str):
         sesion = None
     try:
+        if revisor is revisar_agente and es_fork(entrada):
+            return revisar_fork(datos)  # model y effort no cuentan en un fork
         actualizada = revisor(entrada, sesion)
     except SystemExit:
         raise

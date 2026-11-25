@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { STEP_TOOL } from '../hooks/savvy-core'
+import { nombreDeTipo } from '../hooks/nombres'
 
 const pane = {
   plugin: 'tablero',
@@ -28,7 +28,7 @@ const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
   $.agent.spawn({
     prompt: 'haz el trabajo',
     description: 'revisar auth',
-    subagentType: 'savvy-careful',
+    subagentType: 'general-purpose',
     tool_use_id: 'tu1',
     provider: { plugin: 'engine', tier: 'core' as const },
     parentModel: 'claude-opus-5-5',
@@ -36,18 +36,7 @@ const lanzar = ($: { agent: { spawn: (e: never) => Promise<unknown> } }) =>
     fork: false,
   } as never)
 
-test('el paso que reporta un trabajador aparece en su tarjeta de Tablero', async ($, on) => {
-  motor(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  await lanzar($)
-  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
-  const ui = await $.ui.mount(pane as never)
-  expect(await ui.find({ text: /2\/4/ })).toBeDefined()
-  expect(await ui.find({ text: /leyendo/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('un subagente terminado sigue en Tablero', async ($, on) => {
+test('un subagente terminado sigue en Tablero', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await lanzar($)
@@ -57,12 +46,34 @@ test('un subagente terminado sigue en Tablero', async ($, on) => {
   await ui.unmount()
 })
 
-test('la tarjeta dibuja una barra de avance con los pasos del trabajador', async ($, on) => {
+test('los tipos de Claude Code se nombran en español; uno desconocido queda igual', () => {
+  expect(nombreDeTipo('general-purpose')).toBe('Propósito general')
+  expect(nombreDeTipo('Explore')).toBe('Explorar')
+  expect(nombreDeTipo('mi-agente')).toBe('mi-agente')
+})
+
+// Una tarjeta de agente va sin marco: su estado lo dice el símbolo y el texto, no una caja alrededor.
+const textoDe = (n: unknown): string => {
+  if (typeof n === 'string') return n
+  if (typeof n !== 'object' || n === null) return ''
+  const nodo = n as { children?: unknown[]; props?: { label?: string } }
+  return (nodo.props?.label ?? '') + (nodo.children ?? []).map(textoDe).join('')
+}
+const marcosDeCarta = (n: unknown, out: unknown[] = []): unknown[] => {
+  if (typeof n !== 'object' || n === null) return out
+  const nodo = n as { type?: string; props?: { borderStyle?: string }; children?: unknown[] }
+  const hijos = nodo.children ?? []
+  if (nodo.type === 'Box' && nodo.props?.borderStyle && hijos.some(k => typeof k === 'object' && k !== null && textoDe(k).includes('revisar auth'))) out.push(nodo)
+  for (const k of hijos) marcosDeCarta(k, out)
+  return out
+}
+
+test('una tarjeta de agente no lleva marco', { options: { layout: 'diagrama' } }, async ($, on) => {
   motor(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await lanzar($)
-  await $.tool.call({ tool: STEP_TOOL, agentId: 'a1', done: 2, total: 4, note: 'leyendo' } as never)
   const ui = await $.ui.mount(pane as never)
-  expect(await ui.find({ text: /████░░░░|██░░░░░░/ })).toBeDefined()
+  expect(await ui.find({ text: /revisar auth/ })).toBeDefined()
+  expect(marcosDeCarta(await ui.drawn())).toEqual([])
   await ui.unmount()
 })

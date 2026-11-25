@@ -6,7 +6,7 @@ instalado, qué hace cada pieza y qué esperar de ella.
 ## 1. Arranque de una sesión
 
 - Abre Claude Code en la carpeta del proyecto (`cd proyecto && claude`).
-- La sesión arranca con **Haiku** (ver §3). La línea de estado de abajo muestra
+- La sesión usa el modelo que tú eliges (ver §3). La línea de estado de abajo muestra
   modelo, carpeta, rama, contexto usado, costo y límites.
 - Si aparece un aviso de `ctx-budget` (70 % u 85 % de contexto), conviene empezar
   una sesión nueva con un resumen en vez de seguir.
@@ -21,11 +21,13 @@ instalado, qué hace cada pieza y qué esperar de ella.
 | Mod `tdd-gate` | Al editar código de producción | Pregunta una vez por sesión si no se ha tocado una prueba. |
 | Mod `spec-gate` | Al editar código de producción | Pregunta una vez por sesión si no hay una spec reciente. |
 | Mod `guard-kill-visible` | Antes de comandos que matan procesos | Solo avisa; no bloquea. |
-| Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Avisa para que resumas o cambies de sesión. |
+| Mod `ctx-budget` | Al cruzar 70 % y 85 % de contexto | Te avisa, y le pide a Claude guardar el handoff antes de que se compacte. |
 | Mod `sound-notify` | Al terminar un turno largo o al pedir permiso | Suena un aviso. |
-| Mod `caveman-badge` | Siempre | Muestra en la línea de estado el modo caveman. |
+| Mod `tablero` | Siempre | Muestra en su cabecera el modo caveman en palabras llanas (`Respuestas cortas`). |
+| Hook `hilo.py` | Al compactar, reanudar o abrir sesión | Devuelve los mensajes del usuario tal como los escribió, para no depender del resumen. Con `buscar` cita lo dicho en sesiones pasadas. |
+| Hook `caveman-activo.py` | Siempre | Activa el modo caveman al abrir la sesión y lo recuerda en cada mensaje. |
 | Mod `tablero` | Siempre | Panel con costo, contexto, subagentes y permisos. |
-| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet` u `opus`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
+| Hook `guard-subagentes.py` | Antes de cada Agent, Task o Workflow | Solo deja `haiku`, `sonnet`, `opus` o `fable`, con esfuerzo `low`, `medium`, `high` o `xhigh`. Jev puede elegir el modelo y el esfuerzo, y el tope de uso de la cuenta puede bajarlos (§3). |
 | Hook `jev-reintento.py` | Después de un fallo de herramienta | Al segundo fallo seguido con el mismo error, pregunta a Jev si reintentar, cambiar de enfoque o parar. Su sugerencia llega como nota. |
 | Memoria persistente | Al empezar y al guardar un dato | Ver §5. |
 
@@ -35,19 +37,21 @@ respóndelo y sigue. Si pasa todo el tiempo, revisa el README del mod.
 
 ## 3. Modelo
 
-- **Por defecto: Haiku.** Está en `claude/settings.base.json` y en la regla
-  `claude/rules/modelo.md`.
-- Para otro modelo en una tarea, pídelo en ese mensaje («usa opus para esto») o usa
-  `/model`. Vale solo para esa tarea.
-- Fable no se usa por omisión; solo si lo pides de forma explícita.
-- **Agentes y subagentes:** pueden usar `haiku`, `sonnet` u `opus`, con esfuerzo
-  `low`, `medium`, `high` o `xhigh`. `xhigh` es para tareas muy difíciles (causa
-  raíz poco clara, diseño delicado o razonamiento largo) y solo pasa si el tope de
-  uso lo permite (ver «Tope por uso de la cuenta», más abajo). Fable y `max` se
-  bloquean siempre. El hook `guard-subagentes.py` aplica esa regla a Agent, Task y
-  Workflow. En un workflow, cada `agent()` debe fijar un `model` permitido, y ningún
-  `effort` puede pasar de `high`: un `xhigh` en un workflow se bloquea, porque el tope
-  no puede bajarlo. Jev no elige modelos dentro de los workflows.
+- **El de la sesión lo eliges tú.** Una máquina nueva arranca con Opus
+  (`claude/settings.base.json`); si ya tienes otro en tu `settings.json`, se conserva.
+  Ya no hay Haiku fijo por omisión.
+- Para otro modelo, pídelo («usa sonnet para esto») o usa `/model`. Claude no lo
+  cambia por su cuenta.
+- En la sesión principal, Fable solo se usa si tú lo eliges.
+- **Agentes y subagentes:** pueden usar `haiku`, `sonnet`, `opus` o `fable`, con
+  esfuerzo `low`, `medium`, `high` o `xhigh`. Claude pide el modelo según el tamaño
+  de la tarea, y el tope de uso lo baja si el crédito no alcanza (ver «Tope por uso
+  de la cuenta», más abajo). `xhigh` es para tareas muy difíciles y `fable` para las
+  muy pesadas; los dos solo pasan con margen de uso. `max` se bloquea siempre. El
+  hook `guard-subagentes.py` aplica esa regla a Agent, Task y Workflow. En un
+  workflow, cada `agent()` debe fijar `haiku`, `sonnet` u `opus`, y ningún `effort`
+  puede pasar de `high`: `fable` y `xhigh` se bloquean ahí, porque el tope no puede
+  bajarlos. Jev no elige modelos dentro de los workflows.
 
 ### Jev: decisiones de modelo y de reintento
 
@@ -118,6 +122,7 @@ el escalón:
 
 | Exceso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
+| ≤ −20 | fable | xhigh |
 | ≤ −10 | opus | xhigh |
 | ≤ 5 | opus | high |
 | ≤ 10 | opus | medium |
@@ -125,14 +130,15 @@ el escalón:
 | ≤ 25 | sonnet | medium |
 | > 25, o uso ≥ 90 % | haiku | medium |
 
-Después del corte, la semana no baja nada hasta 97 % de uso: queda opus con xhigh y
+Después del corte, la semana no baja nada hasta 97 % de uso: queda fable con xhigh y
 decide la ventana de 5 horas. Desde 97 %, haiku con esfuerzo medium.
 
 **Ventana de 5 horas.** El uso de la ventana marca el escalón:
 
 | Uso | Modelo máximo | Esfuerzo máximo |
 |---|---|---|
-| < 60 % | opus | xhigh |
+| < 40 % | fable | xhigh |
+| 40 % a 60 % | opus | xhigh |
 | 60 % a 75 % | opus | medium |
 | 75 % a 85 % | sonnet | medium |
 | ≥ 85 % | haiku | medium |
@@ -152,12 +158,14 @@ caso baja a `high` o a lo que marque su escalón. Si falta una de las dos ventan
 baja a `high`, porque necesita conocer las dos. Sin ningún dato, el esfuerzo máximo
 es `high`. `max` sigue bloqueado.
 
+**Fable con mucho margen.** Un subagente de Agent o Task puede pedir `fable` para una tarea muy pesada. Solo pasa si se cumplen todas estas condiciones: hay dato de la semana y, si la cuenta trae ventana de 5 horas, también de esa; la ventana de 5 horas va por debajo de 40 % o está en gracia; y, antes del corte, la semana va al menos 20 puntos por debajo del ritmo, o, después del corte, está bajo 97 %. En otro caso baja a `opus` o a lo que marque su escalón, y la línea `tope` lo anota (`tope: fable → opus`). Sin ningún dato de uso baja a `opus`. En un Workflow, `fable` se bloquea, porque un Workflow no se puede bajar. Fuera de los subagentes sigue prohibido (regla `nunca-fable.md`).
+
 **Qué ves.** Cada recorte añade una línea `tope` a `~/.claude/jev/decisiones.jsonl`,
 con lo que quedó y lo que había, y el tablero la muestra en el log como
 `tope → sonnet · semana +12 pts`. Los topes no cuentan en el total de decisiones de
 Jev. Con dato, la caja JEV del tablero muestra además la fila de ritmo, por ejemplo
 `semana 52% · ritmo 40% · +12`: verde hasta +5, ámbar de +5 a +15 y rojo por encima.
-Añade `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
+Añade `fable ok` cuando el tope dejaría pasar Fable y `xhigh ok` solo cuando el tope devolvería `xhigh`, con la regla exacta de
 arriba (las dos ventanas con dato, la de 5 horas bajo 60 % o en gracia, y la semana a
 −10 o menos antes del corte, o bajo 97 % después). Si vas por debajo del ritmo, el
 tope solo quita límites: no sube modelos para gastar más. Eso lo decides tú.
@@ -186,8 +194,8 @@ entera. Ejemplo:
 |---|---|---|
 | `meta_corte` | `90` | Uso semanal que el ritmo pide tener al corte. |
 | `final` | `97` | Uso semanal desde el que, después del corte, baja a haiku. |
-| `semana_escalones` | `[[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. |
-| `h5_escalones` | `[[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. |
+| `semana_escalones` | `[[-20,"fable","xhigh"],[-10,"opus","xhigh"],[5,"opus","high"],[10,"opus","medium"],[15,"sonnet","high"],[25,"sonnet","medium"]]` | Escalones de la semana: umbral de exceso, modelo y esfuerzo. |
+| `h5_escalones` | `[[40,"fable","xhigh"],[60,"opus","xhigh"],[75,"opus","medium"],[85,"sonnet","medium"]]` | Escalones de la ventana de 5 horas: umbral de uso, modelo y esfuerzo. |
 | `h5_gracia_min` | `15` | Minutos antes del reinicio de 5 horas en que esa ventana no pone tope. |
 | `corte_dia` | `3` | Día del corte, con lunes = 0 (3 es jueves). |
 | `corte_hora` | `23` | Hora local del corte. |
@@ -225,7 +233,19 @@ queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real
 - Las skills de terceros no están auditadas. Revísalas antes de instalarlas (ver
   `SECURITY.md`).
 
-## 7. Comandos útiles dentro de Claude Code
+## 7. Al día
+
+- Al abrir Claude, si pasaron 24 horas desde la última revisión, el hook `al-dia.py`
+  actualiza en segundo plano tus skills, plugins de terceros y programas (`claude`,
+  `herdr`, `opencode`, `codebase-memory-mcp`, plugins de Neovim). No toca los mods de
+  este repo, `context7` ni Ghostty.
+- Si algo falla o queda en uso (el programa está abierto y no se puede reemplazar), se reintenta
+  solo eso pasada 1 hora, en la próxima sesión.
+- Cuando cambia el texto de una skill o plugin, el diff queda en
+  `~/.claude/al-dia/cambios/<AAAA-MM-DD>/<nombre>.diff`.
+- El tablero muestra un resumen en una caja. Reinicia Claude para usar lo nuevo.
+
+## 8. Comandos útiles dentro de Claude Code
 
 | Comando | Para qué |
 |---|---|
@@ -236,7 +256,7 @@ queda lejos de ese reinicio, el ritmo ideal deja de coincidir con tu semana real
 | `/memory` | Ver y editar los archivos de memoria. |
 | `/help` | Lista de comandos disponibles. |
 
-## 8. Cuando algo falla
+## 9. Cuando algo falla
 
 - **Un MCP marca error:** revisa que la variable de entorno (por ejemplo
   `CONTEXT7_API_KEY`) esté definida en tu terminal y reinicia Claude Code.

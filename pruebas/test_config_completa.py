@@ -17,6 +17,18 @@ class ConfiguracionCompleta(unittest.TestCase):
                 self.assertTrue((RAIZ / "claude" / "rules" / regla).is_file())
                 self.assertIn(regla, self.filtros["reglas_permitidas"])
 
+    def test_reglas_del_repo_y_lista_de_permitidas_coinciden(self):
+        """Cada regla de claude/rules se exporta (está en la lista) y cada permitida existe en el repo."""
+        en_repo = {f.name for f in (RAIZ / "claude" / "rules").glob("*.md")}
+        self.assertEqual(en_repo, set(self.filtros["reglas_permitidas"]))
+
+    def test_regla_mods_version_en_el_repo(self):
+        regla = RAIZ / "claude" / "rules" / "mods-version.md"
+        self.assertTrue(regla.is_file())
+        texto = regla.read_text(encoding="utf-8")
+        for paso in ("plugin.json", "CHANGELOG", "claude plugin update", "diff -rq"):
+            self.assertIn(paso, texto)
+
     def test_hook_fable_en_el_repo_registrado_y_exportado(self):
         self.assertTrue((RAIZ / "claude" / "hooks" / "guard-fable.py").is_file())
         self.assertIn("guard-fable.py", self.filtros["settings"]["hooks_permitidos"])
@@ -37,6 +49,15 @@ class ConfiguracionCompleta(unittest.TestCase):
                 self.assertTrue((RAIZ / "claude" / "hooks" / archivo).is_file())
         self.assertIn("jev-reintento.py", self.filtros["settings"]["hooks_permitidos"])
 
+    def test_al_dia_en_el_repo_registrado_y_exportado(self):
+        self.assertTrue((RAIZ / "claude" / "hooks" / "al-dia.py").is_file())
+        self.assertTrue((RAIZ / "claude" / "hooks" / "al_dia.py").is_file())
+        self.assertIn("al-dia.py", self.filtros["settings"]["hooks_permitidos"])
+        grupos = [g for g in self.base["hooks"]["SessionStart"] if g.get("matcher") == "startup"]
+        comandos = [(h["command"], h.get("timeout")) for g in grupos for h in g["hooks"]]
+        self.assertIn(("python3 ~/.claude/hooks/al-dia.py", 5), comandos)
+        self.assertIn(("~/.claude/hooks/cbm-session-reminder", None), comandos)
+
     def test_memoria_maestra_inicio_y_fin(self):
         eventos = {e: [h["command"] for g in self.base["hooks"][e] for h in g["hooks"]]
                    for e in ("SessionStart", "Stop")}
@@ -49,6 +70,22 @@ class ConfiguracionCompleta(unittest.TestCase):
         self.assertIn("commit", texto)
         self.assertIn("push", texto)
         self.assertIn("Co-Authored-By", texto)
+
+    def test_regla_de_git_no_fija_el_modelo_de_la_linea_co_authored(self):
+        """La línea lleva el modelo que escribió el cambio, no uno fijo."""
+        texto = (RAIZ / "claude" / "rules" / "git.md").read_text(encoding="utf-8")
+        self.assertNotIn("Haiku 5.5", texto)
+        self.assertIn("Co-Authored-By: Claude <modelo y versión> <noreply@anthropic.com>", texto)
+        self.assertIn("realmente", texto)
+
+
+    def test_regla_de_git_deja_solo_main(self):
+        """Regla de oro: al terminar, la rama se fusiona a main y se borra."""
+        texto = (RAIZ / "claude" / "rules" / "git.md").read_text(encoding="utf-8")
+        self.assertIn("Regla de oro", texto)
+        self.assertIn("gh pr merge", texto)
+        self.assertIn("--delete-branch", texto)
+        self.assertIn("git fetch --prune", texto)
 
 
 if __name__ == "__main__":

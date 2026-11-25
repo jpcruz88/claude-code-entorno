@@ -36,9 +36,13 @@ import fusionar_settings  # noqa: E402
 ES_WINDOWS = os.name == "nt"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
 # Este repo es su propio marketplace de mods (.claude-plugin/marketplace.json).
+# Mods que ya no existen porque otro los absorbió: se desinstalan al actualizar (tablero 1.3.0 absorbió los tres
+# primeros; barra-plan sustituyó antes a plan-progress).
+MODS_RETIRADOS = ["barra-plan", "aduana-panel", "caveman-badge", "plan-progress"]
 NOMBRE_MARKETPLACE_MODS = "claude-code-entorno"
 MARCADOR_CBM = "{{RUTA_CODEBASE_MEMORY_MCP}}"
 MARCADOR_HERDR = "{{RUTA_HERDR}}"
+MARCADOR_ESPERA = "{{RUTA_ESPERA}}"
 # Skill oficial de herdr: enseña a Claude a manejar paneles y otros agentes.
 SKILL_HERDR = ("herdr", "herdrdev/herdr@herdr")
 # Versión fija del instalador de skills (vercel-labs/skills): la misma con la que
@@ -90,6 +94,10 @@ class Instalador:
         self.sin_opencode_config = a.sin_opencode_config
         self.sin_nvim = a.sin_nvim
         self.home = Path.home()
+        documentos = self.home / "Documents"
+        self.perfiles_ps = [Path(x) for x in a.perfil_ps] if a.perfil_ps else [
+            documentos / "PowerShell" / "Microsoft.PowerShell_profile.ps1",
+            documentos / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1"]
         self.claude_dir = self.home / ".claude"
         self.fallos = []
         self.pendientes = []
@@ -150,6 +158,13 @@ class Instalador:
     def instalar_archivo(self, contenido, destino, origen, ejecutable=False):
         """Copia `contenido` a `destino`; si ya había otra versión, antes la respalda."""
         if destino.exists() and destino.read_bytes() == contenido:
+            # Mismo contenido no implica mismo permiso: una copia hecha por otra vía
+            # puede haber dejado el hook sin bit de ejecución.
+            if (ejecutable and not ES_WINDOWS and not self.simular
+                    and not os.access(str(destino), os.X_OK)):
+                destino.chmod(0o755)
+                self.info("permiso de ejecución recuperado: %s" % destino)
+                return
             self.info("al día: %s" % destino)
             return
         if self.simular:
@@ -160,6 +175,10 @@ class Instalador:
             copia = Path("%s.bak-%s" % (destino, sello()))
             shutil.copy2(str(destino), str(copia))
             self.info("respaldo: %s" % copia)
+            borrados = fusionar_settings.podar_respaldos(destino)
+            if borrados:
+                self.info("respaldos viejos borrados: %d (se conservan los %d más recientes)"
+                          % (len(borrados), fusionar_settings.CONSERVAR_RESPALDOS))
         destino.write_bytes(contenido)
         if ejecutable and not ES_WINDOWS:
             destino.chmod(0o755)
@@ -288,6 +307,28 @@ class Instalador:
                            .read_text(encoding="utf-8"))
         return [p["name"] for p in datos.get("plugins", [])]
 
+    def instalados_de_mods(self, claude):
+        """Los ids de plugin instalados (plugin list --json); vacío si no se puede leer."""
+        codigo, salida = self.correr([claude, "plugin", "list", "--json"], timeout=120)
+        lista = self._json_de(salida) if codigo == 0 else None
+        return {p.get("id") for p in (lista or []) if isinstance(p, dict)}
+
+    def retirar_mods(self, claude, instalados):
+        """Desinstala los mods que dejaron de existir porque otro los absorbió (MODS_RETIRADOS)."""
+        for nombre in MODS_RETIRADOS:
+            pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
+            if pid not in instalados:
+                continue
+            if self.simular:
+                self.info("[simular] haría: claude plugin uninstall %s --scope user (ya forma parte de tablero)" % pid)
+                continue
+            self.info("$ claude plugin uninstall %s --scope user" % pid)
+            codigo, salida = self.correr([claude, "plugin", "uninstall", pid, "--scope", "user"])
+            if codigo == 0:
+                self.info("retirado: %s (ya forma parte de tablero)" % pid)
+            else:
+                self.fallo("retirar %s: %s" % (pid, resumen_error(salida)))
+
     def mods(self):
         self.paso("Mods (mods/, marketplace de este repo)")
         if self.sin_mods:
@@ -298,6 +339,9 @@ class Instalador:
             for nombre in nombres:
                 self.info("[simular] haría: claude plugin install %s@%s --scope user"
                           % (nombre, NOMBRE_MARKETPLACE_MODS))
+            claude = self.claude()
+            if claude:
+                self.retirar_mods(claude, self.instalados_de_mods(claude))
             return
         claude = self.claude()
         if not claude:
@@ -318,9 +362,8 @@ class Instalador:
         if codigo != 0:
             self.fallo("marketplace de mods: %s" % resumen_error(salida))
             return
-        codigo, salida = self.correr([claude, "plugin", "list", "--json"], timeout=120)
-        lista = self._json_de(salida) if codigo == 0 else None
-        instalados = {p.get("id") for p in (lista or []) if isinstance(p, dict)}
+        instalados = self.instalados_de_mods(claude)
+        self.retirar_mods(claude, instalados)
         for nombre in nombres:
             pid = "%s@%s" % (nombre, NOMBRE_MARKETPLACE_MODS)
             if pid in instalados:
@@ -538,8 +581,14 @@ class Instalador:
         if not herdr:
             self.aviso("No encontré herdr; no cambio la config de Ghostty (abre herdr al arrancar).")
             return
+        # El guion que espera a los discos externos antes de abrir herdr.
+        origen = REPO / "herdr" / "esperar-discos.sh"
+        espera = self.home / ".config" / "herdr" / "esperar-discos.sh"
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), espera,
+                              origen.relative_to(REPO), ejecutable=True)
         plantilla = REPO / "ghostty" / "config"
-        texto = plantilla.read_text(encoding="utf-8").replace(MARCADOR_HERDR, herdr)
+        texto = plantilla.read_text(encoding="utf-8").replace(MARCADOR_ESPERA, str(espera))
+        texto = texto.replace(MARCADOR_HERDR, herdr)
         self.instalar_archivo(texto.replace("\r\n", "\n").encode("utf-8"),
                               self.home / ".config" / "ghostty" / "config",
                               plantilla.relative_to(REPO))
@@ -610,8 +659,8 @@ class Instalador:
         define las aliases si su variable de entorno está, así que no instalar
         una clave no rompe nada.
         """
-        if self.plataforma != "unix":
-            return
+        if self.plataforma == "windows":
+            return self.opencode_windows()
         self.paso("OpenCode como respaldo (opencode/, en tu .zshrc o .bashrc)")
         if self.sin_opencode:
             self.info("Se omite (--sin-opencode).")
@@ -645,6 +694,43 @@ class Instalador:
             "cl-or necesita OPENROUTER_API_KEY; las defines tú en esta computadora, "
             "nunca en el repo. Sin ellas las aliases no se crean. La clave también la "
             "usa /go-modelos dentro de Claude Code.")
+
+    def opencode_windows(self):
+        """cl-go y cl-or en Windows: opencode.ps1, cargado desde el perfil de PowerShell.
+
+        PowerShell no lee .zshrc ni .bashrc, así que la versión bash no sirve ahí.
+        Se agrega a cada perfil recibido (PowerShell 7 y Windows PowerShell 5.1).
+        """
+        self.paso("OpenCode como respaldo (opencode/opencode.ps1, en tu perfil de PowerShell)")
+        if self.sin_opencode:
+            self.info("Se omite (--sin-opencode).")
+            return
+        origen = REPO / "opencode" / "opencode.ps1"
+        destino = self.home / ".config" / "claude-code-entorno" / "opencode.ps1"
+        self.instalar_archivo(origen.read_bytes(), destino, origen.relative_to(REPO))
+        linea = ('if (Test-Path "$HOME\\.config\\claude-code-entorno\\opencode.ps1") '
+                 '{ . "$HOME\\.config\\claude-code-entorno\\opencode.ps1" }')
+        agregado = False
+        for perfil in self.perfiles_ps:
+            texto = perfil.read_text(encoding="utf-8-sig") if perfil.exists() else ""
+            if linea in texto:
+                self.info("al día: %s ya lo carga" % perfil)
+            elif self.simular:
+                self.info("[simular] agregaría a %s: %s" % (perfil, linea))
+            else:
+                perfil.parent.mkdir(parents=True, exist_ok=True)
+                separador = "\n" if texto and not texto.endswith("\n") else ""
+                with perfil.open("a", encoding="utf-8") as f:
+                    f.write("%s\n# OpenCode como respaldo de Claude Code (ver README)\n%s\n"
+                            % (separador, linea))
+                self.info("agregado a %s" % perfil)
+                agregado = True
+        if agregado:
+            self.pendientes.append("Abre una terminal de PowerShell nueva para usar cl-go y cl-or.")
+        self.pendientes.append(
+            "cl-go necesita OPENCODE_API_KEY y cl-or necesita OPENROUTER_API_KEY: "
+            "defínelas como variables de usuario de Windows, nunca en el repo. "
+            "Sin ellas los comandos no se crean.")
 
     # ---------------------------------------- 11. config global de OpenCode
     def opencode_config(self):
@@ -822,6 +908,9 @@ def main(argv=None):
                    help="no instala terminal/terminal.sh (eza, bat, zoxide, fzf y atuin)")
     p.add_argument("--sin-opencode", action="store_true",
                    help="no instala opencode/ (las aliases cl-go y cl-or de respaldo)")
+    p.add_argument("--perfil-ps", action="append", default=None,
+                   help="(Windows) perfil de PowerShell donde cargar cl-go y cl-or; "
+                        "se puede repetir. Por omisión, los de Documents")
     p.add_argument("--sin-opencode-config", action="store_true",
                    help="no trae opencode-config a ~/.config/opencode (router de modelos y gomodel)")
     p.add_argument("--sin-nvim", action="store_true",
