@@ -5,6 +5,7 @@ repo no tiene versiones numeradas: cada entrada es un cambio fechado.
 
 ## Sin publicar
 
+- Los hooks de git exigen la lista de términos privados (`revisar_privacidad.py --exigir-terminos`): sin ella no dejan hacer commit ni push. Antes solo avisaban, y desde una copia sin la lista se publicó un nombre privado en una maqueta; se quitó de todo el historial.
 - Avisos de herdr con nombre claro: en Mac, `herdr/avisos.py` (servicio de launchd que instala el instalador) avisa «Colabora: Claude terminó» con «m4 › Personales» debajo, también de las máquinas conectadas. El aviso de herdr se apaga (`delivery = "off"`): decía «claude finished · Personales · 1», sin la máquina, con el número del espacio y sin la pestaña si el espacio tenía una sola. En Windows y Linux sigue avisando herdr.
 - Avisos de «terminó» solo cuando es verdad: herdr espera 30 s (`ui.toast.delay_seconds`) antes de avisar y solo lo hace si el agente sigue terminado o bloqueado; la regla `avisos.md` le pide a Claude no cerrar el turno mientras espera algo suyo (instalador, CI, pruebas), sino esperarlo en primer plano.
 - «Al día» actualiza también este repo una vez al día: `git pull --ff-only` de `main` y, si hay commits nuevos, el instalador otra vez con las mismas opciones (`instalar.sh` e `instalar.ps1` las guardan en `~/.claude/al-dia/entorno.json`). No toca una copia con cambios sin commit o fuera de `main`. `tablero` 1.4.5 enseña su estado. Las máquinas ya instaladas necesitan correr el instalador una vez para guardar sus opciones.

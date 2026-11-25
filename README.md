@@ -1112,6 +1112,10 @@ La lista de términos privados (nombres de clientes, teléfono…) **no está en
 repo**, porque sería publicarlos: vive en
 `../claude-code-entorno-privado/terminos-privados.txt`, junto al repo, o donde
 diga la variable `ENTORNO_TERMINOS_PRIVADOS`. Un término por línea.
+Los hooks de git (`pre-commit` y `pre-push`) **no dejan hacer commit ni push sin
+ella**: una copia del repo sin la lista solo revisaba patrones genéricos y así se
+publicó un nombre privado. Si tienes varias copias, enlaza la carpeta junto a
+cada una (`ln -s`) en vez de duplicar la lista.
 
 ---
 

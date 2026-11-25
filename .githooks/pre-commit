@@ -5,7 +5,7 @@
 set -u
 REPO="$(git rev-parse --show-toplevel)" || exit 1
 
-python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" || {
+python3 "$REPO/herramientas/revisar_privacidad.py" --repo "$REPO" --exigir-terminos || {
   echo "pre-commit: la revisión de privacidad encontró algo. Corrígelo y vuelve a intentar."
   exit 1
 }

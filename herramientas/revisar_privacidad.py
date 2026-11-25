@@ -229,6 +229,8 @@ def main(argv=None):
     p.add_argument("--terminos", default=None, help="archivo de términos privados")
     p.add_argument("--historial", action="store_true",
                    help="revisar también commits anteriores y sus mensajes")
+    p.add_argument("--exigir-terminos", action="store_true",
+                   help="fallar si no está el archivo de términos privados (hooks de git)")
     a = p.parse_args(argv)
     repo = Path(a.repo).resolve()
     archivo = a.terminos or archivo_terminos_por_omision(repo)
@@ -240,6 +242,11 @@ def main(argv=None):
         except ValueError:
             pass
         print("Términos privados: archivo externo encontrado.")
+    elif a.exigir_terminos:
+        print("ERROR: no encontré el archivo de términos privados (%s). Sin él no se ven los "
+              "nombres de clientes. Ponlo ahí o indica su ruta en ENTORNO_TERMINOS_PRIVADOS "
+              "(ver README)." % archivo)
+        return 1
     else:
         print("AVISO: no encontré el archivo de términos privados (ver README); solo reviso "
               "patrones genéricos, tu usuario y el nombre del equipo.")
