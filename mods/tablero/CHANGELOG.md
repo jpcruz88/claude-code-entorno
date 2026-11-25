@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.5 (tablero)
+
+- **Al día:** la caja enseña el estado del repo del entorno (`claude-code-entorno`) con su motivo («copia con cambios sin commit · no se tocó») o su error («no se pudo actualizar · …»), en lugar del texto genérico.
+
 ## 1.4.4 (tablero)
 
 - **Contrato de tipos:** `types/index.d.ts` declara el tipo de los mensajes de Conversaciones dentro del archivo, sin `import`. `claude plugin validate` exige un contrato autónomo y fallaba en el CI. Sin cambios de comportamiento.

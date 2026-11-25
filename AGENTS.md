@@ -277,7 +277,10 @@ Los mismos pasos, con `instalar.sh`:
 
 ## Cómo actualizar después
 
-Cuando el usuario pida actualizar el entorno:
+«Al día» ya lo hace solo una vez al día (`git pull --ff-only` de `main` y el
+instalador con las opciones guardadas en `~/.claude/al-dia/entorno.json`), salvo
+que la copia tenga cambios sin commit o no esté en `main`. Si el usuario pide
+actualizar a mano:
 
 1. `git pull --ff-only` en la carpeta del repo (paso 2).
 2. Simular, enseñar lo que cambia e instalar con `-NoInteractivo` /
