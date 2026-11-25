@@ -20,6 +20,8 @@ TERMINAL = RAIZ / "terminal" / "terminal.sh"
 LINEA = ('[ -f "$HOME/.config/claude-code-entorno/terminal.sh" ] && '
          '. "$HOME/.config/claude-code-entorno/terminal.sh"')
 
+EXPORT_BYPASS = "export CLAUDE_RESUME_SALTAR_PERMISOS=1"
+
 CLAUDE_FALSO = """#!/bin/sh
 case "$*" in
   *--json*) echo "[]" ;;
@@ -90,6 +92,41 @@ class PasoTerminal(unittest.TestCase):
         self.assertEqual(self.leer(".zshrc").count(LINEA), 1)
         self.assertIn("al día: %s" % self.copia, salida)
         self.assertNotIn("Abre una terminal nueva", salida)
+
+    def test_saltar_aviso_activa_reanudar_con_bypass(self):
+        """Con --saltar-aviso-permisos, `claude --resume <id>` reanuda con bypass.
+
+        La función de terminal.sh mira la variable al cargarse: el export va antes.
+        """
+        self.correr("--saltar-aviso-permisos")
+        zshrc = self.leer(".zshrc")
+        self.assertEqual(zshrc.count(EXPORT_BYPASS), 1)
+        self.assertLess(zshrc.index(EXPORT_BYPASS), zshrc.index(LINEA))
+
+    def test_bypass_en_una_instalacion_vieja_va_antes_de_la_linea(self):
+        (self.home / ".zshrc").write_text("export PREVIO=1\n%s\nexport DESPUES=1\n" % LINEA,
+                                          encoding="utf-8")
+        self.correr("--saltar-aviso-permisos")
+        zshrc = self.leer(".zshrc")
+        self.assertEqual(zshrc.count(LINEA), 1)
+        self.assertLess(zshrc.index(EXPORT_BYPASS), zshrc.index(LINEA))
+        self.assertTrue(zshrc.startswith("export PREVIO=1\n"), zshrc)
+        self.assertIn("export DESPUES=1", zshrc)
+
+    def test_bypass_no_se_repite(self):
+        self.correr("--saltar-aviso-permisos")
+        self.correr("--saltar-aviso-permisos")
+        self.assertEqual(self.leer(".zshrc").count(EXPORT_BYPASS), 1)
+
+    def test_sin_saltar_aviso_no_activa_el_bypass(self):
+        self.correr()
+        self.assertNotIn("CLAUDE_RESUME_SALTAR_PERMISOS", self.leer(".zshrc"))
+
+    def test_sin_terminal_avisa_que_no_hay_reanudar_con_bypass(self):
+        salida = self.correr("--sin-terminal", "--saltar-aviso-permisos")
+        self.assertIn("--sin-terminal", salida)
+        self.assertIn("bypass", salida)
+        self.assertFalse((self.home / ".zshrc").exists())
 
     def test_sin_terminal_no_toca_nada(self):
         salida = self.correr("--sin-terminal")
