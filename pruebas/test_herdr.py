@@ -53,6 +53,26 @@ esac
 exit 0
 """
 
+# launchctl de mentira: recuerda si el vigía de avisos quedó cargado.
+LAUNCHCTL_FALSO = """#!/bin/sh
+echo "$*" >> "$HOME/llamadas-launchctl.txt"
+case "$1" in
+  print) [ -f "$HOME/.marca-launchd" ] ;;
+  bootstrap) touch "$HOME/.marca-launchd" ;;
+  bootout) rm -f "$HOME/.marca-launchd" ;;
+esac
+"""
+ES_MAC = sys.platform == "darwin"
+VIGIA = RAIZ / "herdr" / "avisos.py"
+ETIQUETA_VIGIA = "dev.claude-code-entorno.herdr-avisos"
+
+
+def config_esperada():
+    """En Mac los avisos de herdr se apagan (los da el vigía); en otros sistemas, no."""
+    datos = CONFIG_HERDR.read_bytes()
+    return datos if ES_MAC else datos.replace(b'delivery = "off"', b'delivery = "system"')
+
+
 # npx de mentira: «instala» la skill creando su SKILL.md.
 NPX_FALSO = """#!/bin/sh
 echo "$*" >> "$HOME/llamadas-npx.txt"
@@ -73,6 +93,7 @@ class PasoHerdr(unittest.TestCase):
         self.home.mkdir()
         self.bin.mkdir()
         self.falso("claude", CLAUDE_FALSO)
+        self.falso("launchctl", LAUNCHCTL_FALSO)  # nunca el launchctl real
         self.env = {"HOME": str(self.home), "TMPDIR": str(self.tmp), "PYTHONIOENCODING": "utf-8",
                     "PATH": os.pathsep.join([str(self.bin), "/usr/bin", "/bin"])}
 
@@ -105,13 +126,63 @@ class PasoHerdr(unittest.TestCase):
     def test_instala_config_integracion_y_plugin(self):
         self.falso("herdr", HERDR_FALSO)
         salida = self.correr("--sin-skills")
-        self.assertEqual(self.config.read_bytes(), CONFIG_HERDR.read_bytes())
+        self.assertEqual(self.config.read_bytes(), config_esperada())
         llamadas = self.llamadas()
         self.assertIn("integration install claude", llamadas)
         self.assertIn("plugin install permgps/herdr-telegram-agents --yes", llamadas)
         self.assertIn("server reload-config", llamadas)  # falla sin servidor, pero no es error
         # El bot de Telegram se configura a mano: queda como tarea pendiente.
         self.assertIn("%s.setup" % ID_TELEGRAM, salida)
+
+    @property
+    def plist_vigia(self):
+        return self.home / "Library" / "LaunchAgents" / (ETIQUETA_VIGIA + ".plist")
+
+    @unittest.skipUnless(ES_MAC, "el vigía de avisos es solo para Mac")
+    def test_instala_y_arranca_el_vigia_de_avisos(self):
+        import plistlib
+        herdr = self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills")
+        copia = self.home / ".config" / "herdr" / "avisos.py"
+        self.assertEqual(copia.read_bytes(), VIGIA.read_bytes())
+        datos = plistlib.loads(self.plist_vigia.read_bytes())
+        self.assertEqual(datos["Label"], ETIQUETA_VIGIA)
+        self.assertEqual(datos["ProgramArguments"][1:], [str(copia), str(herdr)])
+        self.assertTrue(datos["RunAtLoad"])
+        self.assertTrue(datos["KeepAlive"])
+        self.assertIn("bootstrap gui/%d %s" % (os.getuid(), self.plist_vigia), self.llamadas("launchctl"))
+
+    @unittest.skipUnless(ES_MAC, "el vigía de avisos es solo para Mac")
+    def test_vigia_cargado_y_al_dia_no_se_reinicia(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills")
+        primeras = self.llamadas("launchctl")
+        self.correr("--sin-skills")
+        nuevas = self.llamadas("launchctl")[len(primeras):]
+        self.assertNotIn("bootstrap", nuevas)
+        self.assertNotIn("bootout", nuevas)
+
+    @unittest.skipUnless(ES_MAC, "el vigía de avisos es solo para Mac")
+    def test_vigia_cambiado_se_reinicia(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills")
+        (self.home / ".config" / "herdr" / "avisos.py").write_text("# viejo\n", encoding="utf-8")
+        primeras = self.llamadas("launchctl")
+        self.correr("--sin-skills")
+        nuevas = self.llamadas("launchctl")[len(primeras):]
+        self.assertIn("bootout", nuevas)
+        self.assertIn("bootstrap", nuevas)
+
+    def test_simular_no_arranca_el_vigia(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills", "--simular")
+        self.assertFalse(self.plist_vigia.exists())
+        self.assertNotIn("bootstrap", self.llamadas("launchctl"))
+
+    def test_sin_herdr_no_instala_el_vigia(self):
+        self.falso("herdr", HERDR_FALSO)
+        self.correr("--sin-skills", "--sin-herdr")
+        self.assertFalse(self.plist_vigia.exists())
 
     def test_segunda_corrida_no_repite_nada(self):
         self.falso("herdr", HERDR_FALSO)
@@ -132,7 +203,7 @@ class PasoHerdr(unittest.TestCase):
         respaldos = list(self.config.parent.glob("config.toml.bak-*"))
         self.assertEqual(len(respaldos), 1)
         self.assertEqual(respaldos[0].read_text(encoding="utf-8"), "# mi config vieja\n")
-        self.assertEqual(self.config.read_bytes(), CONFIG_HERDR.read_bytes())
+        self.assertEqual(self.config.read_bytes(), config_esperada())
 
     def test_plugin_configurado_no_queda_pendiente(self):
         self.falso("herdr", HERDR_FALSO)

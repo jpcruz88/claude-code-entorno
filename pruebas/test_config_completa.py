@@ -101,6 +101,12 @@ class ConfiguracionCompleta(unittest.TestCase):
         config = tomllib.loads((RAIZ / "herdr" / "config.toml").read_text(encoding="utf-8"))
         self.assertGreaterEqual(config["ui"]["toast"]["delay_seconds"], 30)
 
+    def test_herdr_no_da_sus_avisos_confusos(self):
+        """En Mac avisa herdr/avisos.py: herdr no nombra la máquina ni siempre la pestaña."""
+        import tomllib
+        config = tomllib.loads((RAIZ / "herdr" / "config.toml").read_text(encoding="utf-8"))
+        self.assertEqual(config["ui"]["toast"]["delivery"], "off")
+
 
 if __name__ == "__main__":
     unittest.main()

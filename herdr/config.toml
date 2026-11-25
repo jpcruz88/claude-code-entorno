@@ -61,9 +61,12 @@ rows = [
   [{ token = "agent", fg = "#7e9cd8" }, { token = "terminal_title_stripped", fg = "#727169" }],
 ]
 
-# Avisos cuando un agente termina o necesita respuesta en otro espacio
+# Avisos cuando un agente termina o necesita respuesta en otro espacio.
+# En Mac los da herdr/avisos.py («Colabora: Claude terminó · m4 › Personales»):
+# el aviso de herdr no nombra la máquina y su «1» es el número del espacio. En
+# otros sistemas, sin ese vigía, el instalador deja aquí "system".
 [ui.toast]
-delivery = "system"
+delivery = "off"
 # Solo avisa si el agente sigue terminado o bloqueado 30 s después: una pausa
 # corta entre pasos de Claude no cuenta como «terminó».
 delay_seconds = 30

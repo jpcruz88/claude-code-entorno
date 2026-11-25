@@ -22,6 +22,7 @@ import argparse
 import datetime
 import json
 import os
+import plistlib
 import re
 import shutil
 import subprocess
@@ -34,6 +35,8 @@ sys.path.insert(0, str(AQUI))
 import fusionar_settings  # noqa: E402
 
 ES_WINDOWS = os.name == "nt"
+ES_MAC = sys.platform == "darwin"
+ETIQUETA_VIGIA = "dev.claude-code-entorno.herdr-avisos"
 MARKETPLACES_CONOCIDOS = {"claude-plugins-official": "anthropics/claude-plugins-official"}
 # Este repo es su propio marketplace de mods (.claude-plugin/marketplace.json).
 # Mods que ya no existen porque otro los absorbió: se desinstalan al actualizar (tablero 1.3.0 absorbió los tres
@@ -505,8 +508,13 @@ class Instalador:
         else:
             destino = self.home / ".config" / "herdr" / "config.toml"
         origen = REPO / "herdr" / "config.toml"
-        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), destino,
-                              origen.relative_to(REPO))
+        config = origen.read_bytes().replace(b"\r\n", b"\n")
+        if not ES_MAC:
+            # Sin el vigía de avisos (solo Mac), que avise herdr.
+            config = config.replace(b'delivery = "off"', b'delivery = "system"')
+        self.instalar_archivo(config, destino, origen.relative_to(REPO))
+        if ES_MAC:
+            self.vigia_avisos(herdr)
 
         codigo, salida = self.correr([herdr, "integration", "status"], timeout=60)
         if re.search(r"^claude: current", salida, re.M):
@@ -533,6 +541,43 @@ class Instalador:
             codigo, _ = self.correr([herdr, "server", "reload-config"], timeout=30)
             self.info("config recargada en el herdr abierto." if codigo == 0 else
                       "herdr no está abierto; la config se carga al abrirlo.")
+
+    def vigia_avisos(self, herdr):
+        """Copia herdr/avisos.py y lo deja corriendo con launchd (avisos con nombre claro)."""
+        origen = REPO / "herdr" / "avisos.py"
+        guion = self.home / ".config" / "herdr" / "avisos.py"
+        plist = self.home / "Library" / "LaunchAgents" / (ETIQUETA_VIGIA + ".plist")
+        python = shutil.which("python3") or sys.executable
+        datos = plistlib.dumps({
+            "Label": ETIQUETA_VIGIA,
+            "ProgramArguments": [python, str(guion), herdr],
+            "RunAtLoad": True,
+            "KeepAlive": True,
+            "StandardErrorPath": str(self.home / "Library" / "Logs" / "herdr-avisos.log"),
+        })
+        antes = [p.read_bytes() if p.exists() else None for p in (guion, plist)]
+        self.instalar_archivo(origen.read_bytes().replace(b"\r\n", b"\n"), guion,
+                              origen.relative_to(REPO), ejecutable=True)
+        self.instalar_archivo(datos, plist, "plist del vigía de avisos de herdr")
+        if self.simular:
+            return
+        launchctl = self.buscar("launchctl", ["/bin/launchctl"])
+        if not launchctl:
+            self.aviso("No encontré launchctl; el vigía de avisos de herdr no arranca.")
+            return
+        dominio = "gui/%d" % os.getuid()
+        cambio = antes != [guion.read_bytes(), plist.read_bytes()]
+        cargado = self.correr([launchctl, "print", "%s/%s" % (dominio, ETIQUETA_VIGIA)], timeout=30)[0] == 0
+        if cargado and not cambio:
+            self.info("vigía de avisos de herdr: corriendo")
+            return
+        if cargado:
+            self.correr([launchctl, "bootout", "%s/%s" % (dominio, ETIQUETA_VIGIA)], timeout=30)
+        codigo, salida = self.correr([launchctl, "bootstrap", dominio, str(plist)], timeout=30)
+        if codigo == 0:
+            self.info("vigía de avisos de herdr: arrancado")
+        else:
+            self.fallo("vigía de avisos de herdr: %s" % resumen_error(salida))
 
     def plugins_herdr(self, herdr):
         self.info("Ojo: los plugins de herdr son código de la comunidad sin revisar (ver README).")
