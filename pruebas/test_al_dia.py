@@ -295,7 +295,8 @@ class PruebaMaquinaReal(unittest.TestCase):
             ("claude", "plugin", "list", "--json"): (0, json.dumps([
                 {"id": "superpowers@claude-plugins-official", "version": "5.1.0", "installPath": "/x/s"},
                 {"id": "cowork-plugin-management@synced", "version": "1.0.0", "installPath": "/x/c"},
-                {"id": "data-viz-2025@skills-dir", "version": "1.0.0", "installPath": "/x/d"}])),
+                {"id": "data-viz-2025@skills-dir", "version": "1.0.0", "installPath": "/x/d"},
+                {"id": "cc-plugin-easel@builtin", "version": "unknown"}])),
             ("herdr", "--version"): (0, "herdr 0.9.5"),
             ("codebase-memory-mcp", "--version"): (0, "codebase-memory-mcp 0.12.0"),
         }
@@ -312,6 +313,13 @@ class PruebaMaquinaReal(unittest.TestCase):
         claves = [x[0] for x in cargar().pasos(f, "skills@1.7.2")]
         self.assertNotIn("marketplace:synced", claves)
         self.assertNotIn("marketplace:skills-dir", claves)
+
+    def test_plugins_incluidos_en_claude_code_no_entran(self):
+        # @builtin viene dentro de Claude Code: no hay marketplace «builtin» que actualizar.
+        f = cargar().foto(self.home, self.ejecutar, lambda programa, home: programa)
+        self.assertNotIn("plugin:cc-plugin-easel@builtin", f)
+        claves = [x[0] for x in cargar().pasos(f, "skills@1.7.2")]
+        self.assertNotIn("marketplace:builtin", claves)
 
     def test_programa_de_homebrew_se_actualiza_con_brew(self):
         # herdr instalado con Homebrew no deja `herdr update`: se usa `brew upgrade herdr`.
