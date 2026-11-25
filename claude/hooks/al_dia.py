@@ -296,7 +296,7 @@ def _foto_skills(home):
     return r
 
 
-MARKETPLACES_SIN_ACTUALIZAR = ("claude-code-entorno", "synced", "skills-dir")
+MARKETPLACES_SIN_ACTUALIZAR = ("claude-code-entorno", "synced", "skills-dir", "builtin")
 
 # Fórmula de Homebrew de cada programa, para actualizarlo con `brew upgrade` si se instaló así.
 FORMULAS_BREW = {"programa:herdr": "herdr", "MCP:codebase-memory": "codebase-memory-mcp",
@@ -321,8 +321,8 @@ def _foto_plugins(home, ejecutar, buscar_):
             continue
         id_ = p["id"]
         version = _version_de(p)
-        # Los mods de este repo, los sincronizados desde claude.ai (@synced) y los de carpeta
-        # (@skills-dir) no tienen marketplace que actualizar.
+        # Los mods de este repo, los sincronizados desde claude.ai (@synced), los de carpeta
+        # (@skills-dir) y los que trae Claude Code (@builtin) no tienen marketplace que actualizar.
         if id_.rpartition("@")[2] in MARKETPLACES_SIN_ACTUALIZAR or not version:
             continue
         r[f"plugin:{id_}"] = _entrada(id_.split("@")[0], "plugin",
