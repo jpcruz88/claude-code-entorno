@@ -88,5 +88,19 @@ class ConfiguracionCompleta(unittest.TestCase):
         self.assertIn("git fetch --prune", texto)
 
 
+    def test_regla_no_cerrar_el_turno_mientras_se_espera(self):
+        """Herdr avisa «terminó» en cuanto el turno acaba: no se cierra con trabajo pendiente."""
+        texto = (RAIZ / "claude" / "rules" / "avisos.md").read_text(encoding="utf-8")
+        self.assertIn("primer plano", texto)
+        self.assertIn("te aviso", texto)
+        self.assertIn("avisos.md", self.filtros["reglas_permitidas"])
+
+    def test_herdr_espera_antes_de_avisar(self):
+        """Un aviso solo si el agente sigue terminado o bloqueado 30 s después."""
+        import tomllib
+        config = tomllib.loads((RAIZ / "herdr" / "config.toml").read_text(encoding="utf-8"))
+        self.assertGreaterEqual(config["ui"]["toast"]["delay_seconds"], 30)
+
+
 if __name__ == "__main__":
     unittest.main()
