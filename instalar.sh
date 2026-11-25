@@ -510,4 +510,11 @@ args=(--plataforma unix --python-hooks python3)
 [ "$SIN_OPENCODE" = 1 ] && args+=(--sin-opencode)
 [ "$SIN_OPENCODE_CONFIG" = 1 ] && args+=(--sin-opencode-config)
 [ "$SIN_NVIM" = 1 ] && args+=(--sin-nvim)
+# Las opciones elegidas, para que «Al día» reinstale igual cuando haya cambios en main.
+for arg in "$@"; do
+  case "$arg" in
+    --simular|--no-interactivo) ;;
+    *) args+=("--recordar=$arg") ;;
+  esac
+done
 python3 "$REPO/herramientas/instalar_comun.py" "${args[@]}"
