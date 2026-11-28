@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.6 (tablero)
+
+- **Windows sin `HOME`:** Sesiones, Conversaciones, la statusline, Config y Aduana usan `USERPROFILE` cuando falta `HOME`. Antes escribían en `undefined/.claude/tablero/…` dentro de la carpeta del proyecto.
+
 ## 1.4.5 (tablero)
 
 - **Al día:** la caja enseña el estado del repo del entorno (`claude-code-entorno`) con su motivo («copia con cambios sin commit · no se tocó») o su error («no se pudo actualizar · …»), en lugar del texto genérico.

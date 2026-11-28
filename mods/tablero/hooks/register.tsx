@@ -162,7 +162,11 @@ const DEFAULT_CONV = { todas: [] as Mensaje[], turnoFin: null as number | null, 
 let misMensajes: Mensaje[] = []
 let colaConversaciones: Promise<unknown> = Promise.resolve()
 const conv = atom({ plugin: 'tablero', key: 'conversaciones' } as const, DEFAULT_CONV)
-const carpetaConversaciones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/conversaciones`
+// Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
+// Sin ninguna de las dos, las rutas saldrían como «undefined/.claude/…» relativas a la carpeta del proyecto.
+const casa = async ($: EngineInterface) =>
+  (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
+const carpetaConversaciones = async ($: EngineInterface) => `${await casa($)}/.claude/tablero/conversaciones`
 /** Anota (o cambia) un mensaje de esta sesión y reescribe su archivo para las demás. */
 const guardarMensaje = ($: EngineInterface, m: Mensaje) => {
   const paso = colaConversaciones.then(async () => {
@@ -232,7 +236,7 @@ const leerTodasConversaciones = async ($: EngineInterface) => {
 }
 // Desde cuándo esta sesión está en su estado actual, para el reloj de Sesiones de las otras.
 let estadoPropio: { estado: RegistroSesion['estado']; desde: number } | null = null
-const carpetaSesiones = async ($: EngineInterface) => `${await $.env.get('HOME')}/.claude/tablero/sesiones`
+const carpetaSesiones = async ($: EngineInterface) => `${await casa($)}/.claude/tablero/sesiones`
 /** Escribe el registro de esta sesión para las demás y para el presupuesto. Sin rename en la API: quien lee
  *  ignora un archivo a medio escribir. */
 const escribirRegistro = async ($: EngineInterface) => {
@@ -308,8 +312,8 @@ const leerServicioClaude = async ($: EngineInterface) => {
   return ponerFuente($, { servicio: r ? leerServicio(r.status, r.text) : null })
 }
 const leerConfig = async ($: EngineInterface) => {
-  const [casa, raiz, ajustes, herramientas] = await Promise.all([
-    $.env.get('HOME'),
+  const [home, raiz, ajustes, herramientas] = await Promise.all([
+    casa($),
     $.session.root().catch(() => ''),
     $.settings.read().catch(() => ({}) as Record<string, unknown>),
     $.tool.list().catch(() => []),
@@ -317,8 +321,8 @@ const leerConfig = async ($: EngineInterface) => {
   const existe = (ruta: string) => $.fs.stat(ruta).then(() => 1).catch(() => 0)
   const mds = (carpeta: string) => $.fs.list(carpeta).then(l => l.filter(x => x.name.endsWith('.md')).length).catch(() => 0)
   const cuentas = await Promise.all([
-    ...[`${casa}/.claude/CLAUDE.md`, `${raiz}/CLAUDE.md`, `${raiz}/AGENTS.md`, `${raiz}/.claude/CLAUDE.md`].map(existe),
-    mds(`${casa}/.claude/rules`),
+    ...[`${home}/.claude/CLAUDE.md`, `${raiz}/CLAUDE.md`, `${raiz}/AGENTS.md`, `${raiz}/.claude/CLAUDE.md`].map(existe),
+    mds(`${home}/.claude/rules`),
     mds(`${raiz}/.claude/rules`),
   ])
   // El CLAUDE.md del proyecto que solo hace `@AGENTS.md` es el mismo archivo de instrucciones: cuenta uno.
@@ -338,8 +342,8 @@ const diaLocal = (ms: number) => {
 }
 /** Lee el archivo de la statusline de esta sesión y apunta el costo con que empezó el día. */
 const refrescarExtra = async ($: EngineInterface) => {
-  const [casa, id, ahora, costo] = await Promise.all([$.env.get('HOME'), $.session.id().catch(() => ''), $.clock.now(), costNow($)])
-  const texto = casa && id && /^[A-Za-z0-9_-]+$/.test(id) ? await $.fs.read(`${casa}/.claude/tablero/linea/${id}.json`).catch(() => null) : null
+  const [home, id, ahora, costo] = await Promise.all([casa($), $.session.id().catch(() => ''), $.clock.now(), costNow($)])
+  const texto = home && id && /^[A-Za-z0-9_-]+$/.test(id) ? await $.fs.read(`${home}/.claude/tablero/linea/${id}.json`).catch(() => null) : null
   const linea = typeof texto === 'string' ? leerLinea(texto, ahora / 1000) : null
   const hoy = diaLocal(ahora)
   await update($, extra, x => {
@@ -406,8 +410,7 @@ let ultimoJev: JevEstado | null = null
  */
 async function releerJev($: EngineInterface): Promise<DecisionJev[]> {
   const sesionId = await $.session.id().catch(() => null)
-  // Windows no siempre define HOME: en ese caso va USERPROFILE. `$.env.get` exige literales.
-  const home = (await $.env.get('HOME').catch(() => undefined)) || (await $.env.get('USERPROFILE').catch(() => undefined))
+  const home = await casa($)
   const texto = sesionId && home ? await $.fs.read(`${home}/.claude/jev/decisiones.jsonl`).catch(() => null) : null
   // El uso de la cuenta no depende de la sesión: se lee aunque no haya id. Ausente es «sin dato»; roto (por ejemplo,
   // a medio escribir) deja el último válido.
@@ -683,8 +686,8 @@ export const register: Register = (on, options) => {
         await refrescarExtra($).catch(() => undefined)
         if (cfg.extras.has('sesiones') || cfg.extras.has('presupuesto')) await escribirRegistro($).catch(() => undefined)
         try {
-          const casa = await $.env.get('HOME')
-          const leido = JSON.parse((await $.fs.read(`${casa}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
+          const home = await casa($)
+          const leido = JSON.parse((await $.fs.read(`${home}/${ARCHIVO_ADUANA}`)) as string) as EstadoAduana
           await update($, aduana, () => leido)
           if (leido.terminado && leido.actualizado !== aduanaAvisada) {
             aduanaAvisada = leido.actualizado

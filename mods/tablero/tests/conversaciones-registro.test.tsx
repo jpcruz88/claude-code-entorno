@@ -12,6 +12,8 @@ type Opciones = {
   sesiones?: Record<string, unknown>[]
   /** La llamada a herramienta falla. */
   llamadaFalla?: boolean
+  /** Variables de entorno; por omisión HOME=/casa. */
+  entorno?: Record<string, string>
 }
 
 const getDe = (sesion: string, titulo: string) =>
@@ -26,7 +28,7 @@ const motor = (on: On, o: Opciones = {}) => {
   on('ui.status', () => ({ value: undefined }))
   on('tool.register', () => ({ value: { tool: 'mcp__tablero__plan_progress' } }))
   on('command.register', () => ({ value: { command: 'tablero' } }))
-  on('env.get', (_$, e) => ({ value: ({ HOME: '/casa', HERDR_ENV: '1' } as Record<string, string>)[e.name] }))
+  on('env.get', (_$, e) => ({ value: (o.entorno ?? { HOME: '/casa', HERDR_ENV: '1' })[e.name] }))
   on('fs.write', (_$, e) => {
     escritos[String(e.path)] = String(e.text)
     return { value: undefined }
@@ -180,4 +182,16 @@ test('al empezar un turno del lead, el registro de Sesiones lleva turnoInicio', 
   await reloj.advance(10_000)
   const registro = JSON.parse(escritos['/casa/.claude/tablero/sesiones/abc.json'] ?? '{}') as { turnoInicio?: number }
   expect(registro.turnoInicio).toBe(inicio)
+})
+
+test('Windows sin HOME: escribe bajo USERPROFILE y nunca en una carpeta «undefined»', async ($, on) => {
+  const { escritos, reloj } = motor(on, { herdrGet: getDe('rev', 'Revisor'), entorno: { USERPROFILE: '/perfil', HERDR_ENV: '1' } })
+  await iniciar($)
+  await $.tool.call({ tool: 'Bash', command: 'herdr agent prompt reviewer "Revisa el diff"', tool_use_id: 'b1' } as never)
+  await reloj.advance(6_000)
+  // En Windows el motor devuelve las rutas como C:\perfil\…: se comparan sin unidad y con barras normales.
+  const rutas = Object.keys(escritos).map(r => r.replace(/\\/g, '/').replace(/^[A-Za-z]:/, ''))
+  expect(rutas.some(r => r.includes('undefined'))).toBe(false)
+  expect(rutas).toContain('/perfil/.claude/tablero/conversaciones/abc.json')
+  expect(rutas).toContain('/perfil/.claude/tablero/sesiones/abc.json')
 })
